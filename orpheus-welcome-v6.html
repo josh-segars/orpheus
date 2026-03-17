@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orpheus Social</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,500;0,8..60,700;0,8..60,900;1,8..60,700;1,8..60,900&family=Source+Sans+3:ital,wght@0,400;0,600;1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="orpheus-styles.css">
+  <style>
+    /* ── Welcome page layout ─────────────────────────────────── */
+    .main { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-bottom: 60px; flex-shrink: 0; }
+    .hero { display: flex; flex-direction: column; align-items: center; text-align: center; padding-bottom: 55px; }
+    .hero-line-1 { font-family: 'Source Serif 4', serif; font-size: 40px; font-weight: 500; font-variation-settings: 'opsz' 40; color: var(--warm-gold); line-height: 1; white-space: nowrap; }
+    .hero-line-2 { font-family: 'Source Serif 4', serif; font-size: 50px; font-weight: 900; font-style: italic; font-variation-settings: 'opsz' 50; color: var(--deep-slate); line-height: 1; white-space: nowrap; }
+    .cards-row { display: flex; gap: 20px; align-items: flex-start; }
+    .card-dark { background-color: var(--deep-slate); width: 400px; align-self: stretch; padding: 40px; border-radius: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 40px; }
+    .card-dark-body { font-family: 'Source Serif 4', serif; font-size: 18px; font-weight: 400; font-variation-settings: 'opsz' 18; color: var(--warm-ivory); line-height: normal; }
+    .btn-start { display: block; width: 100%; background-color: var(--warm-ivory); color: var(--deep-slate); font-family: 'Source Sans 3', sans-serif; font-size: 16px; font-weight: 600; text-align: center; padding: 10px 20px; border-radius: 10px; border: none; cursor: pointer; text-decoration: none; }
+    .btn-start:hover { background-color: var(--warm-gold); color: white; }
+    .cards-right { display: flex; flex-direction: column; gap: 20px; width: 400px; }
+    .card-step { background-color: var(--warm-parchment); padding: 20px; border-radius: 10px; display: flex; flex-direction: column; gap: 7px; }
+    .card-step-title { font-family: 'Source Serif 4', serif; font-size: 16px; font-weight: 700; font-variation-settings: 'opsz' 16; color: var(--warm-text); text-align: center; line-height: normal; }
+    .card-step-body { font-family: 'Source Sans 3', sans-serif; font-size: 16px; font-weight: 400; color: var(--warm-text); line-height: normal; }
+    .card-step-body em { font-style: italic; font-weight: 600; }
+  </style>
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="wordmark">
+      <span class="wordmark-orpheus">Orpheus</span>
+      <span class="wordmark-social">Social</span>
+    </div>
+    <div class="nav-client">
+      <span class="nav-client-label">Confidential Portal for</span>
+      <span class="nav-client-name">Jane Doe</span>
+    </div>
+  </nav>
+
+  <main class="main">
+
+    <div class="hero">
+      <span class="hero-line-1">Experience speaks.</span>
+      <span class="hero-line-2">Make yours sing.</span>
+    </div>
+
+    <div class="cards-row">
+
+      <div class="card-dark">
+        <p class="card-dark-body">Welcome, Jane.<br><br>You are about to lay the groundwork for a clear picture of how your professional presence is interpreted, resulting in a specific plan to ensure it reflects the credibility you've earned.<br><br>Take your time, and begin whenever you are ready.</p>
+        <a href="orpheus-groundwork-v1.html" class="btn-start">Get Started</a>
+      </div>
+
+      <div class="cards-right">
+        <div class="card-step">
+          <div class="card-step-title">Groundwork</div>
+          <p class="card-step-body">Submit a short questionnaire and data from your LinkedIn profile, allowing time for all materials to be ready before your diagnostic begins.</p>
+        </div>
+        <div class="card-step">
+          <div class="card-step-title">Signal Score</div>
+          <p class="card-step-body">Your <em>Signal Score</em> measures how your professional presence is being interpreted across 5 dimensions, giving you a precise picture of where you stand and where you can strengthen your signal.</p>
+        </div>
+        <div class="card-step">
+          <div class="card-step-title">Forward Brief</div>
+          <p class="card-step-body">Your <em>Forward Brief</em> translates your Signal Score into a prioritized plan with specific steps to ensure your professional presence reflects the credibility you've earned.</p>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <footer class="footer">
+    <div class="wordmark-sm">
+      <span class="wordmark-sm-orpheus">Orpheus</span>
+      <span class="wordmark-sm-social">Social</span>
+    </div>
+    <div class="footer-links">
+      <a href="#">Terms of Service</a>
+      <a href="#">Confidentiality</a>
+      <span>Copyright &copy; 2026 All Rights Reserved.</span>
+    </div>
+  </footer>
+
+</body>
+</html>

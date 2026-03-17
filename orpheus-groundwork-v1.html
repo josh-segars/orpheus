@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orpheus Social — Groundwork</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,500;0,8..60,700;0,8..60,900;1,8..60,700;1,8..60,900&family=Source+Sans+3:ital,wght@0,400;0,600;1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="orpheus-styles.css">
+  <style>
+    /* ── Groundwork page layout ──────────────────────────────── */
+    .main { width: 100%; max-width: 820px; padding: 48px 20px 60px; display: flex; flex-direction: column; gap: 32px; flex-shrink: 0; }
+    .page-header { display: flex; flex-direction: column; gap: 16px; }
+    .page-title { font-family: 'Source Serif 4', serif; font-size: 36px; font-weight: 900; font-variation-settings: 'opsz' 36; color: var(--deep-slate); line-height: 1; }
+    .page-intro { font-family: 'Source Sans 3', sans-serif; font-size: 16px; font-weight: 300; color: var(--warm-stone); line-height: 1.7; }
+    .checklist { display: flex; flex-direction: column; gap: 28px; }
+    .checklist-group { display: flex; flex-direction: column; gap: 8px; }
+    .group-label { font-family: 'Source Sans 3', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--warm-stone); padding: 0 4px; margin-bottom: 4px; }
+    .checklist-item { background-color: var(--warm-parchment); border-radius: 10px; padding: 16px 20px; display: flex; align-items: center; gap: 16px; cursor: pointer; text-decoration: none; transition: background-color 0.15s ease; }
+    .checklist-item:hover { background-color: #e4dfd6; }
+    .checklist-item.complete { opacity: 0.65; }
+    .check-indicator { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--warm-border); flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.15s ease; }
+    .checklist-item.complete .check-indicator { background-color: var(--warm-gold); border-color: var(--warm-gold); }
+    .check-mark { display: none; color: white; font-size: 12px; font-weight: 700; line-height: 1; }
+    .checklist-item.complete .check-mark { display: block; }
+    .item-content { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+    .item-title-row { display: flex; align-items: center; gap: 10px; }
+    .item-title { font-family: 'Source Serif 4', serif; font-size: 16px; font-weight: 700; font-variation-settings: 'opsz' 16; color: var(--warm-text); line-height: normal; }
+    .checklist-item.complete .item-title { color: var(--warm-stone); }
+    .item-badge { font-family: 'Source Sans 3', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; color: var(--warm-gold); border: 1px solid var(--warm-gold); border-radius: 20px; padding: 2px 8px; white-space: nowrap; }
+    .item-arrow { font-family: 'Source Sans 3', sans-serif; font-size: 18px; font-weight: 300; color: var(--warm-border); flex-shrink: 0; line-height: 1; }
+    .checklist-item:hover .item-arrow { color: var(--warm-stone); }
+    .completion-row { display: flex; flex-direction: column; align-items: center; gap: 12px; padding-top: 8px; }
+    .btn-complete { display: inline-block; font-family: 'Source Sans 3', sans-serif; font-size: 14px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--warm-ivory); background-color: var(--deep-slate); padding: 14px 48px; border-radius: 10px; border: none; cursor: not-allowed; opacity: 0.35; text-decoration: none; }
+    .btn-complete.active { opacity: 1; cursor: pointer; }
+    .btn-complete.active:hover { background-color: var(--warm-gold); }
+    .completion-note { font-family: 'Source Sans 3', sans-serif; font-size: 13px; font-weight: 300; color: var(--warm-stone); text-align: center; }
+  </style>
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="wordmark">
+      <span class="wordmark-orpheus">Orpheus</span>
+      <span class="wordmark-social">Social</span>
+    </div>
+    <div class="nav-client">
+      <span class="nav-client-label">Confidential Portal for</span>
+      <span class="nav-client-name">Jane Doe</span>
+    </div>
+  </nav>
+
+  <main class="main">
+
+    <div class="page-header">
+      <h1 class="page-title">Groundwork Checklist</h1>
+      <p class="page-intro">Everything here forms the foundation of your diagnostic. Work through each item at your own pace and return as often as needed. Your progress is saved. We have placed the LinkedIn data requests first, as one step requires up to 24 hours for LinkedIn to prepare your files. Starting there now means the rest can happen while you wait. Your Signal Score analysis begins as soon as all items are complete.</p>
+    </div>
+
+    <div class="checklist">
+
+      <div class="checklist-group">
+        <div class="group-label">LinkedIn Data</div>
+        <a href="orpheus-linkedin-step1.html" class="checklist-item">
+          <div class="check-indicator"><span class="check-mark">&#10003;</span></div>
+          <div class="item-content">
+            <div class="item-title-row">
+              <span class="item-title">Request Your Data Archive</span>
+              <span class="item-badge">Up to 24 hours</span>
+            </div>
+          </div>
+          <div class="item-arrow">&#8250;</div>
+        </a>
+        <a href="orpheus-linkedin-step2.html" class="checklist-item">
+          <div class="check-indicator"><span class="check-mark">&#10003;</span></div>
+          <div class="item-content">
+            <div class="item-title-row">
+              <span class="item-title">Export Your Analytics</span>
+            </div>
+          </div>
+          <div class="item-arrow">&#8250;</div>
+        </a>
+      </div>
+
+      <div class="checklist-group">
+        <div class="group-label">Questionnaire</div>
+        <a href="orpheus-questionnaire-s1.html" class="checklist-item">
+          <div class="check-indicator"><span class="check-mark">&#10003;</span></div>
+          <div class="item-content">
+            <div class="item-title-row"><span class="item-title">Professional Identity</span></div>
+          </div>
+          <div class="item-arrow">&#8250;</div>
+        </a>
+        <a href="orpheus-questionnaire-s2.html" class="checklist-item">
+          <div class="check-indicator"><span class="check-mark">&#10003;</span></div>
+          <div class="item-content">
+            <div class="item-title-row"><span class="item-title">Career Stage &amp; Context</span></div>
+          </div>
+          <div class="item-arrow">&#8250;</div>
+        </a>
+        <a href="orpheus-questionnaire-s3.html" class="checklist-item">
+          <div class="check-indicator"><span class="check-mark">&#10003;</span></div>
+          <div class="item-content">
+            <div class="item-title-row"><span class="item-title">Target Audiences</span></div>
+          </div>
+          <div class="item-arrow">&#8250;</div>
+        </a>
+        <a href="orpheus-questionnaire-s4.html" class="checklist-item">
+          <div class="check-indicator"><span class="check-mark">&#10003;</span></div>
+          <div class="item-content">
+            <div class="item-title-row"><span class="item-title">Goals</span></div>
+          </div>
+          <div class="item-arrow">&#8250;</div>
+        </a>
+        <a href="orpheus-questionnaire-s5.html" class="checklist-item">
+          <div class="check-indicator"><span class="check-mark">&#10003;</span></div>
+          <div class="item-content">
+            <div class="item-title-row"><span class="item-title">Current LinkedIn Relationship</span></div>
+          </div>
+          <div class="item-arrow">&#8250;</div>
+        </a>
+        <a href="orpheus-questionnaire-s6.html" class="checklist-item">
+          <div class="check-indicator"><span class="check-mark">&#10003;</span></div>
+          <div class="item-content">
+            <div class="item-title-row"><span class="item-title">Voice &amp; Style</span></div>
+          </div>
+          <div class="item-arrow">&#8250;</div>
+        </a>
+        <a href="orpheus-questionnaire-s7.html" class="checklist-item">
+          <div class="check-indicator"><span class="check-mark">&#10003;</span></div>
+          <div class="item-content">
+            <div class="item-title-row"><span class="item-title">Practical Parameters</span></div>
+          </div>
+          <div class="item-arrow">&#8250;</div>
+        </a>
+      </div>
+
+    </div>
+
+    <div class="completion-row">
+      <a href="#" class="btn-complete">My Groundwork is Complete</a>
+      <span class="completion-note">Available once all items above are complete.</span>
+    </div>
+
+  </main>
+
+  <footer class="footer">
+    <div class="wordmark-sm">
+      <span class="wordmark-sm-orpheus">Orpheus</span>
+      <span class="wordmark-sm-social">Social</span>
+    </div>
+    <div class="footer-links">
+      <a href="#">Terms of Service</a>
+      <a href="#">Confidentiality</a>
+      <span>Copyright &copy; 2026 All Rights Reserved.</span>
+    </div>
+  </footer>
+
+</body>
+</html>
