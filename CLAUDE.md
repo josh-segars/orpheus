@@ -244,7 +244,8 @@ The prototype is pure HTML/CSS/Python running locally. Production adds a backend
 | Database | Supabase (PostgreSQL) | Auth, job queue, result storage; free tier for beta |
 | AI | Anthropic API — Claude | Narrative generation and Forward Brief synthesis only |
 | Hosting — frontend | Vercel | Free tier |
-| Hosting — backend | Railway or Render | Free tier / ~$5/mo |
+| Hosting — backend | Railway | Free tier / ~$5/mo |
+| Project management | Plane (cloud) | plane.so — no self-hosting |
 | CI/CD | GitHub Actions | Existing repo |
 
 ### Project Structure
