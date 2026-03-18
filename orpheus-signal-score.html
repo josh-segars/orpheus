@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orpheus Social — Signal Score</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,500;0,8..60,700;0,8..60,900;1,8..60,700;1,8..60,900&family=Source+Sans+3:ital,wght@0,400;0,600;1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="orpheus-styles.css">
+  <style>
+    .score-hero {
+      background-color: var(--deep-slate);
+      border-radius: 10px;
+      padding: 48px 40px;
+      text-align: center;
+      margin-bottom: 60px;
+    }
+
+    .score-eyebrow {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--warm-gold);
+      margin-bottom: 24px;
+    }
+
+    .score-number-container {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      margin-bottom: 8px;
+    }
+
+    .score-number {
+      font-family: 'Source Serif 4', serif;
+      font-size: 72px;
+      font-weight: 900;
+      font-style: italic;
+      font-variation-settings: "opsz" 72;
+      color: var(--warm-gold);
+      line-height: 1;
+    }
+
+    .score-max {
+      font-family: 'Source Serif 4', serif;
+      font-size: 28px;
+      font-weight: 500;
+      color: var(--warm-stone);
+      margin-left: 8px;
+      line-height: 1;
+    }
+
+    .score-descriptor {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 14px;
+      color: rgba(249, 246, 240, 0.7);
+      margin-bottom: 20px;
+    }
+
+    .score-progress-track {
+      width: 100%;
+      height: 4px;
+      background-color: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .score-progress-fill {
+      height: 100%;
+      background-color: var(--warm-gold);
+      border-radius: 2px;
+    }
+
+    .dimensions-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+      margin-bottom: 60px;
+    }
+
+    .dimension-card {
+      background-color: var(--warm-parchment);
+      border-radius: 10px;
+      padding: 20px 24px;
+    }
+
+    .dimension-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 12px;
+    }
+
+    .dimension-name {
+      font-family: 'Source Serif 4', serif;
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--warm-text);
+    }
+
+    .dimension-score {
+      font-family: 'Source Serif 4', serif;
+      font-size: 16px;
+      font-style: italic;
+      color: var(--warm-gold);
+    }
+
+    .dimension-progress-track {
+      width: 100%;
+      height: 8px;
+      background-color: var(--warm-border);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+
+    .dimension-progress-fill {
+      height: 100%;
+      background-color: var(--warm-gold);
+      border-radius: 4px;
+    }
+
+    .dimension-narrative {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 14px;
+      color: var(--warm-stone);
+      line-height: 1.6;
+    }
+
+    .interpretation-prose {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .interpretation-paragraph {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 15px;
+      color: var(--warm-stone);
+      line-height: 1.7;
+    }
+
+    /* ── Sub-metric indicators ─────────────────────────────── */
+    .dimension-indicators {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--warm-border);
+    }
+
+    .indicator {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .indicator-label {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--warm-stone);
+      line-height: 1.4;
+    }
+
+    .indicator-value {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .indicator-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* Strength — solid warm-gold dot, dark value text */
+    .indicator-strength { color: var(--warm-text); }
+    .indicator-strength .indicator-dot { background-color: var(--warm-gold); }
+
+    /* Gap — hollow dot, muted value text */
+    .indicator-gap { color: var(--warm-stone); }
+    .indicator-gap .indicator-dot {
+      background-color: transparent;
+      border: 1.5px solid var(--warm-stone);
+    }
+
+    /* Watch / neutral — soft dot, muted value text */
+    .indicator-watch { color: var(--warm-stone); }
+    .indicator-watch .indicator-dot { background-color: var(--warm-border); }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="wordmark"><span class="wordmark-orpheus">Orpheus</span><span class="wordmark-social">Social</span></div>
+    <div class="nav-client"><span class="nav-client-label">Confidential Portal for</span><span class="nav-client-name">Jane Doe</span></div>
+  </nav>
+
+  <main class="main-interior">
+    <!-- Score Hero Section -->
+    <div class="score-hero">
+      <div class="score-eyebrow">Your Signal Score</div>
+      <div class="score-number-container">
+        <div class="score-number">64.7</div>
+        <div class="score-max">/100</div>
+      </div>
+      <div class="score-descriptor">Moderate Signal Strength</div>
+      <div class="score-progress-track">
+        <div class="score-progress-fill" style="width: 64.7%;"></div>
+      </div>
+    </div>
+
+    <!-- Dimensions Section -->
+    <div class="section-header">
+      <div class="section-eyebrow">Dimensions</div>
+      <h2 class="section-title">How Your Signal Breaks Down</h2>
+    </div>
+
+    <div class="dimensions-grid">
+      <!-- Presence -->
+      <div class="dimension-card">
+        <div class="dimension-header">
+          <div class="dimension-name">Presence</div>
+          <div class="dimension-score">7.2 / 10</div>
+        </div>
+        <div class="dimension-progress-track">
+          <div class="dimension-progress-fill" style="width: 72%;"></div>
+        </div>
+        <div class="dimension-narrative">Your profile is substantive and well-structured, with room to deepen social proof through recommendations and long-form content.</div>
+        <div class="dimension-indicators">
+          <div class="indicator">
+            <span class="indicator-label">Summary</span>
+            <span class="indicator-value indicator-strength"><span class="indicator-dot"></span>1,840 chars</span>
+          </div>
+          <div class="indicator">
+            <span class="indicator-label">Skills &amp; Endorsements</span>
+            <span class="indicator-value indicator-watch"><span class="indicator-dot"></span>38 skills · 412 endorsements</span>
+          </div>
+          <div class="indicator">
+            <span class="indicator-label">Recommendations received</span>
+            <span class="indicator-value indicator-gap"><span class="indicator-dot"></span>2</span>
+          </div>
+          <div class="indicator">
+            <span class="indicator-label">Articles published</span>
+            <span class="indicator-value indicator-gap"><span class="indicator-dot"></span>0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reach -->
+      <div class="dimension-card">
+        <div class="dimension-header">
+          <div class="dimension-name">Reach</div>
+          <div class="dimension-score">4.8 / 10</div>
+        </div>
+        <div class="dimension-progress-track">
+          <div class="dimension-progress-fill" style="width: 48%;"></div>
+        </div>
+        <div class="dimension-narrative">Your audience is smaller than your experience warrants — growing your follower base is the highest-leverage starting point.</div>
+        <div class="dimension-indicators">
+          <div class="indicator">
+            <span class="indicator-label">Total followers</span>
+            <span class="indicator-value indicator-gap"><span class="indicator-dot"></span>1,247</span>
+          </div>
+          <div class="indicator">
+            <span class="indicator-label">Connections</span>
+            <span class="indicator-value indicator-watch"><span class="indicator-dot"></span>1,893</span>
+          </div>
+          <div class="indicator">
+            <span class="indicator-label">New followers / week</span>
+            <span class="indicator-value indicator-gap"><span class="indicator-dot"></span>4.2 avg</span>
+          </div>
+          <div class="indicator">
+            <span class="indicator-label">Unique members reached</span>
+            <span class="indicator-value indicator-gap"><span class="indicator-dot"></span>18,340</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resonance -->
+      <div class="dimension-card">
+        <div class="dimension-header">
+          <div class="dimension-name">Resonance</div>
+          <div class="dimension-score">6.1 / 10</div>
+        </div>
+        <div class="dimension-progress-track">
+          <div class="dimension-progress-fill" style="width: 61%;"></div>
+        </div>
+        <div class="dimension-narrative">Content engages when you post it, but inconsistent output means the audience isn't building momentum week over week.</div>
+        <div class="dimension-indicators">
+          <div class="indicator">
+            <span class="indicator-label">Engagement rate</span>
+            <span class="indicator-value indicator-watch"><span class="indicator-dot"></span>1.8%</span>
+          </div>
+          <div class="indicator">
+            <span class="indicator-label">Avg engagements / post</span>
+            <span class="indicator-value indicator-gap"><span class="indicator-dot"></span>14</span>
+          </div>
+          <div class="indicator">
+            <span class="indicator-label">Top post impressions</span>
+            <span class="indicator-value indicator-strength"><span class="indicator-dot"></span>7,240</span>
+          </div>
+          <div class="indicator">
+            <span class="indicator-label">Impression trend</span>
+            <span class="indicator-value indicator-strength"><span class="indicator-dot"></span>+22% vs prior period</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Consistency -->
+      <div class="dimension-card">
+        <div class="dimension-header">
+          <div class="dimension-name">Consistency</div>
+          <div class="dimension-score">5.3 / 10</div>
+        </div>
+        <div class="dimension-progress-track">
+          <div class="dimension-progress-fill" style="width: 53%;"></div>
+        </div>
+        <div class="dimension-narrative">Publishing is sporadic rather than systematic, which limits algorithmic visibility regardless of content quality.</div>
+        <div class="dimension-indicators">
+          <div class="indicator">
+            <span class="indicator-label">Posts per week</span>
+            <span class="indicator-value indicator-watch"><span class="indicator-dot"></span>1.4 avg</span>
+          </div>
+          <div class="indicator">
+            <span class="indicator-label">Active weeks</span>
+            <span class="indicator-value indicator-gap"><span class="indicator-dot"></span>71%</span>
+          </div>
+          <div class="indicator">
+            <span class="indicator-label">Longest gap</span>
+            <span class="indicator-value indicator-gap"><span class="indicator-dot"></span>3 weeks</span>
+          </div>
+          <div class="indicator">
+            <span class="indicator-label">Weeks above median</span>
+            <span class="indicator-value indicator-watch"><span class="indicator-dot"></span>48%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Authority -->
+      <div class="dimension-card">
+        <div class="dimension-header">
+          <div class="dimension-name">Authority</div>
+          <div class="dimension-score">8.4 / 10</div>
+        </div>
+        <div class="dimension-progress-track">
+          <div class="dimension-progress-fill" style="width: 84%;"></div>
+        </div>
+        <div class="dimension-narrative">The right people are watching — your audience composition reflects strong alignment with your intended market.</div>
+        <div class="dimension-indicators">
+          <div class="indicator">
+            <span class="indicator-label">Senior+ audience</span>
+            <span class="indicator-value indicator-strength"><span class="indicator-dot"></span>47%</span>
+          </div>
+          <div class="indicator">
+            <span class="indicator-label">Target industry alignment</span>
+            <span class="indicator-value indicator-strength"><span class="indicator-dot"></span>28%</span>
+          </div>
+          <div class="indicator">
+            <span class="indicator-label">Primary geography</span>
+            <span class="indicator-value indicator-watch"><span class="indicator-dot"></span>19% DC-Baltimore</span>
+          </div>
+          <div class="indicator">
+            <span class="indicator-label">Top follower organizations</span>
+            <span class="indicator-value indicator-strength"><span class="indicator-dot"></span>McKinsey · Deloitte · HBS</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interpretation Section -->
+    <div class="section-header">
+      <div class="section-eyebrow">Interpretation</div>
+      <h2 class="section-title">Reading Your Score</h2>
+    </div>
+
+    <div class="interpretation-prose">
+      <p class="interpretation-paragraph">A Signal Score above 80 indicates a presence that is actively building authority in the right spaces. Below 60 suggests fundamental gaps that, if left unaddressed, are actively working against your professional goals. Your score of 64.7 places you in the functional range — your presence exists and does some work, but it is not yet operating at the level your experience and credentials warrant.</p>
+
+      <p class="interpretation-paragraph">Your strongest signals are Authority (the right audience is already paying attention) and Presence (your profile provides a credible foundation). These are real advantages. The gap is in activating them — turning a solid foundation and a quality audience into consistent, compounding visibility.</p>
+
+      <p class="interpretation-paragraph">Your Forward Brief translates this diagnostic into a sequenced plan. The recommendations are ordered by leverage: addressing them in sequence will produce the fastest compound improvement to your overall Signal Score.</p>
+    </div>
+
+    <!-- Action bar -->
+    <div class="actions">
+      <a href="orpheus-groundwork-v1.html" class="btn-secondary">← Return to Groundwork</a>
+      <a href="orpheus-forward-brief.html" class="btn-primary">View My Forward Brief →</a>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="wordmark-sm"><span class="wordmark-sm-orpheus">Orpheus</span><span class="wordmark-sm-social">Social</span></div>
+    <div class="footer-links"><a href="#">Terms of Service</a><a href="#">Confidentiality</a><span>Copyright &copy; 2026 All Rights Reserved.</span></div>
+  </footer>
+</body>
+</html>

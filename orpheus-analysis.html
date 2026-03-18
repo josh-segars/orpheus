@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orpheus Social — Analysis in Progress</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,500;0,8..60,700;0,8..60,900;1,8..60,700;1,8..60,900&family=Source+Sans+3:ital,wght@0,400;0,600;1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="orpheus-styles.css">
+  <style>
+    /* Pulse animation for status dots */
+    @keyframes pulse {
+      0% {
+        opacity: 0.2;
+      }
+      50% {
+        opacity: 1;
+      }
+      100% {
+        opacity: 0.2;
+      }
+    }
+
+    .analysis-status {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      margin: 60px 0;
+    }
+
+    .status-dots {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--warm-gold);
+      animation: pulse 1.4s infinite;
+    }
+
+    .status-dot:nth-child(1) {
+      animation-delay: 0s;
+    }
+
+    .status-dot:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .status-dot:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+
+    .status-label {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--warm-stone);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .centered-button {
+      display: flex;
+      justify-content: center;
+      margin-top: 60px;
+    }
+
+    .centered-button .btn-secondary {
+      width: auto;
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="wordmark"><span class="wordmark-orpheus">Orpheus</span><span class="wordmark-social">Social</span></div>
+    <div class="nav-client"><span class="nav-client-label">Confidential Portal for</span><span class="nav-client-name">Jane Doe</span></div>
+  </nav>
+
+  <main class="main-interior">
+    <div class="section-header">
+      <div class="section-eyebrow">Analysis</div>
+      <h1 class="section-title">Your Analysis is Underway</h1>
+    </div>
+
+    <p class="section-intro">Your Groundwork is complete. Andrew is now reviewing your materials and preparing your Signal Score diagnostic. You will receive a message directly when your results are ready — typically within 48 hours.</p>
+
+    <div class="analysis-status">
+      <div class="status-dots">
+        <div class="status-dot"></div>
+        <div class="status-dot"></div>
+        <div class="status-dot"></div>
+      </div>
+      <div class="status-label">Analysis in progress</div>
+    </div>
+
+    <div class="info-notice">
+      <div class="info-notice-text">
+        <span class="info-notice-label">While You Wait</span>
+        <div class="info-notice-body">If anything comes to mind that you'd like to add to your questionnaire responses — a clarification, an example, something you forgot to mention — you can return to any section via the Groundwork Checklist and update your answers before the analysis is finalized.</div>
+      </div>
+    </div>
+
+    <div class="centered-button">
+      <a href="orpheus-groundwork-v1.html" class="btn-secondary">Return to Groundwork</a>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="wordmark-sm"><span class="wordmark-sm-orpheus">Orpheus</span><span class="wordmark-sm-social">Social</span></div>
+    <div class="footer-links"><a href="#">Terms of Service</a><a href="#">Confidentiality</a><span>Copyright &copy; 2026 All Rights Reserved.</span></div>
+  </footer>
+</body>
+</html>

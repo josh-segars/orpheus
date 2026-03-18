@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orpheus Social — Forward Brief</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,500;0,8..60,700;0,8..60,900;1,8..60,700;1,8..60,900&family=Source+Sans+3:ital,wght@0,400;0,600;1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="orpheus-styles.css">
+  <style>
+    .priority-cards {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 28px;
+      margin-bottom: 60px;
+    }
+
+    .priority-card {
+      background-color: var(--warm-parchment);
+      border-radius: 10px;
+      padding: 28px;
+      display: flex;
+      gap: 24px;
+    }
+
+    .priority-number-column {
+      flex-shrink: 0;
+      width: 48px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 4px;
+    }
+
+    .priority-number {
+      font-family: 'Source Serif 4', serif;
+      font-size: 32px;
+      font-weight: 700;
+      font-style: italic;
+      font-variation-settings: "opsz" 32;
+      color: rgba(196, 144, 42, 0.2);
+      line-height: 1;
+    }
+
+    .priority-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .priority-title {
+      font-family: 'Source Serif 4', serif;
+      font-size: 19px;
+      font-weight: 700;
+      color: var(--warm-text);
+      margin-bottom: 12px;
+    }
+
+    .priority-dimension {
+      display: inline-block;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--warm-gold);
+      border: 1px solid var(--warm-gold);
+      border-radius: 10px;
+      padding: 4px 10px;
+      margin-bottom: 16px;
+    }
+
+    .priority-why {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 14px;
+      font-style: italic;
+      color: var(--warm-stone);
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+
+    .priority-action {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 14px;
+      color: var(--warm-text);
+      line-height: 1.7;
+    }
+
+    .next-steps-prose {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+
+    .next-steps-paragraph {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 15px;
+      color: var(--warm-stone);
+      line-height: 1.7;
+    }
+
+    .download-button-container {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    .download-button-container .btn-primary {
+      width: auto;
+    }
+
+    .download-note {
+      text-align: center;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 13px;
+      font-style: italic;
+      color: var(--warm-stone);
+    }
+
+    .final-actions {
+      display: flex;
+      justify-content: flex-start;
+      margin-top: 60px;
+    }
+
+    .final-actions .btn-secondary {
+      width: auto;
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="wordmark"><span class="wordmark-orpheus">Orpheus</span><span class="wordmark-social">Social</span></div>
+    <div class="nav-client"><span class="nav-client-label">Confidential Portal for</span><span class="nav-client-name">Jane Doe</span></div>
+  </nav>
+
+  <main class="main-interior">
+    <!-- Header -->
+    <div class="section-header">
+      <div class="section-eyebrow">Forward Brief</div>
+      <h1 class="section-title">Your Path to a Stronger Signal</h1>
+    </div>
+
+    <p class="section-intro">Based on your Signal Score diagnostic, these five priorities represent the clearest opportunities to close the gap between where your presence is and where your experience warrants. They are ordered by leverage — address them in sequence for compounding effect.</p>
+
+    <!-- Priority Cards -->
+    <div class="priority-cards">
+      <!-- Priority 1 -->
+      <div class="priority-card">
+        <div class="priority-number-column">
+          <div class="priority-number">1</div>
+        </div>
+        <div class="priority-content">
+          <div class="priority-title">Grow Your Follower Base</div>
+          <div class="priority-dimension">Reach</div>
+          <div class="priority-why">Follower count is the most visible credibility signal to someone who encounters your profile for the first time. Your audience composition is excellent; you need more of them.</div>
+          <div class="priority-action">Connect with 10–15 new targeted professionals per week from your target industries. Follow up every post with direct engagement (reply to every comment within 24 hours) to signal to the algorithm that your content is worth amplifying. Set a milestone: 1,000 followers in 90 days.</div>
+        </div>
+      </div>
+
+      <!-- Priority 2 -->
+      <div class="priority-card">
+        <div class="priority-number-column">
+          <div class="priority-number">2</div>
+        </div>
+        <div class="priority-content">
+          <div class="priority-title">Establish a Publishing Rhythm</div>
+          <div class="priority-dimension">Consistency</div>
+          <div class="priority-why">Algorithmic visibility on LinkedIn is almost entirely a function of consistent signal — not volume, not quality alone, but reliable presence. Your current sporadic pattern means weeks of invisibility.</div>
+          <div class="priority-action">Commit to a non-negotiable minimum of 3 posts per week, published Monday, Wednesday, and Friday. Use a content bank — write 2–3 weeks of posts at once to eliminate the weekly decision cost. Consistency at moderate quality outperforms quality at low frequency.</div>
+        </div>
+      </div>
+
+      <!-- Priority 3 -->
+      <div class="priority-card">
+        <div class="priority-number-column">
+          <div class="priority-number">3</div>
+        </div>
+        <div class="priority-content">
+          <div class="priority-title">Request Recommendations Strategically</div>
+          <div class="priority-dimension">Presence</div>
+          <div class="priority-why">You have 3 recommendations received against 8 given — a visible imbalance. Recommendations are the only form of third-party validation visible on your profile, and they carry disproportionate weight with high-seniority visitors.</div>
+          <div class="priority-action">Identify 3–5 colleagues, clients, or supervisors from your most recent and most prestigious roles. Send a specific, personal request — tell them what you'd like them to highlight. Aim for 2 new recommendations in the next 30 days.</div>
+        </div>
+      </div>
+
+      <!-- Priority 4 -->
+      <div class="priority-card">
+        <div class="priority-number-column">
+          <div class="priority-number">4</div>
+        </div>
+        <div class="priority-content">
+          <div class="priority-title">Publish Your First LinkedIn Article</div>
+          <div class="priority-dimension">Presence</div>
+          <div class="priority-why">Long-form articles index differently on LinkedIn and in search. They signal depth of thought leadership that posts alone cannot establish. Zero articles is a notable gap for a senior advisor.</div>
+          <div class="priority-action">Write one 800–1,200 word article on a topic at the intersection of your expertise and your audience's biggest current challenge. Focus on a specific question you are asked frequently. Publish it, then share it as a post with a short excerpt and a "read the full piece" call to action.</div>
+        </div>
+      </div>
+
+      <!-- Priority 5 -->
+      <div class="priority-card">
+        <div class="priority-number-column">
+          <div class="priority-number">5</div>
+        </div>
+        <div class="priority-content">
+          <div class="priority-title">Sharpen Your Content Voice</div>
+          <div class="priority-dimension">Resonance</div>
+          <div class="priority-why">Your engagement rate is functional, but the gap between your average post and your top performers suggests untapped potential. The content that resonates most tends to be specific, personal, and stake-forward — not advisory or observational.</div>
+          <div class="priority-action">Review your 5 highest-performing posts for patterns. Before writing any post, answer: "What is the specific situation I am in, what do I actually think about it, and why would that matter to someone in my audience?" Posts that answer all three tend to outperform. Eliminate posts that are purely professional updates or content shares without a personal angle.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Next Steps Section -->
+    <div class="section-header">
+      <div class="section-eyebrow">Next Steps</div>
+      <h2 class="section-title">Moving Forward</h2>
+    </div>
+
+    <div class="next-steps-prose">
+      <p class="next-steps-paragraph">Your Forward Brief is a starting point, not a prescription. Andrew will review these priorities with you directly to sequence them within your current workload, adapt them to your specific voice and context, and establish milestones for the 90 days ahead. Bring any questions, pushbacks, or additions to that conversation — this document is meant to provoke your thinking, not settle it.</p>
+    </div>
+
+    <!-- Download Section -->
+    <div class="download-button-container">
+      <a href="#" class="btn-primary">Download Your Forward Brief</a>
+    </div>
+    <div class="download-note">A PDF version of this document will be provided by Andrew following your review session.</div>
+
+    <!-- Final Action Bar -->
+    <div class="final-actions">
+      <a href="orpheus-signal-score.html" class="btn-secondary">← Return to Signal Score</a>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="wordmark-sm"><span class="wordmark-sm-orpheus">Orpheus</span><span class="wordmark-sm-social">Social</span></div>
+    <div class="footer-links"><a href="#">Terms of Service</a><a href="#">Confidentiality</a><span>Copyright &copy; 2026 All Rights Reserved.</span></div>
+  </footer>
+</body>
+</html>

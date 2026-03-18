@@ -5,7 +5,9 @@ Strategic Digital Presence Advisory** practice. It guides senior executive
 clients through a structured data-gathering phase ("Groundwork"), then
 delivers a **Signal Score** diagnostic and **Forward Brief** action plan.
 
-Built by Josh Segars. No framework — pure HTML and CSS. No JavaScript.
+**Current state:** Fully functional prototype — pure HTML/CSS, no JavaScript, no framework, hosted locally via VS Code Live Server. All 14 portal screens complete.
+
+**Next phase:** Transitioning to a hosted production stack with a Python backend, database, and React frontend. See "Planned Production Stack" section below.
 
 ---
 
@@ -99,9 +101,9 @@ a `<style>` block in the page's `<head>`.
 | `orpheus-questionnaire-s5.html` | Q: Current LinkedIn Relationship (Q14–Q17) | ✅ Complete |
 | `orpheus-questionnaire-s6.html` | Q: Voice & Style (Q18–Q20) | ✅ Complete |
 | `orpheus-questionnaire-s7.html` | Q: Practical Parameters (Q21–Q23) | ✅ Complete |
-| `orpheus-analysis.html` | Analysis in Progress (holding state) | 🔲 Not started |
-| `orpheus-signal-score.html` | Signal Score delivery | 🔲 Not started |
-| `orpheus-forward-brief.html` | Forward Brief delivery | 🔲 Not started |
+| `orpheus-analysis.html` | Analysis in Progress (holding state) | ✅ Complete |
+| `orpheus-signal-score.html` | Signal Score delivery | ✅ Complete |
+| `orpheus-forward-brief.html` | Forward Brief delivery | ✅ Complete |
 
 ---
 
@@ -178,10 +180,142 @@ PDF export was evaluated and deemed redundant — ZIP CSVs contain same profile 
 
 ---
 
+## Signal Score Framework
+
+5 dimensions, weighted to 100-point total:
+
+| Dimension | Weight | What It Measures |
+|---|---|---|
+| Presence | 20 | Profile depth & credibility (skills, endorsements, recs, summary, honors) |
+| Reach | 20 | Audience size & growth (followers, connections, new follower rate) |
+| Resonance | 25 | Content engagement quality (rate, avg per post, top post, trend) |
+| Consistency | 20 | Content volume & cadence (posts/week, active weeks, variance) |
+| Authority | 15 | Audience composition (seniority %, industry alignment, geography) |
+
+Placeholder scores used in current prototype: Presence 7.2, Reach 4.8, Resonance 6.1, Consistency 5.3, Authority 8.4 → Total 64.7 ("Moderate Signal Strength")
+
+Andrew Segars test scores (from actual data, 2025-03-17 to 2026-03-16): Presence 9.5, Reach 10.0, Resonance 9.0, Consistency 8.5, Authority 10.0 → Total 93.4
+
+---
+
+## Sub-Metric Schema (Signal Score Indicators)
+
+Each dimension exposes 4 fixed indicators on every report — same metrics every cycle to support longitudinal comparison. Status is derived from thresholds: strength (filled gold dot), watch (gray dot), gap (hollow dot).
+
+Thresholds will evolve as the practice calibrates against real client data.
+
+| Dimension | Indicator | Strength | Gap |
+|---|---|---|---|
+| Presence | Summary | 1,000+ chars | < 500 chars |
+| Presence | Skills & Endorsements | 40+ skills | < 25 skills |
+| Presence | Recommendations received | 5+ | < 3 |
+| Presence | Articles published | 3+ | 0 |
+| Reach | Total followers | 2,500+ | < 1,000 |
+| Reach | Connections | 2,000+ | < 500 |
+| Reach | New followers / week | 10+ avg | < 5 avg |
+| Reach | Unique members reached | 50,000+ / yr | < 20,000 / yr |
+| Resonance | Engagement rate | 3%+ | < 1% |
+| Resonance | Avg engagements / post | 30+ | < 15 |
+| Resonance | Top post impressions | 10,000+ | < 5,000 |
+| Resonance | Impression trend | +10% vs prior period | < −10% |
+| Consistency | Posts per week | 3+ avg | < 1 avg |
+| Consistency | Active weeks | 90%+ of period | < 75% |
+| Consistency | Longest gap | ≤ 1 week | > 3 weeks |
+| Consistency | Weeks above median | 60%+ | < 40% |
+| Authority | Senior+ audience | 50%+ | < 30% |
+| Authority | Target industry alignment | 30%+ | < 15% |
+| Authority | Primary geography | 20%+ in target market | < 10% |
+| Authority | Top follower organizations | Named alignment with target sector | — |
+
+Authority indicators 3 and 4 are client-specific — "target industries" and "primary geography" are defined by questionnaire answers (Target Audiences section), not derived from LinkedIn data alone.
+
+---
+
+## Planned Production Stack
+
+The prototype is pure HTML/CSS/Python running locally. Production adds a backend, database, and hosted frontend.
+
+### Tech Stack
+
+| Layer | Technology | Notes |
+|---|---|---|
+| Frontend | React | Dynamic client portal, score display, review delivery |
+| Backend | FastAPI (Python) | Async; Claude SDK support; scoring scripts already in Python |
+| Database | Supabase (PostgreSQL) | Auth, job queue, result storage; free tier for beta |
+| AI | Anthropic API — Claude | Narrative generation and Forward Brief synthesis only |
+| Hosting — frontend | Vercel | Free tier |
+| Hosting — backend | Railway or Render | Free tier / ~$5/mo |
+| CI/CD | GitHub Actions | Existing repo |
+
+### Project Structure
+
+```
+/
+├── CLAUDE.md
+├── frontend/              # React app
+│   └── src/
+├── backend/               # FastAPI app
+│   ├── main.py
+│   ├── agents/            # Claude calls — narrative generation, Forward Brief
+│   ├── scoring/           # Deterministic Signal Score computation (5 dimensions)
+│   ├── ingestion/         # LinkedIn ZIP + XLSX parsing
+│   ├── workers/           # Background job processor
+│   └── models/            # Pydantic data models
+└── .github/
+    └── workflows/         # GitHub Actions CI/CD
+```
+
+### Analysis Pipeline
+
+The analysis has three distinct stages — only the third involves Claude:
+
+1. **Ingestion** — Parse LinkedIn ZIP (CSVs) and Analytics XLSX into structured data. Pure Python, deterministic. Proof-of-concept scripts already exist from prototype work.
+
+2. **Scoring** — Compute 5-dimension Signal Score using weighted thresholds. Pure Python, deterministic. Output: dimension scores (1–10), sub-metric values, and status flags (strength / watch / gap) for each of the 20 indicators.
+
+3. **Narrative generation** — Claude receives scored data + questionnaire answers and generates: dimension narratives, score interpretation, and Forward Brief priorities. This is the only AI step. Structured output, one agent call.
+
+Keeping scoring deterministic and separate from the AI call makes scores auditable, reproducible, and comparable across reporting cycles without re-running Claude.
+
+### Job Queue Pattern
+
+Ingestion + scoring + Claude call takes 20–60 seconds — too long for a synchronous web request. The job queue pattern decouples submission from processing:
+
+1. Client submits LinkedIn data → FastAPI creates a `pending` job in Supabase → returns `job_id` immediately
+2. Client sees the Analysis in Progress screen (already built)
+3. Background worker claims the job, runs the full pipeline, saves results
+4. Frontend polls `/jobs/{job_id}` every few seconds → updates UI on completion
+
+**Job states:** `pending → running → complete` (failed jobs retry up to 3×, then surface an error)
+
+**Queue implementation for beta:** Supabase `jobs` table using `SELECT ... FOR UPDATE SKIP LOCKED` to prevent duplicate claims if workers scale.
+
+### Environment Variables
+
+```
+ANTHROPIC_API_KEY=
+SUPABASE_URL=
+SUPABASE_SERVICE_KEY=
+```
+
+Never committed. Document required keys in `.env.example`.
+
+### Backend Conventions
+
+- Use `async/await` throughout — FastAPI and Supabase client are both async
+- Ingestion logic lives in `/backend/ingestion/` — one file per source (zip_parser.py, xlsx_parser.py)
+- Scoring logic lives in `/backend/scoring/` — separate from agent calls, no Claude dependency
+- All Claude calls live in `/backend/agents/` — one file per agent
+- Job queue state managed via `jobs` table in Supabase
+- Pydantic models in `/backend/models/` define the data contracts between pipeline stages
+
+---
+
 ## Deferred / Pending
 
 - Screenshot assets for LinkedIn step pages (3 in step1, 3 in step2)
-- Signal Score document structure (discuss with Andrew)
 - Confidentiality policy and AI data handling disclosure
 - Backend / form submission (currently all front-end static)
-- Analysis in Progress, Signal Score, and Forward Brief screens
+- "My Groundwork is Complete" button disabled state (currently always active — requires JS or backend to enable only when all items checked)
+- PDF export of Forward Brief
+- Per-client personalization (name, scores, priorities) — currently all static placeholders
