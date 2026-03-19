@@ -245,7 +245,7 @@ The prototype is pure HTML/CSS/Python running locally. Production adds a backend
 | AI | Anthropic API — Claude | Narrative generation and Forward Brief synthesis only |
 | Hosting — frontend | Vercel | Free tier |
 | Hosting — backend | Railway | Free tier / ~$5/mo |
-| Project management | Plane (cloud) | plane.so — no self-hosting |
+| Project management | Plane (cloud) | workspace: `orpheussocial`, project: `Orpheus`, identifier: `ORPHEUS` |
 | CI/CD | GitHub Actions | Existing repo |
 
 ### Project Structure
@@ -312,11 +312,30 @@ Never committed. Document required keys in `.env.example`.
 
 ---
 
+## Plane Documentation Conventions
+
+Plane is the source of truth for tasks and documentation. Do not maintain a duplicate task list in this file.
+
+Work items are referenced as `ORPHEUS-[n]` (e.g. `ORPHEUS-12`). Use these identifiers in commit messages and PRs to link work to Plane issues.
+
+**Page naming format:** `Category: Title (YYYY-MM-DD)`
+Example: `Decision: Auth Strategy (2026-03-18)`
+
+**Page categories:**
+- `Decision` — why X was chosen over Y (tech, product, design)
+- `Spec` — feature or component requirements and scope
+- `Architecture` — system design, infrastructure, data models
+- `Meeting` — discussion summaries and action items
+
+**Publishing workflow:**
+1. Claude drafts page content in the conversation
+2. Josh reviews and approves (or requests edits)
+3. Claude publishes to the Orpheus project in Plane
+
+All pages are published to the **Orpheus project** (project-level, not workspace-level).
+
+---
+
 ## Deferred / Pending
 
-- Screenshot assets for LinkedIn step pages (3 in step1, 3 in step2)
-- Confidentiality policy and AI data handling disclosure
-- Backend / form submission (currently all front-end static)
-- "My Groundwork is Complete" button disabled state (currently always active — requires JS or backend to enable only when all items checked)
-- PDF export of Forward Brief
-- Per-client personalization (name, scores, priorities) — currently all static placeholders
+See the Orpheus project in Plane for the current task list. Plane is the source of truth — do not maintain a parallel list here.
