@@ -10,3 +10,7 @@ node_modules/
 
 # Client data — contains private LinkedIn data, never commit
 client-data/
+
+# Python
+__pycache__/
+*.pyc

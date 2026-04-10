@@ -132,9 +132,10 @@ can complete items in any order.
 Two files collected from clients during Groundwork:
 
 1. **ZIP archive** — from LinkedIn Settings > Data privacy > Download your data >
-   "Download larger data archive". Contains CSVs: Profile, Positions, Education,
-   Skills, Connections, Recommendations, Endorsements, Shares, Inferences_about_you, etc.
-   No analytics data in ZIP.
+   **"Download larger data archive" (Complete, not Basic)**. Basic export omits
+   Shares.csv, which is required for behavioral scoring. Contains CSVs: Profile,
+   Positions, Education, Skills, Connections, Recommendations, Endorsements,
+   Shares, Comments, Reactions, Rich_Media, Inferences_about_you, etc.
 
 2. **Analytics XLSX** — from linkedin.com/analytics/creator/content/ (accessed via
    "Post impressions" link in feed left column). Export set to "Past 365 days".
@@ -180,54 +181,26 @@ PDF export was evaluated and deemed redundant — ZIP CSVs contain same profile 
 
 ---
 
-## Signal Score Framework
+## Signal Score Framework (v2)
 
-5 dimensions, weighted to 100-point total:
+4 dimensions, weighted to 100-point composite. The score measures whether a member's profile and behavior provide signals LinkedIn's retrieval and ranking systems are documented to use. It does not measure outcomes.
 
 | Dimension | Weight | What It Measures |
 |---|---|---|
-| Presence | 20 | Profile depth & credibility (skills, endorsements, recs, summary, honors) |
-| Reach | 20 | Audience size & growth (followers, connections, new follower rate) |
-| Resonance | 25 | Content engagement quality (rate, avg per post, top post, trend) |
-| Consistency | 20 | Content volume & cadence (posts/week, active weeks, variance) |
-| Authority | 15 | Audience composition (seniority %, industry alignment, geography) |
+| Profile Signal Clarity | 35% | Does the profile give the retrieval system clear language to build an accurate member embedding? |
+| Behavioral Signal Strength | 30% | Has the member built sufficient, recent, coherent engagement history for the ranking model? |
+| Behavioral Signal Quality | 20% | Is the member generating the action types the optimization targets reward? |
+| Profile-Behavior Alignment | 15% | Is content topically and semantically consistent with the declared professional identity? |
 
-Placeholder scores used in current prototype: Presence 7.2, Reach 4.8, Resonance 6.1, Consistency 5.3, Authority 8.4 → Total 64.7 ("Moderate Signal Strength")
+Dimensions 1 and 4 are scored by Claude via rubrics (1–5 scale). Dimensions 2 and 3 are deterministic band lookups (0–5 scale). All PROVISIONAL parameters are adjustable config, not hardcoded.
 
-Andrew Segars test scores (from actual data, 2025-03-17 to 2026-03-16): Presence 9.5, Reach 10.0, Resonance 9.0, Consistency 8.5, Authority 10.0 → Total 93.4
+Client-facing output is a **signal strength band** (Weak/Emerging/Moderate/Strong/Exceptional), not a raw number. Numeric scores visible to advisors only.
 
----
+**What moved to Forward Brief (not scored):** Reach, Resonance, Authority, viewer-actor affinity, visual professionalism, engagement invitation.
 
-## Sub-Metric Schema (Signal Score Indicators)
+Pressure-test: Andrew Segars scores 77.6 → Strong band (data: 2025-03-17 to 2026-03-16).
 
-Each dimension exposes 4 fixed indicators on every report — same metrics every cycle to support longitudinal comparison. Status is derived from thresholds: strength (filled gold dot), watch (gray dot), gap (hollow dot).
-
-Thresholds will evolve as the practice calibrates against real client data.
-
-| Dimension | Indicator | Strength | Gap |
-|---|---|---|---|
-| Presence | Summary | 1,000+ chars | < 500 chars |
-| Presence | Skills & Endorsements | 40+ skills | < 25 skills |
-| Presence | Recommendations received | 5+ | < 3 |
-| Presence | Articles published | 3+ | 0 |
-| Reach | Total followers | 2,500+ | < 1,000 |
-| Reach | Connections | 2,000+ | < 500 |
-| Reach | New followers / week | 10+ avg | < 5 avg |
-| Reach | Unique members reached | 50,000+ / yr | < 20,000 / yr |
-| Resonance | Engagement rate | 3%+ | < 1% |
-| Resonance | Avg engagements / post | 30+ | < 15 |
-| Resonance | Top post impressions | 10,000+ | < 5,000 |
-| Resonance | Impression trend | +10% vs prior period | < −10% |
-| Consistency | Posts per week | 3+ avg | < 1 avg |
-| Consistency | Active weeks | 90%+ of period | < 75% |
-| Consistency | Longest gap | ≤ 1 week | > 3 weeks |
-| Consistency | Weeks above median | 60%+ | < 40% |
-| Authority | Senior+ audience | 50%+ | < 30% |
-| Authority | Target industry alignment | 30%+ | < 15% |
-| Authority | Primary geography | 20%+ in target market | < 10% |
-| Authority | Top follower organizations | Named alignment with target sector | — |
-
-Authority indicators 3 and 4 are client-specific — "target industries" and "primary geography" are defined by questionnaire answers (Target Audiences section), not derived from LinkedIn data alone.
+See `PRODUCT_CONTEXT.md` for full sub-dimension specifications, band thresholds, scoring formula, and Forward Brief data contract.
 
 ---
 
@@ -242,7 +215,7 @@ The prototype is pure HTML/CSS/Python running locally. Production adds a backend
 | Frontend | React | Dynamic client portal, score display, review delivery |
 | Backend | FastAPI (Python) | Async; Claude SDK support; scoring scripts already in Python |
 | Database | Supabase (PostgreSQL) | Auth, job queue, result storage; free tier for beta |
-| AI | Anthropic API — Claude | Narrative generation and Forward Brief synthesis only |
+| AI | Anthropic API — Claude | Rubric scoring (Dim 1 + 4) and narrative generation |
 | Hosting — frontend | Vercel | Free tier |
 | Hosting — backend | Railway | Free tier / ~$5/mo |
 | Project management | Plane (cloud) | workspace: `orpheussocial`, project: `Orpheus`, identifier: `ORPHEUS` |
@@ -253,30 +226,53 @@ The prototype is pure HTML/CSS/Python running locally. Production adds a backend
 ```
 /
 ├── CLAUDE.md
-├── frontend/              # React app
+├── PRODUCT_CONTEXT.md          # Full scoring specs, schema, decisions
+├── frontend/                   # React app (not yet scaffolded)
 │   └── src/
-├── backend/               # FastAPI app
-│   ├── main.py
-│   ├── agents/            # Claude calls — narrative generation, Forward Brief
-│   ├── scoring/           # Deterministic Signal Score computation (5 dimensions)
-│   ├── ingestion/         # LinkedIn ZIP + XLSX parsing
-│   ├── workers/           # Background job processor
-│   └── models/            # Pydantic data models
+├── backend/                    # FastAPI app
+│   ├── main.py                 # App entry point, CORS, router registration
+│   ├── config.py               # Pydantic Settings (.env loading)
+│   ├── db.py                   # Supabase client init
+│   ├── auth.py                 # FastAPI auth dependency
+│   ├── routers/                # API route handlers (5 routers, 15 endpoints)
+│   ├── models/                 # Pydantic data models
+│   │   ├── job.py              # Job state model
+│   │   └── scoring.py          # v2 scoring output models (ScoringStageOutput)
+│   ├── ingestion/              # LinkedIn ZIP + XLSX parsing (validated)
+│   │   ├── types.py            # JSONB shape models for parsed data
+│   │   ├── zip_parser.py       # ZIP archive parser
+│   │   └── xlsx_parser.py      # Analytics XLSX parser
+│   ├── scoring/                # Deterministic Signal Score computation (4 dimensions)
+│   │   ├── config.py           # All PROVISIONAL thresholds and weights
+│   │   └── engine.py           # Scoring engine — run_scoring() entry point
+│   ├── agents/                 # Claude API calls (2 calls in pipeline)
+│   │   ├── rubric.py           # Dim 1 + Dim 4 rubric scoring
+│   │   └── narrative.py        # Narrative generation (stub)
+│   ├── workers/                # Background job processor
+│   │   └── processor.py        # Job loop with optimistic locking (stub)
+│   ├── migrations/             # SQL migrations (applied to Supabase)
+│   │   ├── 003_v2_scoring_columns.sql
+│   │   └── 004_rename_narratives_dimension.sql
+│   ├── tests/                  # Test suite
+│   │   └── test_scoring.py     # 48 tests for scoring engine
+│   └── requirements.txt
 └── .github/
-    └── workflows/         # GitHub Actions CI/CD
+    └── workflows/              # GitHub Actions CI/CD
 ```
 
 ### Analysis Pipeline
 
-The analysis has three distinct stages — only the third involves Claude:
+The pipeline has four stages. Claude is used in two of them (rubric scoring and narrative generation). All other scoring is deterministic.
 
-1. **Ingestion** — Parse LinkedIn ZIP (CSVs) and Analytics XLSX into structured data. Pure Python, deterministic. Proof-of-concept scripts already exist from prototype work.
+1. **Ingestion** — Parse LinkedIn ZIP (CSVs) and Analytics XLSX into structured data. Pure Python, deterministic. Parsers validated against real export data.
 
-2. **Scoring** — Compute 5-dimension Signal Score using weighted thresholds. Pure Python, deterministic. Output: dimension scores (1–10), sub-metric values, and status flags (strength / watch / gap) for each of the 20 indicators.
+2. **Rubric scoring** — Claude applies written rubrics to profile data (Dim 1: 5 sub-dimensions) and profile+content data (Dim 4: 2 sub-dimensions). Returns integer scores (1–5) per sub-dimension. Full rubric text is in `agents/rubric.py`.
 
-3. **Narrative generation** — Claude receives scored data + questionnaire answers and generates: dimension narratives, score interpretation, and Forward Brief priorities. This is the only AI step. Structured output, one agent call.
+3. **Deterministic scoring** — Computes Dim 2 and Dim 3 from archive data (quantitative band lookups). Combines all four dimensions using the formula `(sum − min) / (max − min) × weight`. Also extracts Forward Brief structured data (Reach, Resonance, Authority from XLSX; qualitative flags from ZIP). Single entry point: `scoring/engine.py → run_scoring()`. Output: `ScoringStageOutput` (scored_dimensions + forward_brief_data).
 
-Keeping scoring deterministic and separate from the AI call makes scores auditable, reproducible, and comparable across reporting cycles without re-running Claude.
+4. **Narrative generation** — Claude receives both scored_dimensions and forward_brief_data as structured inputs, plus questionnaire answers. Generates dimension narratives and Forward Brief text. Prompt must map score ranges to narrative guidance explicitly.
+
+Keeping scoring deterministic and separate from narrative generation makes scores auditable, reproducible, and comparable across reporting cycles.
 
 ### Job Queue Pattern
 
@@ -294,21 +290,26 @@ Ingestion + scoring + Claude call takes 20–60 seconds — too long for a synch
 ### Environment Variables
 
 ```
-ANTHROPIC_API_KEY=
 SUPABASE_URL=
 SUPABASE_SERVICE_KEY=
+SUPABASE_ANON_KEY=
+ANTHROPIC_API_KEY=
 ```
 
-Never committed. Document required keys in `.env.example`.
+Never committed. Documented in `backend/.env.example`.
 
 ### Backend Conventions
 
 - Use `async/await` throughout — FastAPI and Supabase client are both async
+- API routes live in `/backend/routers/` — one file per resource, user-scoped Supabase client via auth dependency
 - Ingestion logic lives in `/backend/ingestion/` — one file per source (zip_parser.py, xlsx_parser.py)
-- Scoring logic lives in `/backend/scoring/` — separate from agent calls, no Claude dependency
-- All Claude calls live in `/backend/agents/` — one file per agent
+- Scoring logic lives in `/backend/scoring/` — `config.py` holds all PROVISIONAL thresholds, `engine.py` is the orchestrator
+- Claude calls live in `/backend/agents/` — `rubric.py` (Dim 1 + 4 scoring) and `narrative.py` (report generation)
 - Job queue state managed via `jobs` table in Supabase
 - Pydantic models in `/backend/models/` define the data contracts between pipeline stages
+- Two Supabase client patterns: service client (pipeline, admin ops) and user-scoped client (API routes, RLS enforcement)
+- Worker runs as a separate process (`python -m backend.workers`) — uses service-role client, optimistic locking for job claims
+- All PROVISIONAL scoring parameters serialized into `config_snapshot` on the jobs table for reproducibility
 
 ---
 

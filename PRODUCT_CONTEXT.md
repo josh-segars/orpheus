@@ -14,48 +14,99 @@ Orpheus Social is a client portal and diagnostic tool that measures LinkedIn pre
 
 2. **Individual (self-serve)** — A person signs up, uploads their own LinkedIn data, and receives the Signal Score + Forward Brief automatically. No human review gate.
 
-Both use cases share the same scoring engine and Signal Score framework. The scoring is fully deterministic — no AI is involved in score computation. Claude only generates narratives and Forward Brief copy after scores are calculated. The difference between use cases is in the workflow and delivery layer, not the analysis.
+Both use cases share the same scoring engine and Signal Score framework. **One scoring engine, no stream distinction.** There is no client-type flag, no stream identifier, and no conditional scoring logic. The same dimensions, formulas, rubrics, and band labels apply to every client. All differences between advisory and automated streams live in the report output and delivery layer — not in the scoring engine.
 
 **Design principles:**
 - Reliability over completeness — only score what can be consistently captured and explained
 - Observable over inferred — use platform data where possible, rubric scoring only for explicit signals
 - Separation of concerns — Score = measurement. Advisory = interpretation. Do not mix them.
 - This score measures **presence health**, not strategic excellence
+- Every scoring element carries a confidence label: CONFIRMED, INFERRED, PROXY, or PROVISIONAL
+
+**Fundamental reframe (v2, April 2026):** The Signal Score measures whether a member's profile and behavior provide the kinds of signals LinkedIn's confirmed retrieval and ranking systems are documented to use. It does not measure outcomes. Two confirmed inputs drive everything: profile language (what the retrieval system reads to build the member embedding) and behavioral history (what the ranking system reads to understand trajectory and predict future engagement).
 
 ---
 
-## Current Schema State
+## Current Schema State (v2)
 
 ### Dimensions
 
-| # | Dimension | Layer | Question | Weight |
+| # | Dimension | Weight | Confidence | What It Measures |
 |---|---|---|---|---|
-| 1 | Narrative & Conversion | Signal Alignment | Do profile signals and content signals align with a clear path to action? | 20 |
-| 2 | Resonance | Performance | Does content generate engagement? | 20 |
-| 3 | Consistency | Behavior | Is activity sustained and predictable? | 20 |
-| 4 | Presence | Foundation | Is the profile structurally complete and interpretable? | 15 |
-| 5 | Authority | Audience Quality | Is the audience relevant and appropriately senior? | 15 |
-| 6 | Reach | Distribution | How large is the addressable audience? | 10 |
+| 1 | Profile Signal Clarity | 35% | CONFIRMED | Does the profile give the retrieval system clear language to build an accurate member embedding? |
+| 2 | Behavioral Signal Strength | 30% | CONFIRMED | Has the member built sufficient, recent, coherent engagement history for the ranking model? |
+| 3 | Behavioral Signal Quality | 20% | CONFIRMED/INFERRED | Is the member generating the action types the optimization targets reward? |
+| 4 | Profile-Behavior Alignment | 15% | CONFIRMED/INFERRED | Is content topically and semantically consistent with the declared professional identity? |
 
-**Weights finalized [Andrew, 2026-03-30].** Ordered by weight. Rationale grounded in LinkedIn's confirmed AI systems — see Platform Intelligence section and Signal Score Architecture Decisions document.
+**Weights confirmed [Andrew, 2026-04-08].** Labeled INFERRED and PROVISIONAL — well-grounded in cold-start literature across three papers but LinkedIn does not publish dimension weights. Must be adjustable configuration parameters, not hardcoded constants. Recalibration expected at 50–100 profiles.
+
+**What moved to Forward Brief (not scored):** Reach (followers, connections, members reached), Resonance (impressions, engagement rates on received content), Authority (audience seniority, industry, geography), Engagement Invitation / CTA, viewer-actor affinity, and visual professionalism. These are computed and displayed as advisory context but do not contribute to the composite score. Rationale: these are outputs of the system, not inputs — they measure what happened, not whether the member provides signals the system is documented to use.
 
 ---
 
 ### Sub-dimension Summary
 
-Full sub-dimension architecture with scoring methods and point allocations is defined in the Signal Score Architecture Decisions document (master, 2026-03-30). Summary below for reference.
+**Dimension 1 — Profile Signal Clarity (35%):** 5 sub-dimensions, scale 1–5, qualitative rubric scoring applied by Claude. Equal weighting within dimension.
+- Headline Clarity — rubric complete
+- About Section Coherence — rubric complete
+- Experience Description Quality — rubric complete
+- Profile Completeness — structural check (completeness floor: if headline, About, industry, or job history are missing, Dimension 1 capped at 50% of max)
+- Identity Clarity — rubric complete
 
-**Narrative & Conversion — 20 points:** Identity Clarity (8, rubric), Profile-Content Alignment (8, rubric), Engagement Invitation (4, three-state). "Engagement Invitation" replaces "Conversion Signal" — scored from About section text only, no commercial intent assumed. See Architecture Decisions Section 5.
+**Dimension 2 — Behavioral Signal Strength (30%):** 4 sub-dimensions, scale 0–5, quantitative bands computed from archive data. All band boundaries PROVISIONAL — recalibration at 50–100 profiles.
+- History Depth — total outbound actions (comments + reactions + shares + reposts), trailing 12 months. PROXY measure. Bands: 0(<10), 1(10–29), 2(30–99), 3(100–299), 4(300–599), 5(600+). The <10 threshold is a confirmed Feed SR sparse disadvantage anchor.
+- Recency — outbound actions in trailing 60 days. Hybrid absolute + proportional floor at bands 3+. PROXY measure. Bands: 0(<5), 1(5–14), 2(15–39), 3(40–99 AND ≥15% of 12mo), 4(100–199 AND ≥20% of 12mo), 5(200+ AND ≥20% of 12mo).
+- Continuity — active weeks (3+ posts/comments = active) out of trailing 52 weeks. Posts + comments only, not reactions. Bands: 0(<5), 1(5–12), 2(13–25), 3(26–37), 4(38–46), 5(47–52).
+- Posting Presence — average posts/week over 52 weeks. Posts only. Consistency ceiling: if <50% of weeks have a post, capped at score 3. Bands: 0(none), 1(<0.25/wk), 2(0.25–0.49), 3(0.5–0.99), 4(1.0–1.99, confirmed 1/wk benchmark), 5(2.0+).
 
-**Resonance — 20 points:** Engagement Rate (10, quantitative), Impression Trend (5, quantitative), Avg Engagements Per Post (4, quantitative), Top Post Impressions (1, quantitative). Engagement Rate uses combined total engagements / impressions — LinkedIn's XLSX export does not break out likes, comments, and shares separately. Substantive vs. passive distinction addressed in Forward Brief and advisory notes, not in score.
+**Dimension 3 — Behavioral Signal Quality (20%):** 2 sub-dimensions, scale 0–5, quantitative. Viewer-actor affinity confirmed as real signal but not scored — moved to Forward Brief.
+- Outbound Engagement Presence — combined comments + reactions, trailing 12 months. Bands: 0(<10), 1(10–49), 2(50–149), 3(150–499), 4(500–999), 5(1,000+).
+- Engagement Quality Score — formula: substantive comments + (reactions × 0.25). Substantive = 20 words or 100 characters. The 4:1 weighting is INFERRED and PROVISIONAL. Bands: 0(0–4), 1(5–24), 2(25–74), 3(75–199), 4(200–399), 5(400+).
 
-**Consistency — 20 points:** Recent Activity Strength (6, quantitative — NEW), Active Weeks (5, quantitative), Posts Per Week (4, quantitative), Longest Gap (3, quantitative), Engagement Quality Ratio (2, quantitative — NEW), Weeks Above Median (1, quantitative). Recent Activity Strength captures recency decay — see Architecture Decisions Section 3. Engagement Quality Ratio measures outbound substantive engagement using Comments.csv + Reactions.csv — see Architecture Decisions Section 4.
+**Dimension 4 — Profile-Behavior Alignment (15%):** 2 sub-dimensions, scale 1–5, qualitative rubric scoring applied by Claude. Full rubric criteria written (5 score points each, observable-over-inferred, rare-5 rule).
+- Topic Consistency — do posts and comments cohere into a recognizable professional identity? Multiple topics allowed if semantically connected.
+- Profile-Content Coherence — does content reinforce the professional identity the profile declares? Requires reading both profile fields and content together.
 
-**Presence — 15 points:** About Clarity (6, rubric), Headline Clarity (3, rubric), Experience Section Clarity (3, rubric), Profile Completeness (2, three-state), Visual Professionalism (1, three-state). Featured section dropped from scoring — advisory note only. Visual Professionalism scored from Rich_Media.csv when present; advisory note when absent.
+---
 
-**Authority — 15 points:** Senior+ Audience (6, quantitative), Target Industry Alignment (4, quantitative), Role Seniority (3, quantitative), Primary Geography (2, quantitative). Top Follower Organizations dropped from scoring — advisory observation only.
+### Scoring Formula
 
-**Reach — 10 points:** Unique Members Reached (4, quantitative), New Followers/Week (3, quantitative), Total Followers (2, quantitative), Connections (1, quantitative).
+**Sub-dimension combination within a dimension:** `(sum of scores − minimum possible) / (maximum possible − minimum possible) × dimension weight = dimension contribution`
+
+Dimensions 1 and 4 use a 1–5 scale (minimum = number of sub-dimensions). Dimensions 2 and 3 use a 0–5 scale (minimum = 0, formula simplifies to sum / max × weight). Equal weighting within each dimension.
+
+**Composite score:** Sum of all four dimension contributions. Range: 0–100.
+
+**Completeness floor (Dimension 1 only):** If any of headline, About, industry, or job history are missing, Dimension 1 contribution is capped at 50% of its maximum (17.5).
+
+**Signal strength bands** (client-facing output):
+
+| Band | Score Range |
+|---|---|
+| Weak | 0–24 |
+| Emerging | 25–44 |
+| Moderate | 45–64 |
+| Strong | 65–79 |
+| Exceptional | 80–100 |
+
+Bands are unequal by design — narrower at extremes. Numeric scores visible to advisors only; clients see bands. Band breakpoints are PROVISIONAL — recalibration at 50–100 profiles.
+
+**Pressure-test result:** Andrew Segars scores 77.6/100 → Strong band. Dim 1: 22.75%, Dim 2: 25.50%, Dim 3: 20.00%, Dim 4: 9.38%.
+
+---
+
+## Confidence Labels
+
+Every scoring element carries one or more labels. Defined in the Transparency and Proxy Disclosure document.
+
+| Label | Meaning | External Use |
+|---|---|---|
+| CONFIRMED | Direct evidence from primary-source LinkedIn engineering publications | Can cite directly |
+| INFERRED | Strong synthesis across credible sources; logical extension of confirmed findings | Describe as "evidence-based interpretation" |
+| PROXY | Underlying signal confirmed; measurement indirect from available data | Note the gap honestly |
+| PROVISIONAL | Directionally grounded; requires calibration against real population data | Present as "calibrated estimate" |
+
+All PROVISIONAL elements must be adjustable configuration parameters. Recalibration checkpoint: 50–100 profiles.
 
 ---
 
@@ -65,17 +116,24 @@ Clients submit two files:
 
 | File | Format | Used For |
 |---|---|---|
-| LinkedIn Complete archive | ZIP (or unzipped folder) | Presence, Consistency, profile data |
-| LinkedIn Analytics export | XLSX (5 sheets) | Reach, Resonance, Authority |
+| LinkedIn Complete archive | ZIP (or unzipped folder) | All 4 scored dimensions + Forward Brief |
+| LinkedIn Analytics export | XLSX (5 sheets) | Forward Brief only (Reach, Resonance, Authority) |
 
-**Critical:** Clients must download the **Complete** archive, not the Basic archive. The Basic export omits `Shares.csv`, which is required for Consistency scoring.
+**Critical:** Clients must download the **Complete** archive, not the Basic archive. The Basic export omits `Shares.csv`, which is required for behavioral scoring.
 
-**ZIP → Score mapping:**
-- Presence → Profile.csv, Positions.csv, Rich_Media.csv
-- Consistency → Shares.csv, Comments.csv, Reactions.csv
-- Narrative & Conversion → Profile.csv (About section text), Shares.csv (post content)
+**ZIP → Scored Dimensions:**
+- Dimension 1 (Profile Signal Clarity) → Profile.csv, Positions.csv, Education.csv, Skills.csv, Languages.csv
+- Dimension 2 (Behavioral Signal Strength) → Shares.csv, Comments.csv, Reactions.csv
+- Dimension 3 (Behavioral Signal Quality) → Comments.csv, Reactions.csv
+- Dimension 4 (Profile-Behavior Alignment) → Profile.csv (About section), Shares.csv (post content)
 
-**XLSX → Score mapping:**
+**ZIP → Forward Brief:**
+- Comment depth analysis → Comments.csv
+- Posting gap distribution → Shares.csv
+- Viewer-actor affinity patterns → Comments.csv, Reactions.csv (URL patterns)
+- Visual professionalism → Rich_Media.csv (photo present/absent)
+
+**XLSX → Forward Brief:**
 - Reach → DISCOVERY sheet, FOLLOWERS sheet
 - Resonance → ENGAGEMENT sheet, TOP POSTS sheet
 - Authority → DEMOGRAPHICS sheet
@@ -86,88 +144,178 @@ Clients submit two files:
 
 | Window | Length | Purpose |
 |---|---|---|
-| Primary scoring | 90 days (most recent) | All performance metrics |
-| Comparison | Prior 90 days | Trajectory / trend validation |
-| Contextual | Full 365 days | Historical context only — does not impact score |
+| History depth | Trailing 12 months | Matches Feed SR one-year history window |
+| Recency | Trailing 60 days | Matches Feed SR ~2-month half-life |
+| Continuity / Posting | Trailing 52 weeks | Active week and posting frequency metrics |
+| Forward Brief analytics | Per XLSX export period | Typically 365 days |
+
+---
+
+## Pipeline Architecture
+
+### Two Output Pipelines
+
+The scoring stage produces two structured outputs that feed narrative generation together:
+
+1. **Scored dimensions output** — four dimension scores, sub-dimension scores, composite score, band label. Deterministic computation.
+
+2. **Forward Brief structured data output** — computed values for Reach, Resonance, Authority, plus qualitative flags. Structured, reproducible output — not impressionistic narrative.
+
+Both are computed in the **scoring stage** (single stage, not separate). Claude receives both as structured inputs and generates the full report.
+
+### Forward Brief Data Contract
+
+**Quantitative computed fields (from XLSX):**
+- Follower count and growth rate (new followers/week)
+- Unique members reached (trailing period)
+- Average impressions per post
+- Average engagement rate on received content
+- Top post performance (impressions, engagement)
+- Audience seniority distribution
+- Audience industry distribution (top 3–5)
+- Audience geography (top countries/regions)
+- Top represented organizations
+
+**Quantitative computed fields (from ZIP):**
+- Average comment length (chars/words) — comment depth observation
+- Posting gap distribution (longest gap, % zero-post weeks) — consistency beyond Continuity score
+
+**Qualitative flags (pre-processed into structured fields):**
+- Viewer-actor affinity: `concentrated_engagement: bool` + `top_targets: list` — from URL patterns in Comments.csv/Reactions.csv
+- Visual professionalism: `photo_present: bool` — from Rich_Media.csv
+- Engagement invitation: `services_present: bool`, `contact_visible: bool`, `cta_in_about: bool` — from Profile.csv
+
+### Scoring Stage Output Shape
+
+```json
+{
+  "scored_dimensions": {
+    "composite": 77.6,
+    "band": "Strong",
+    "dimensions": [
+      {
+        "name": "Profile Signal Clarity",
+        "weight": 0.35,
+        "confidence": "CONFIRMED",
+        "normalized_score": 0.650,
+        "contribution": 22.75,
+        "completeness_floor_applied": false,
+        "sub_dimensions": [
+          {"name": "Headline Clarity", "score": 3, "scale": "1-5", "method": "rubric"},
+          {"name": "About Section Coherence", "score": 4, "scale": "1-5", "method": "rubric"}
+        ]
+      }
+    ]
+  },
+  "forward_brief_data": {
+    "quantitative": {
+      "follower_count": 12500,
+      "follower_growth_rate": 45.2,
+      "unique_members_reached": 285000,
+      "avg_impressions_per_post": 3200,
+      "avg_engagement_rate": 0.042,
+      "top_post_impressions": 28500,
+      "audience_seniority": {"Senior": 0.32, "Manager": 0.28, "Director": 0.15},
+      "audience_industries": [{"name": "Technology", "pct": 0.35}],
+      "audience_geography": [{"name": "United States", "pct": 0.45}],
+      "avg_comment_length_words": 26.3,
+      "longest_posting_gap_weeks": 2,
+      "zero_post_week_pct": 0.29
+    },
+    "qualitative_flags": {
+      "viewer_actor_affinity": {"concentrated": true, "top_targets": ["url1", "url2"]},
+      "visual_professionalism": {"photo_present": true},
+      "engagement_invitation": {"services_present": false, "contact_visible": true, "cta_in_about": true}
+    }
+  }
+}
+```
 
 ---
 
 ## Open Questions
 
-*Implementation constraints and remaining items before build.*
+*Remaining items before or during build.*
 
-1. **DISCOVERY sheet is summary-only** — LinkedIn's analytics XLSX provides only period totals (impressions, members reached) on the DISCOVERY sheet, not daily breakdowns. Daily impressions are available on the ENGAGEMENT sheet. The Reach indicator "Unique members reached" must come from the DISCOVERY summary, not a daily time series. [Josh, 2026-03-23]
+1. **DISCOVERY sheet is summary-only** — LinkedIn's analytics XLSX provides only period totals (impressions, members reached) on the DISCOVERY sheet, not daily breakdowns. The Forward Brief field "Unique members reached" must come from the DISCOVERY summary. [Josh, 2026-03-23]
 
-2. **DEMOGRAPHICS categories differ from schema assumptions** — LinkedIn provides "Job titles," "Locations," and "Industries" — not "seniority," "geography," or "company." The Authority indicators for "Senior+ audience" must be derived from job title analysis (mapping titles to seniority tiers), not a direct seniority field. No company/organization data is provided in the analytics export. [Josh, 2026-03-23]
+2. **DEMOGRAPHICS categories differ from schema assumptions** — LinkedIn provides "Job titles," "Locations," and "Industries." Audience seniority for Forward Brief must be derived from job title analysis. No company/organization data in the analytics export. [Josh, 2026-03-23]
 
-3. **FOLLOWERS sheet has no cumulative total per day** — Only a summary total in row 0 and daily "New followers" rows. Cumulative follower count over time must be computed backwards from the total. [Josh, 2026-03-23]
+3. **FOLLOWERS sheet has no cumulative total per day** — Only a summary total in row 0 and daily "New followers" rows. Cumulative count must be computed backwards from the total. [Josh, 2026-03-23]
 
-4. **Quantitative threshold bands** — Specific threshold values not yet defined for any quantitative sub-dimension. Bands must be set for all quantitative indicators before scoring engine is built. High priority. [Andrew, 2026-03-30]
+4. **Inter-rater consistency testing** — Dimensions 1 and 4 use Claude-applied rubrics. Must run sample profiles through rubrics twice under identical prompting and compare outputs before launch. [Andrew, 2026-04-08]
 
-5. **Three-state scoring definitions** — Profile Completeness and Visual Professionalism three-state conditions need explicit definitions — what constitutes Complete vs. Partial vs. Minimal for each. High priority. [Andrew, 2026-03-30]
-
-6. **Framework reconciliation note** — Relationship between old five-category 0–4 scoring template and new six-dimension Signal Score architecture needs a brief documented reconciliation for internal clarity. Medium priority. [Andrew, 2026-03-30]
-
-7. **360Brew language audit** — All instances of 360Brew as primary framing in schema and documentation should be updated to reference confirmed production systems: LLM-based dual-encoder retrieval (Danchev) and Feed SR sequential ranking model (Hertel et al.). Medium priority. [Andrew, 2026-03-30]
+5. **Recalibration checkpoint** — All PROVISIONAL band boundaries and dimension weights flagged for review at 50–100 profiles. Must be adjustable configuration parameters in the build. [Andrew, 2026-04-08]
 
 ---
 
 ## Key Decisions Made
 
-- **Deterministic scoring** — Score computation is pure Python, no AI. Claude handles narratives only.
-- **90-day primary window** — Scores reflect the last 90 days, not full year.
-- **Photo/banner recency scoring** — Rich_Media.csv upload history used; absence treated as gap.
+### Architecture & Scoring (v2, April 2026)
+- **4-dimension architecture** — Replaced 6-dimension model. Dimensions grounded in confirmed LinkedIn retrieval and ranking system inputs, not outcomes. Reach, Resonance, Authority move to Forward Brief. [Andrew, 2026-04-08]
+- **One scoring engine, no stream distinction** — Identical engine for advisory and self-serve. No client-type flag or conditional logic. All differences live in report output and delivery layer. [Andrew, 2026-04-08]
+- **Dimension weights: 35/30/20/15** — INFERRED and PROVISIONAL. Adjustable config, not hardcoded. Cold-start finding across three papers grounds the profile-heavy weighting. [Andrew, 2026-04-08]
+- **Signal strength bands** — Client-facing output is band label (Weak/Emerging/Moderate/Strong/Exceptional), not raw number. Numeric scores visible to advisors only. [Andrew + Josh, 2026-04-01]
+- **Band breakpoints: 0–24, 25–44, 45–64, 65–79, 80–100** — Unequal by design. PROVISIONAL. [Andrew, 2026-04-08]
+- **Sub-dimension combination formula** — `(sum − min) / (max − min) × weight`. Equal weighting within dimensions. Pressure-tested against real data (77.6 → Strong). [Andrew, 2026-04-08]
+- **Completeness floor on Dimension 1** — Missing headline, About, industry, or job history caps Dim 1 at 50%. Structural check, not a scored sub-dimension. [Andrew, 2026-04-08]
+- **Confidence labeling** — Every scoring element labeled CONFIRMED, INFERRED, PROXY, or PROVISIONAL. Labels carry through to client-facing transparency disclosures. [Andrew, 2026-04-08]
+
+### Dimension-Specific (v2)
+- **Dimension 2: all bands confirmed** — History Depth, Recency (hybrid absolute + proportional floor), Continuity (3+ posts/comments = active week), Posting Presence (1/wk benchmark, 50% consistency ceiling). All bands PROVISIONAL. [Andrew, 2026-04-08]
+- **Dimension 3: quantitative, not rubric** — Outbound Engagement Presence (comments + reactions) and Engagement Quality Score (substantive comments + reactions × 0.25). 20-word/100-char substantive threshold. 4:1 weighting INFERRED and PROVISIONAL. [Andrew, 2026-04-08]
+- **Dimension 4: rubrics complete** — Topic Consistency and Profile-Content Coherence, full 1–5 criteria with written definitions for each score point. Rare-5 rule, observable-over-inferred. [Andrew, 2026-04-08]
+- **v1 Recent Activity Strength not carried over** — Replaced by Recency and Posting Presence sub-dimensions. Trend modifier dropped (not grounded in primary source). [Andrew, 2026-04-08]
+- **Visual Professionalism dropped from scoring** — No primary source names photo/banner as retrieval or ranking input. Forward Brief note only. [Andrew, 2026-04-08]
+- **Viewer-actor affinity: Forward Brief only** — Confirmed signal (0.3% Long Dwell AUC) but not measurable from archive. Unscored advisory context. [Andrew, 2026-04-08]
+- **Engagement Invitation: Forward Brief only** — Not scored. Qualitative flag for services, contact visibility, CTA in About. [Andrew, 2026-04-08]
+
+### Pipeline & Data (v2)
+- **Forward Brief computed in scoring stage** — Single computation stage produces both scored dimensions and Forward Brief structured data. No separate pre-processing stage. [Josh, 2026-04-08]
+- **Qualitative flags pre-processed** — Viewer-actor affinity, visual professionalism, and engagement invitation are structured fields (booleans/categoricals), not raw data for Claude. Ensures reproducibility. [Josh, 2026-04-08]
+- **History depth proxy** — Total outbound actions (comments + reactions + shares + reposts), trailing 12 months. Conservative undercount by design — misses long dwell events. PROXY label. [Andrew, 2026-04-08]
+- **Scores table gains forward_brief_data column** — JSONB column alongside existing dimensions JSONB. One row per job, two output sections. [Josh, 2026-04-08]
+
+### Carried from v1
+- **Deterministic scoring** — Score computation is pure Python, no AI. Claude handles rubric application (Dim 1, Dim 4) and narrative generation only.
 - **Complete archive required** — Basic LinkedIn export is insufficient; Shares.csv is missing.
-- **Qualitative scoring is constrained** — Rubric fields use explicit text only, no inference, fixed 1–5 definitions.
-- **6 dimensions** — Narrative & Conversion added as 6th dimension. Weights finalized 2026-03-30.
-- **Excluded from scoring** — Endorsements, Recommendations (as a metric), Articles, certifications, summary length, writing quality.
-- **Two use cases, unified model** — Advisory (white-glove) and Individual (self-serve) share the same data model. An individual is modeled as an advisor with one client (themselves). This keeps the analysis pipeline on a single code path. [Josh, 2026-03-23]
-- **Multi-advisor from day one** — The system supports multiple advisors at launch, not just Andrew. [Josh, 2026-03-23]
-- **White-labeling = branding + narrative editing** — Advisors get custom logo, colors, domain, and can edit AI-generated narratives before client delivery. Scoring framework is fixed and shared, not configurable per advisor. [Josh, 2026-03-23]
-- **client_id anchors all analysis data** — Jobs, scores, narratives, and reports FK to client, not advisor. This enables advisory→self-serve client migration by re-parenting the client record. [Josh, 2026-03-23]
-- **Display name seeded once** — Client display_name is set from the account at creation, then allowed to diverge. No ongoing sync. [Josh, 2026-03-23]
-- **Reports snapshot branding** — Each report stores the branding config (logo, colors, practice name) at generation time, not resolved dynamically. Advisory reports retain advisor branding even after client migration. [Josh, 2026-03-23]
-- **Pipeline config snapshot on jobs** — Each job stores a JSONB config_snapshot capturing the full scoring config, questionnaire schema hash, and prompt version used. Enables future cross-report comparison without building a version registry now. [Josh, 2026-03-23]
-- **Client login included in initial build** — Advisory clients log into the portal to view published reports. Advisor invites client by email (Supabase Auth invite), client accepts and gets a scoped dashboard. Skips manual delivery (PDF/email). Three RLS policy sets: advisor sees all their clients, client sees only their own published reports, self-serve individual sees everything for their own record. [Josh, 2026-03-23]
-- **Dimension weights finalized** — Narrative & Conversion 20, Resonance 20, Consistency 20, Presence 15, Authority 15, Reach 10. Grounded in confirmed LinkedIn AI system priorities. [Andrew, 2026-03-30]
-- **Dwell time as primary Resonance signal** — Confirmed by Feed SR paper as one of two primary optimization targets. Not available in LinkedIn analytics export — cannot be scored. Appears as an advisory note in diagnostic output and in Forward Brief recommendations. [Andrew, 2026-03-30]
-- **Presence carries disproportionate weight for low-activity clients** — Feed SR confirms profile embeddings provide >2% performance improvement for members with <10 interactions. Scoring interpretation flags when activity is low enough that Presence is carrying disproportionate weight. Low-Activity Profile Note required in diagnostic output. [Andrew, 2026-03-30]
-- **Recency decay in Consistency scoring** — Feed SR confirms exponential decay with ~2-month half-life on interaction history. Recent Activity Strength added as new Consistency sub-dimension (6 pts) scoring posting activity in most recent 30 days with trend condition. [Andrew, 2026-03-30]
-- **Viewer-actor affinity compounding** — Feed SR confirms repeated engagement with the same people is a distinct ranked signal. Forward Brief recommends focused consistent engagement with relevant voices over scattered broad participation. [Andrew, 2026-03-30]
-- **Cold-start profile opportunity** — Danchev blog confirms LLM-based retrieval can route content from headline and job title alone without engagement history. Profile work has immediate distribution consequences for passive professionals. Forward Brief entry-level insight. [Andrew, 2026-03-30]
-- **Topic routing independent of network size** — Jurka confirms content on specific topics can be routed beyond the immediate network. Consistent topic signals expand addressable reach. Strengthens Narrative & Conversion rationale. [Andrew, 2026-03-30]
-- **Featured section dropped from scoring** — Not captured in LinkedIn data export. Appears as advisory note in Presence section + Forward Brief checklist item. [Andrew, 2026-03-30]
-- **Services section dropped from scoring** — Not captured in LinkedIn data export. Forward Brief recommendation only. [Andrew, 2026-03-30]
-- **Top Follower Organizations dropped from scoring** — Not a confirmed platform ranking signal. Surfaces as advisory observation in diagnostic output. [Andrew, 2026-03-30]
-- **Conversion Signal → Engagement Invitation** — Renamed and reframed. Scores whether the profile contains any clear signal inviting engagement, regardless of commercial intent. Three-state scoring from About section text (Profile.csv) only. [Andrew, 2026-03-30]
-- **5 rubrics complete** — Headline Clarity, About Clarity, Experience Section Clarity (Presence); Identity Clarity, Profile-Content Alignment (Narrative & Conversion). All 1–5 scale with written criteria for every score point. Observable conditions only, no inference. [Andrew, 2026-03-30]
-- **Combined Engagement Rate** — LinkedIn XLSX does not break out likes/comments/shares. Resonance scores a single combined Engagement Rate (10 pts) rather than separate substantive/passive rates. Advisory note explains platform weighting differences. [Andrew, 2026-03-30; Josh, 2026-03-31]
-- **Engagement Quality Ratio added to Consistency** — Outbound engagement quality measured from Comments.csv + Reactions.csv (% of engagement that is substantive comments vs. passive reactions). 2 points in Consistency dimension. Captures viewer-actor affinity behavioral signal. [Andrew, 2026-03-30; Josh, 2026-03-31]
-- **Visual Professionalism scoring** — Score from Rich_Media.csv when profile/banner photo entries are present. Advisory note when absent (known reliability gap). Client self-report as fallback. Image upload as future option pending user feedback. [Josh, 2026-03-31]
+- **Two use cases, unified model** — Advisory and individual share the same data model. An individual is an advisor with one client (themselves). [Josh, 2026-03-23]
+- **Multi-advisor from day one** — Multiple advisors at launch, not just Andrew. [Josh, 2026-03-23]
+- **White-labeling = branding + narrative editing** — Scoring framework is fixed and shared, not configurable per advisor. [Josh, 2026-03-23]
+- **client_id anchors all analysis data** — Enables advisory→self-serve migration. [Josh, 2026-03-23]
+- **Pipeline config snapshot on jobs** — JSONB config_snapshot for reproducibility. [Josh, 2026-03-23]
+- **Client login included in initial build** — Advisor invites client, scoped dashboard. [Josh, 2026-03-23]
+- **5 Dimension 1 rubrics complete** — Headline Clarity, About Clarity, Experience Section Clarity, Identity Clarity, Profile-Content Alignment. All 1–5 scale. [Andrew, 2026-03-30]
 
 ---
 
 ## Platform Intelligence
 
-Confirmed findings from first-party LinkedIn engineering sources. These ground the scoring rationale and Forward Brief recommendations.
+Confirmed findings from first-party LinkedIn engineering sources. These ground the scoring rationale and Forward Brief recommendations. Full annotated bibliography maintained separately (April 2026).
 
-**Sources:**
+**Tier 1 — Primary/Structural Sources:**
 - Feed SR: An Industrial-Scale Sequential Recommender for LinkedIn Feed Ranking (Hertel et al., arXiv:2602.12354v1, February 2026)
 - LinkedIn Engineering Blog: Engineering the Next Generation of LinkedIn's Feed (Danchev, March 12, 2026)
 - How Does the LinkedIn Feed Work? (Jurka, August 11, 2025)
+- Updates to the LinkedIn Feed (Jurka, March 12, 2026)
+- Large Scale Retrieval for the LinkedIn Feed using Causal Language Models (arXiv:2510.14223, 2025)
+- LinkedIn Post Embeddings (Ramanujam et al., arXiv:2405.11344, 2025)
+- LiGNN: Graph Neural Networks at LinkedIn (Hou et al., arXiv:2402.11139, 2024)
+- 360Brew: A Decoder-Only Foundation Model (arXiv:2501.16450, 2025 — recalled)
 
 **Confirmed signals and implications:**
-- Dwell time and substantive contributions (comments, shares) are the two primary optimization targets for the ranking system (Feed SR)
-- Profile embeddings are generated from profile data using a fine-tuned LLM, refreshed daily (Feed SR, Danchev)
-- For members with <10 historical interactions, profile embeddings provide measurable performance improvement in retrieval quality (Feed SR)
-- Exponential decay weighting on interaction history with ~2-month half-life — recent activity carries full weight, older activity decays (Feed SR)
-- Viewer-to-actor affinity tracked across multiple time windows — repeated engagement with the same people is a distinct ranked signal (Feed SR)
-- LLM-based retrieval can deduce professional interests from headline and job title alone without engagement history — cold-start advantage (Danchev)
-- Content on specific topics can be routed beyond immediate network based on topic relevance and professional identity, independent of network size (Jurka)
+- Dwell time and substantive contributions (comments, shares) are the two primary optimization targets (Feed SR)
+- Profile embeddings generated from profile data using a fine-tuned LLM, refreshed daily (Feed SR, Danchev)
+- Retrieval system explicitly reads: headline, About, industry, skills, location, job history, education, certifications, languages (Retrieval paper)
+- For members with <10 historical interactions, profile embeddings provide measurable performance improvement (Feed SR) — grounds cold-start advantage and Dim 1 weighting
+- Exponential decay weighting on interaction history with ~2-month half-life (Feed SR)
+- Viewer-to-actor affinity is a distinct ranked signal — removing it costs 0.3% Long Dwell AUC (Feed SR)
+- LLM-based retrieval can deduce professional interests from headline and job title alone (Danchev) — cold-start advantage
+- Content routed by topic relevance beyond immediate network, independent of network size (Jurka)
+- 50-dimensional semantic post embeddings generated within minutes of creation, used in retrieval and ranking (Post Embeddings paper)
+- Engagement pods and comment automation actively suppressed; authentic engagement rewarded (Jurka, March 2026)
 
-**Note on 360Brew:** Referenced in early working model as directional only. Not confirmed as a current production system. Confirmed production systems are the LLM-based dual-encoder retrieval system (Danchev) and the Feed SR sequential ranking model (Hertel et al.).
-
-See the LinkedIn 2026 Working Model for detailed sections on each confirmed finding.
+**Note on 360Brew:** Referenced in early working model as directional only. The paper describes architecture and performance but not confirmed rollout timing. Confirmed production systems are the LLM-based dual-encoder retrieval system (Retrieval paper, Danchev) and the Feed SR sequential ranking model (Hertel et al.).
 
 ---
 
@@ -193,57 +341,78 @@ auth.users 1──1 advisors 1──∞ clients 1──1 questionnaire_responses
 **advisors** — One row per advisor (or self-serve individual). Linked 1:1 to auth.users.
 - `id` (uuid PK), `user_id` (FK → auth.users, unique), `is_individual` (bool), `practice_name`, `logo_url`, `color_primary`, `color_accent`, `custom_domain`, `created_at`
 
-**clients** — One row per subject being analyzed. Always belongs to an advisor. For self-serve, the advisor creates one client referencing themselves. For advisory, the advisor invites the client by email; `user_id` is set when the client accepts the invitation.
-- `id` (uuid PK), `advisor_id` (FK → advisors), `user_id` (FK → auth.users, nullable — set on invite acceptance), `display_name`, `email`, `invitation_status` (pending / accepted / expired), `status` (active / inactive / migrated), `created_at`
+**clients** — One row per subject being analyzed. Always belongs to an advisor. For self-serve, the advisor creates one client referencing themselves.
+- `id` (uuid PK), `advisor_id` (FK → advisors), `user_id` (FK → auth.users, nullable), `display_name`, `email`, `invitation_status` (pending / accepted / expired), `status` (active / inactive / migrated), `created_at`
 
 **questionnaire_responses** — Questionnaire answers stored as JSONB. One row per client, updated incrementally.
 - `id` (uuid PK), `client_id` (FK → clients, unique), `responses` (JSONB), `schema_version` (string), `completed_at` (nullable), `updated_at`
 
 **jobs** — One row per analysis pipeline run. Carries the config snapshot for reproducibility.
-- `id` (uuid PK), `client_id` (FK → clients), `status` (pending / running / complete / failed), `version_label` (string, nullable — human-friendly era tag e.g. "2026-Q1"), `config_snapshot` (JSONB), `attempt_count`, `error_message` (nullable), `created_at`, `started_at`, `completed_at`
+- `id` (uuid PK), `client_id` (FK → clients), `status` (pending / running / complete / failed), `version_label` (string, nullable), `config_snapshot` (JSONB), `attempt_count`, `error_message` (nullable), `created_at`, `started_at`, `completed_at`
 
-**ingested_data** — Parsed LinkedIn data as structured JSONB after ingestion. Preserves intermediate state for re-scoring without re-parsing.
+**ingested_data** — Parsed LinkedIn data as structured JSONB after ingestion.
 - `id` (uuid PK), `job_id` (FK → jobs, unique), `zip_data` (JSONB), `xlsx_data` (JSONB), `ingested_at`
 
-**scores** — Dimension scores and indicator-level detail. One row per job.
-- `id` (uuid PK), `job_id` (FK → jobs, unique), `total_score` (numeric), `dimensions` (JSONB — array of {dimension, score, weight, indicators: [{name, value, status}]}), `scored_at`
+**scores** — Dimension scores, Forward Brief data, and composite. One row per job.
+- `id` (uuid PK), `job_id` (FK → jobs, unique), `total_score` (numeric), `band` (string — Weak/Emerging/Moderate/Strong/Exceptional), `dimensions` (JSONB), `forward_brief_data` (JSONB), `scored_at`
 
-**narratives** — AI-generated text, one row per dimension per job. Supports draft→published workflow for advisory editing.
-- `id` (uuid PK), `job_id` (FK → jobs), `dimension` (string), `generated_text`, `edited_text` (nullable), `status` (draft / published), `published_at` (nullable), `generated_at`
+**narratives** — AI-generated text, one row per section per job. Supports draft→published workflow.
+- `id` (uuid PK), `job_id` (FK → jobs), `section` (string — dimension name or "forward_brief"), `generated_text`, `edited_text` (nullable), `status` (draft / published), `published_at` (nullable), `generated_at`
 
 **reports** — Published deliverable bundle. Snapshots branding at generation time.
-- `id` (uuid PK), `job_id` (FK → jobs, unique), `client_id` (FK → clients), `report_type` (advisory / self_serve), `branding_snapshot` (JSONB — logo, colors, practice name), `forward_brief` (JSONB or text), `published_at`
+- `id` (uuid PK), `job_id` (FK → jobs, unique), `client_id` (FK → clients), `report_type` (advisory / self_serve), `branding_snapshot` (JSONB), `published_at`
 
 ### Config Snapshot Shape (on jobs)
 
 ```json
 {
-  "version_label": "2026-Q1",
+  "version_label": "2026-Q2",
   "scoring": {
     "dimensions": [
       {
-        "name": "Presence",
-        "weight": 20,
-        "indicators": [
-          {"name": "Profile photo", "source": "Rich_Media.csv", "strength": "within 2 years", "gap": "4+ years or absent"}
+        "name": "Profile Signal Clarity",
+        "weight": 0.35,
+        "confidence": "CONFIRMED",
+        "sub_dimensions": [
+          {"name": "Headline Clarity", "scale": "1-5", "method": "rubric"},
+          {"name": "About Section Coherence", "scale": "1-5", "method": "rubric"},
+          {"name": "Experience Description Quality", "scale": "1-5", "method": "rubric"},
+          {"name": "Profile Completeness", "scale": "1-5", "method": "rubric"},
+          {"name": "Identity Clarity", "scale": "1-5", "method": "rubric"}
+        ],
+        "completeness_floor": {
+          "required_fields": ["headline", "about", "industry", "job_history"],
+          "cap_pct": 0.5
+        }
+      },
+      {
+        "name": "Behavioral Signal Strength",
+        "weight": 0.30,
+        "confidence": "CONFIRMED",
+        "sub_dimensions": [
+          {"name": "History Depth", "scale": "0-5", "method": "quantitative", "bands": [10, 30, 100, 300, 600]},
+          {"name": "Recency", "scale": "0-5", "method": "quantitative_hybrid"},
+          {"name": "Continuity", "scale": "0-5", "method": "quantitative", "bands": [5, 13, 26, 38, 47]},
+          {"name": "Posting Presence", "scale": "0-5", "method": "quantitative", "consistency_ceiling": 0.5}
         ]
       }
     ],
-    "total_points": 100
+    "bands": {"Weak": [0, 24], "Emerging": [25, 44], "Moderate": [45, 64], "Strong": [65, 79], "Exceptional": [80, 100]}
   },
   "questionnaire_schema_hash": "abc123",
-  "narrative_prompt_version": "1.0"
+  "narrative_prompt_version": "2.0"
 }
 ```
 
 ### Design Notes
 
-- **Unified model**: An individual (self-serve) user is an advisor with `is_individual: true` and one client record pointing back to themselves. The entire pipeline — jobs, scores, narratives, reports — follows the same path for both use cases.
-- **Advisory→self-serve migration**: Re-parent the client record to a new self-advisor. All history follows via client_id FKs. Historical reports retain original branding via snapshot.
-- **Versioning**: Config snapshot is written once when a job starts and never mutated. Future comparison logic can diff snapshots across reporting cycles. No version registry needed yet.
+- **Unified model**: An individual (self-serve) user is an advisor with `is_individual: true` and one client record pointing back to themselves.
+- **Advisory→self-serve migration**: Re-parent the client record. All history follows via client_id FKs.
+- **Versioning**: Config snapshot is written once when a job starts and never mutated.
 - **Narrative editing**: Advisory flow sets narratives to `draft` status; advisor edits `edited_text` and publishes. Self-serve auto-publishes with `edited_text` null.
-- **RLS pattern**: Three roles — advisor, client, individual. Advisor: full access to all data for their clients. Client: read-only access to their own published reports (narratives must have `status = published`). Individual: full access to their own client record and all pipeline data. All scoped via `user_id` on advisor or client records.
-- **Client invitation**: Advisor creates client record with email → Supabase Auth invite sent → client accepts, sets password → `user_id` linked to client record, `invitation_status` set to `accepted`.
+- **RLS pattern**: Three roles — advisor, client, individual. All scoped via `user_id`.
+- **AI in scoring**: Claude is used in two places only — Dimension 1 rubric scoring (5 rubrics) and Dimension 4 rubric scoring (2 rubrics). All other scoring is deterministic computation.
+- **Schema change needed**: `scores` table needs `band` (string) and `forward_brief_data` (JSONB) columns added. Migration required.
 
 ---
 
@@ -251,14 +420,16 @@ auth.users 1──1 advisors 1──∞ clients 1──1 questionnaire_responses
 
 | Component | Status | Notes |
 |---|---|---|
-| Database schema | Applied | 8 tables, 5 enums, 26 RLS policies in Supabase |
-| Pydantic models | Complete | 10 files, typed JSONB shapes for all entities |
-| Ingestion parsers | Validated | ZIP + XLSX parsers tested against 2 real profiles |
+| Database schema | Applied (needs migration) | 8 tables in Supabase. Needs: `band` and `forward_brief_data` columns on `scores` table |
+| Pydantic models | Needs update | Current models reflect v1 architecture. Need new scoring output models matching v2 |
+| Ingestion parsers | Validated | ZIP + XLSX parsers tested against real data. No changes needed for v2 |
 | API routes | Complete | Auth, advisors, clients, questionnaires, jobs (5 routers, 15 endpoints) |
 | Signup/invitation flow | Complete | Advisor + individual provisioning, client invitation via Supabase Auth |
 | Worker skeleton | Complete | Job loop with optimistic locking, 4-stage pipeline with placeholder scoring/narratives |
-| Scoring engine | Stub | Weights and rubrics received; blocked on quantitative threshold bands and three-state definitions |
-| Narrative generation | Stub | Blocked on prompt templates and scoring engine completion |
+| Scoring engine | Ready to build | All specifications complete. 4 dimensions, all bands defined, formula pressure-tested |
+| Forward Brief computation | Ready to build | Data contract defined. Computed in scoring stage alongside dimensions |
+| Narrative generation | Stub | Blocked on prompt templates. Must receive scored_dimensions + forward_brief_data as structured inputs |
+| Claude rubric prompts | Not started | Dim 1 (5 rubrics) and Dim 4 (2 rubrics). Inter-rater consistency testing required before launch |
 | Frontend | Not started | Josh's territory; API exists for it to build against |
 
 ---
@@ -270,7 +441,7 @@ auth.users 1──1 advisors 1──∞ clients 1──1 questionnaire_responses
 | Frontend | React → Vercel |
 | Backend | FastAPI (Python) → Railway |
 | Database | Supabase (PostgreSQL) |
-| AI | Anthropic API — Claude (narrative generation only) |
+| AI | Anthropic API — Claude (rubric scoring + narrative generation) |
 | Project management | Plane (orpheussocial workspace) |
 
 ---
