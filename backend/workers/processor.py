@@ -374,7 +374,8 @@ async def process_one(supabase, anthropic_client: Anthropic) -> bool:
     attempt = job.get("attempt_count", 0) + 1
 
     try:
-        await update_job_status(supabase, job_id, "running")
+        # claim_job() already set status='running' and started_at via RPC.
+        # Just update the attempt counter.
         supabase.table("jobs").update(
             {"attempt_count": attempt}
         ).eq("id", job_id).execute()
