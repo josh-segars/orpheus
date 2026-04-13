@@ -148,13 +148,14 @@ async def stage_ingestion(
         logger.info(f"[{job_id}] Quality report: {summary}")
 
     # Save parsed data + quality report to ingested_data table
-    supabase.table("ingested_data").insert({
+    # Use upsert so retries don't crash on duplicate job_id
+    supabase.table("ingested_data").upsert({
         "job_id": job_id,
         "zip_data": zip_data.model_dump(),
         "xlsx_data": xlsx_data.model_dump() if xlsx_data else None,
         "quality_report": quality_report.model_dump(),
         "ingested_at": datetime.utcnow().isoformat(),
-    }).execute()
+    }, on_conflict="job_id").execute()
 
     return zip_data, xlsx_data, quality_report
 
@@ -205,15 +206,15 @@ async def stage_scoring(
         f"[{job_id}] Score: {sd.composite:.1f} / 100 — {sd.band.value}"
     )
 
-    # Save scores to database
-    supabase.table("scores").insert({
+    # Save scores to database (upsert for retry safety)
+    supabase.table("scores").upsert({
         "job_id": job_id,
         "total_score": sd.composite,
         "band": sd.band.value,
         "dimensions": json.loads(sd.model_dump_json()),
         "forward_brief_data": json.loads(result.forward_brief_data.model_dump_json()),
         "scored_at": datetime.utcnow().isoformat(),
-    }).execute()
+    }, on_conflict="job_id").execute()
 
     # Save config snapshot to the job for reproducibility
     snapshot = build_config_snapshot()
@@ -252,6 +253,9 @@ async def stage_narrative_generation(
 
     status = "draft" if is_advisory else "published"
     now = datetime.utcnow().isoformat()
+
+    # Clear any narratives from a previous attempt before inserting
+    supabase.table("narratives").delete().eq("job_id", job_id).execute()
 
     for section_name, narrative_text in sections.items():
         row = {
@@ -342,13 +346,13 @@ async def run_pipeline(supabase, anthropic_client: Anthropic, job: dict):
         "color_primary": client_row["advisors"].get("color_primary"),
         "color_accent": client_row["advisors"].get("color_accent"),
     }
-    supabase.table("reports").insert({
+    supabase.table("reports").upsert({
         "job_id": job_id,
         "client_id": client_id,
         "report_type": "advisory" if is_advisory else "self_serve",
         "branding_snapshot": branding,
         "published_at": datetime.utcnow().isoformat() if not is_advisory else None,
-    }).execute()
+    }, on_conflict="job_id").execute()
 
     sd = scoring_output.scored_dimensions
     logger.info(
