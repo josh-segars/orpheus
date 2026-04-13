@@ -40,7 +40,8 @@ def _parse_date(date_str: str) -> date | None:
     """Parse a date string from LinkedIn export data.
 
     LinkedIn uses several formats across CSVs:
-    - "2025-03-17" (ISO)
+    - "2025-03-17 11:12:43" (ISO datetime — Shares, Comments, Reactions)
+    - "2025-03-17" (ISO date)
     - "03/17/2025" (US)
     - "Mar 17, 2025"
     Returns None if unparseable.
@@ -48,7 +49,7 @@ def _parse_date(date_str: str) -> date | None:
     if not date_str or not date_str.strip():
         return None
     date_str = date_str.strip()
-    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%b %d, %Y", "%B %d, %Y"):
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%m/%d/%Y", "%b %d, %Y", "%B %d, %Y"):
         try:
             return datetime.strptime(date_str, fmt).date()
         except ValueError:

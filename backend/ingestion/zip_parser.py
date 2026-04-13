@@ -288,7 +288,7 @@ def _check_date_parseable(date_str: str) -> bool:
     if not date_str or not date_str.strip():
         return False
     from datetime import datetime
-    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%b %d, %Y", "%B %d, %Y"):
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%m/%d/%Y", "%b %d, %Y", "%B %d, %Y"):
         try:
             datetime.strptime(date_str.strip(), fmt)
             return True
@@ -309,7 +309,7 @@ def _find_date_range(items_with_dates: list[dict]) -> tuple[str | None, str | No
         d = item.get("date", "")
         if not d:
             continue
-        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%b %d, %Y", "%B %d, %Y"):
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%m/%d/%Y", "%b %d, %Y", "%B %d, %Y"):
             try:
                 dates.append(datetime.strptime(d.strip(), fmt).date())
                 break
