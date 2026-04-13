@@ -49,6 +49,8 @@ def _normalize_header(header: str) -> str:
     LinkedIn CSV headers use title casing and spaces:
     'First Name', 'Company Name', 'Started On', etc.
     """
+    if header is None:
+        return ""
     return header.strip().lower().replace(" ", "_").replace("/", "_")
 
 
@@ -82,7 +84,11 @@ def _read_csv_from_zip(
         reader = csv.DictReader(io.StringIO(text))
         rows = []
         for row in reader:
-            normalized = {_normalize_header(k): v for k, v in row.items()}
+            normalized = {
+                _normalize_header(k): v
+                for k, v in row.items()
+                if k is not None  # trailing commas produce None keys
+            }
             rows.append(normalized)
         return rows
 
