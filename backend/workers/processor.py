@@ -24,6 +24,7 @@ from anthropic import Anthropic
 
 from backend.ingestion.types import ZipData, XlsxData
 from backend.ingestion.zip_parser import parse_zip
+from backend.ingestion.xlsx_parser import parse_xlsx
 from backend.scoring.engine import run_scoring
 from backend.scoring.config import build_config_snapshot
 from backend.agents.rubric import score_rubrics
@@ -132,11 +133,16 @@ async def stage_ingestion(
         xlsx_bytes = supabase.storage.from_("uploads").download(
             f"{client_id}/{job_id}/analytics.xlsx"
         )
-        # TODO: xlsx_parser.parse_xlsx(xlsx_bytes) — parser not yet implemented
-        # For now, xlsx_data remains None. Forward Brief will have partial data.
-        logger.warning(f"[{job_id}] XLSX parser not yet implemented — Forward Brief will be partial")
-    except Exception:
-        logger.info(f"[{job_id}] No analytics XLSX uploaded — Forward Brief will be partial")
+        xlsx_data = parse_xlsx(xlsx_bytes)
+        logger.info(
+            f"[{job_id}] XLSX parsed — {len(xlsx_data.engagement)} engagement days, "
+            f"{xlsx_data.followers.total_followers} followers"
+        )
+    except Exception as e:
+        if "not found" in str(e).lower() or "400" in str(e):
+            logger.info(f"[{job_id}] No analytics XLSX uploaded — Forward Brief will be partial")
+        else:
+            logger.warning(f"[{job_id}] XLSX parse failed: {e} — Forward Brief will be partial")
 
     # Log quality report summary
     summary = quality_report.summary()
