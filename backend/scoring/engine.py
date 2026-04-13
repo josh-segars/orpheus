@@ -143,8 +143,10 @@ def _score_recency(count_60d: int, total_12mo: int) -> SubDimensionScore:
     """
     raw_score = _band_lookup(count_60d, config.DIM2_RECENCY_BANDS)
 
-    # Apply proportional floor for bands 3+
-    if raw_score >= 3 and total_12mo > 0:
+    # Apply proportional floor for bands 3+ (skip for deep histories
+    # where absolute counts are inherently meaningful)
+    if (raw_score >= 3 and total_12mo > 0
+            and total_12mo < config.DIM2_RECENCY_PROPORTIONAL_FLOOR_BYPASS):
         proportion = count_60d / total_12mo
         required = config.DIM2_RECENCY_PROPORTIONAL_FLOORS.get(raw_score, 0)
         if proportion < required:

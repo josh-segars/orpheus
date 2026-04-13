@@ -70,6 +70,7 @@ DIM2_RECENCY_PROPORTIONAL_FLOORS = {
     4: 0.20,  # ≥20% of 12-month total
     5: 0.20,  # ≥20% of 12-month total
 }
+DIM2_RECENCY_PROPORTIONAL_FLOOR_BYPASS = 300  # skip proportional check if total_12mo >= this
 DIM2_RECENCY_WINDOW_DAYS = 60
 
 # Continuity: active weeks (3+ posts/comments = active) out of trailing 52 weeks.
@@ -148,6 +149,7 @@ def build_config_snapshot(version_label: str = "2026-Q2") -> dict:
                     str(k): v for k, v in DIM2_RECENCY_PROPORTIONAL_FLOORS.items()
                 },
                 "recency_window_days": DIM2_RECENCY_WINDOW_DAYS,
+                "recency_proportional_floor_bypass": DIM2_RECENCY_PROPORTIONAL_FLOOR_BYPASS,
                 "continuity_bands": DIM2_CONTINUITY_BANDS,
                 "continuity_active_threshold": DIM2_CONTINUITY_ACTIVE_THRESHOLD,
                 "posting_bands": DIM2_POSTING_BANDS,
