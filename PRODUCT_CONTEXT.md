@@ -55,7 +55,7 @@ Both use cases share the same scoring engine and Signal Score framework. **One s
 
 **Dimension 2 — Behavioral Signal Strength (30%):** 4 sub-dimensions, scale 0–5, quantitative bands computed from archive data. All band boundaries PROVISIONAL — recalibration at 50–100 profiles.
 - History Depth — total outbound actions (comments + reactions + shares + reposts), trailing 12 months. PROXY measure. Bands: 0(<10), 1(10–29), 2(30–99), 3(100–299), 4(300–599), 5(600+). The <10 threshold is a confirmed Feed SR sparse disadvantage anchor.
-- Recency — outbound actions in trailing 60 days. Hybrid absolute + proportional floor at bands 3+. PROXY measure. Bands: 0(<5), 1(5–14), 2(15–39), 3(40–99 AND ≥15% of 12mo), 4(100–199 AND ≥20% of 12mo), 5(200+ AND ≥20% of 12mo).
+- Recency — outbound actions in trailing 60 days. Hybrid absolute + proportional floor at bands 3+, bypassed when total_12mo ≥ 300 (deep histories where absolute counts are inherently meaningful). PROXY measure. Bands: 0(<5), 1(5–14), 2(15–39), 3(40–99 AND ≥15% of 12mo), 4(100–199 AND ≥20% of 12mo), 5(200+ AND ≥20% of 12mo). Bypass threshold: 300 (PROVISIONAL).
 - Continuity — active weeks (3+ posts/comments = active) out of trailing 52 weeks. Posts + comments only, not reactions. Bands: 0(<5), 1(5–12), 2(13–25), 3(26–37), 4(38–46), 5(47–52).
 - Posting Presence — average posts/week over 52 weeks. Posts only. Consistency ceiling: if <50% of weeks have a post, capped at score 3. Bands: 0(none), 1(<0.25/wk), 2(0.25–0.49), 3(0.5–0.99), 4(1.0–1.99, confirmed 1/wk benchmark), 5(2.0+).
 
@@ -91,7 +91,7 @@ Dimensions 1 and 4 use a 1–5 scale (minimum = number of sub-dimensions). Dimen
 
 Bands are unequal by design — narrower at extremes. Numeric scores visible to advisors only; clients see bands. Band breakpoints are PROVISIONAL — recalibration at 50–100 profiles.
 
-**Pressure-test result:** Andrew Segars scores 77.6/100 → Strong band. Dim 1: 22.75%, Dim 2: 25.50%, Dim 3: 20.00%, Dim 4: 9.38%.
+**Pressure-test result (confirmed via live pipeline, 2026-04-13):** Andrew Segars scores 77.6/100 → Strong band. Dim 1: 22.75, Dim 2: 25.50, Dim 3: 20.00, Dim 4: 9.38. Data period: 2025-03-17 to 2026-03-16. Full pipeline (Ingestion → Rubric Scoring → Deterministic Scoring → Narrative Generation) completed end-to-end on Railway + Supabase.
 
 ---
 
@@ -262,7 +262,7 @@ Both are computed in the **scoring stage** (single stage, not separate). Claude 
 - **Confidence labeling** — Every scoring element labeled CONFIRMED, INFERRED, PROXY, or PROVISIONAL. Labels carry through to client-facing transparency disclosures. [Andrew, 2026-04-08]
 
 ### Dimension-Specific (v2)
-- **Dimension 2: all bands confirmed** — History Depth, Recency (hybrid absolute + proportional floor), Continuity (3+ posts/comments = active week), Posting Presence (1/wk benchmark, 50% consistency ceiling). All bands PROVISIONAL. [Andrew, 2026-04-08]
+- **Dimension 2: all bands confirmed** — History Depth, Recency (hybrid absolute + proportional floor, bypassed at total_12mo ≥ 300), Continuity (3+ posts/comments = active week), Posting Presence (1/wk benchmark, 50% consistency ceiling). All bands PROVISIONAL. [Andrew, 2026-04-08; bypass added Josh, 2026-04-13]
 - **Dimension 3: quantitative, not rubric** — Outbound Engagement Presence (comments + reactions) and Engagement Quality Score (substantive comments + reactions × 0.25). 20-word/100-char substantive threshold. 4:1 weighting INFERRED and PROVISIONAL. [Andrew, 2026-04-08]
 - **Dimension 4: rubrics complete** — Topic Consistency and Profile-Content Coherence, full 1–5 criteria with written definitions for each score point. Rare-5 rule, observable-over-inferred. [Andrew, 2026-04-08]
 - **v1 Recent Activity Strength not carried over** — Replaced by Recency and Posting Presence sub-dimensions. Trend modifier dropped (not grounded in primary source). [Andrew, 2026-04-08]
@@ -275,6 +275,10 @@ Both are computed in the **scoring stage** (single stage, not separate). Claude 
 - **Qualitative flags pre-processed** — Viewer-actor affinity, visual professionalism, and engagement invitation are structured fields (booleans/categoricals), not raw data for Claude. Ensures reproducibility. [Josh, 2026-04-08]
 - **History depth proxy** — Total outbound actions (comments + reactions + shares + reposts), trailing 12 months. Conservative undercount by design — misses long dwell events. PROXY label. [Andrew, 2026-04-08]
 - **Scores table gains forward_brief_data column** — JSONB column alongside existing dimensions JSONB. One row per job, two output sections. [Josh, 2026-04-08]
+
+### Calibration (April 13, 2026)
+- **Recency proportional floor bypass at 300** — The proportional floor (15–20% of 12mo total) penalizes consistently active users since 60 days is only 16.4% of a year. Skip the floor when total_12mo ≥ 300, where absolute counts are inherently meaningful. PROVISIONAL threshold. [Josh, 2026-04-13]
+- **LinkedIn datetime format** — Shares.csv, Comments.csv, Reactions.csv use `YYYY-MM-DD HH:MM:SS` (with timestamp), not date-only. Parser must try datetime format first. [Josh, 2026-04-13]
 
 ### Carried from v1
 - **Deterministic scoring** — Score computation is pure Python, no AI. Claude handles rubric application (Dim 1, Dim 4) and narrative generation only.
@@ -420,17 +424,19 @@ auth.users 1──1 advisors 1──∞ clients 1──1 questionnaire_responses
 
 | Component | Status | Notes |
 |---|---|---|
-| Database schema | Applied (needs migration) | 8 tables in Supabase. Needs: `band` and `forward_brief_data` columns on `scores` table |
-| Pydantic models | Needs update | Current models reflect v1 architecture. Need new scoring output models matching v2 |
-| Ingestion parsers | Validated | ZIP + XLSX parsers tested against real data. No changes needed for v2 |
+| Database schema | Applied | 8 tables in Supabase. v2 columns applied (003, 004, 005, 006). Two ad-hoc ALTERs need migration files: `narrative_config` on advisors, `published_at DROP NOT NULL` on reports |
+| Pydantic models | Complete | v2 scoring output models (ScoringStageOutput) in `models/scoring.py` |
+| Ingestion — ZIP parser | Complete | Tested against real data. Handles None keys, datetime formats. Data quality reporting integrated |
+| Ingestion — XLSX parser | Complete | All 5 sheets parsed (DISCOVERY, ENGAGEMENT, TOP POSTS, FOLLOWERS, DEMOGRAPHICS). Tested against real data |
 | API routes | Complete | Auth, advisors, clients, questionnaires, jobs (5 routers, 15 endpoints) |
 | Signup/invitation flow | Complete | Advisor + individual provisioning, client invitation via Supabase Auth |
-| Worker skeleton | Complete | Job loop with optimistic locking, 4-stage pipeline with placeholder scoring/narratives |
-| Scoring engine | Ready to build | All specifications complete. 4 dimensions, all bands defined, formula pressure-tested |
-| Forward Brief computation | Ready to build | Data contract defined. Computed in scoring stage alongside dimensions |
-| Narrative generation | Stub | Blocked on prompt templates. Must receive scored_dimensions + forward_brief_data as structured inputs |
-| Claude rubric prompts | Not started | Dim 1 (5 rubrics) and Dim 4 (2 rubrics). Inter-rater consistency testing required before launch |
-| Frontend | Not started | Josh's territory; API exists for it to build against |
+| Worker / job processor | Complete | Job loop with optimistic locking via RPC, 4-stage pipeline, upsert retry safety, deployed on Railway |
+| Scoring engine | Complete | 4 dimensions, all bands, formula confirmed. `scoring/config.py` + `scoring/engine.py`. Pressure-test: 77.6 ✓ |
+| Forward Brief computation | Complete | Computed in scoring stage. XLSX feeds Reach/Resonance/Authority; ZIP feeds qualitative flags |
+| Claude rubric scoring | Complete | `agents/rubric.py` — Dim 1 (5 rubrics) + Dim 4 (2 rubrics). Inter-rater consistency testing still needed |
+| Narrative generation | Complete | `agents/narrative.py` — receives scored dimensions + forward brief + quality report + questionnaire. 5 sections generated |
+| Railway deployment | Complete | Web service (FastAPI) + worker service (background processor). Shared env vars. Worker requires manual redeploy |
+| Frontend | Not started | Josh's territory; API and pipeline ready for it to build against |
 
 ---
 

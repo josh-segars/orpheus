@@ -1,0 +1,33 @@
+/* Sub-signal dial — a small circular gauge indicating a dimension's score
+   on a 1–10 scale. Used in the Signal Score page's dimension cards.
+   All classes prefixed `ssd-` to avoid collisions. */
+
+.ssd-root {
+  --ssd-dial: var(--warm-gold);
+  /* Needle is the same color as the card background so the notch reads
+     as a cutout — the dial appears to have a slot punched through it,
+     showing the parchment behind. */
+  --ssd-needle: var(--warm-parchment);
+  --ssd-tick: var(--warm-stone);
+  --ssd-label: var(--warm-text);
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Source Sans 3', sans-serif;
+}
+
+.ssd-svg {
+  display: block;
+  overflow: visible;
+}
+
+.ssd-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--ssd-label);
+  white-space: nowrap;
+}

@@ -1,0 +1,186 @@
+/* Signal Meter — responsive horizontal band meter.
+   All classes prefixed `sm-` to avoid collisions with the global stylesheet. */
+
+.sm-root {
+  --sm-bg: var(--deep-slate);
+  --sm-tick: rgba(249, 246, 240, 0.35);
+  --sm-tick-major: rgba(249, 246, 240, 0.6);
+  --sm-tick-boundary: rgba(249, 246, 240, 0.95);
+  --sm-label: var(--warm-ivory);
+  --sm-label-muted: rgba(249, 246, 240, 0.55);
+  --sm-reticle: var(--warm-gold);
+
+  /* Horizontal inset for the scale so ticks at score 0 / 100 don't sit
+     flush against the meter's rounded edge. The deep-slate background
+     stays full-width; only the scale / labels / boundary numbers are inset.
+     Applied consistently across all three positioning contexts so ticks,
+     boundary numbers, band labels, and the reticle all stay aligned. */
+  --sm-inset: 16px;
+
+  font-family: 'Source Sans 3', sans-serif;
+  color: var(--sm-label);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Meter strip (deep-slate bg, boundary numbers, ticks, band labels, reticle) ─ */
+/* Height is determined by children (each row has an explicit height) rather
+   than fixed on the meter itself. Avoids flex-basis ambiguity where rows
+   with `min-height` could collapse at certain container widths. */
+.sm-meter {
+  position: relative;
+  width: 100%;
+  padding: 10px 0;
+  background-color: var(--sm-bg);
+  border-radius: 10px;
+  overflow: visible;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── Boundary numbers (0 / 25 / 45 / 65 / 80 / 100) ────────── */
+/* Rendered INSIDE .sm-meter, on the deep-slate background, so they read
+   as meter tick labels rather than floating above the meter. */
+.sm-boundary-numbers {
+  position: relative;
+  height: 16px;
+  flex: 0 0 16px;
+  margin: 0 var(--sm-inset);
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(249, 246, 240, 0.7);
+}
+.sm-boundary-numbers > span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The scale is the inset area inside the meter that ticks + reticle
+   position against. Its padding-box is the positioning context for the
+   reticle, so left: ${score}% is measured against the inset width. */
+.sm-scale {
+  position: relative;
+  height: 50px;
+  flex: 0 0 50px;
+  margin: 0 var(--sm-inset);
+}
+
+.sm-ticks {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Without this, the stroke of the ticks at x=0 and x=1000 (score 0 and
+     100) gets clipped by the SVG viewport, since strokes are centered on
+     the x coordinate. overflow: visible lets the half-pixel outside the
+     viewBox render — it sits within the deep-slate background of the
+     parent .sm-meter, which also has overflow: visible. */
+  overflow: visible;
+}
+
+/* ── Reticle ───────────────────────────────────────────────── */
+/* Stays inside .sm-scale so the gold line doesn't bleed into the
+   boundary-numbers row above or the band-labels row below, both of
+   which are now siblings within .sm-meter. */
+.sm-reticle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.sm-reticle::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-50%);
+  background-color: var(--sm-reticle);
+  border-radius: 1px;
+}
+.sm-reticle::after {
+  /* subtle glow so the reticle reads on a dense tick field */
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    ellipse 50% 60% at center,
+    rgba(196, 144, 42, 0.35),
+    transparent 70%
+  );
+  pointer-events: none;
+}
+
+/* ── Band labels row ───────────────────────────────────────── */
+/* Rendered INSIDE .sm-meter below the tick scale. Active band is
+   emphasized (gold, larger); inactive bands appear muted and collapse on
+   narrow containers via the container query below. */
+.sm-band-labels {
+  position: relative;
+  height: 20px;
+  flex: 0 0 20px;
+  margin: 0 var(--sm-inset);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.sm-band-label {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  color: var(--sm-label-muted);
+  font-size: 10px;
+  transition: color 200ms ease, font-size 200ms ease;
+}
+
+.sm-band-label[aria-current='true'] {
+  color: var(--warm-gold);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ── Mobile behavior ───────────────────────────────────────── */
+/* Use a container query on the root so the meter adapts to its container
+   width, not the viewport. Fallback media query provided for browsers
+   without container-query support. */
+.sm-root {
+  container-type: inline-size;
+}
+
+@container (max-width: 520px) {
+  /* Slightly tighten the inset so the scale doesn't lose too much width
+     on narrow containers. */
+  .sm-root {
+    --sm-inset: 12px;
+  }
+  /* Hide interior boundary numbers (25/45/65/80) on narrow widths —
+     keep only 0 and 100 to anchor the ends. */
+  .sm-boundary-numbers > span[data-interior='true'] {
+    display: none;
+  }
+  /* Collapse inactive band labels — only the active band stays visible. */
+  .sm-band-label:not([aria-current='true']) {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .sm-boundary-numbers > span[data-interior='true'] {
+    display: none;
+  }
+}

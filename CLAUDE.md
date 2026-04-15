@@ -32,12 +32,13 @@ All files live flat in the repo root. Assets go in `assets/screenshots/`.
 ### Color Tokens (defined in `orpheus-styles.css` `:root`)
 ```
 --deep-slate:     #1C2B3A   (primary dark, nav bg, buttons)
---warm-gold:      #C4902A   (accent, active states, highlights)
+--warm-gold:      #C4902A   (accent, active states, highlights, watch tone)
 --warm-ivory:     #F9F6F0   (page background)
 --warm-parchment: #EDE9E1   (card/input backgrounds)
 --warm-text:      #271D10   (body text)
---warm-stone:     #7A6A56   (secondary text, placeholders)
+--warm-stone:     #7A6A56   (secondary text, placeholders, strength tone)
 --warm-border:    #DDD5C8   (borders, dividers)
+--red-clay:       #BD3F3A   (gap/issue tone — sub-dimension icons, alerts)
 ```
 
 ### Border Radius
@@ -198,15 +199,15 @@ Client-facing output is a **signal strength band** (Weak/Emerging/Moderate/Stron
 
 **What moved to Forward Brief (not scored):** Reach, Resonance, Authority, viewer-actor affinity, visual professionalism, engagement invitation.
 
-Pressure-test: Andrew Segars scores 77.6 → Strong band (data: 2025-03-17 to 2026-03-16).
+Pressure-test confirmed via live pipeline (2026-04-13): Andrew Segars scores 77.6 → Strong band (data: 2025-03-17 to 2026-03-16).
 
 See `PRODUCT_CONTEXT.md` for full sub-dimension specifications, band thresholds, scoring formula, and Forward Brief data contract.
 
 ---
 
-## Planned Production Stack
+## Production Stack
 
-The prototype is pure HTML/CSS/Python running locally. Production adds a backend, database, and hosted frontend.
+Backend deployed on Railway, database on Supabase. Frontend not yet scaffolded.
 
 ### Tech Stack
 
@@ -247,14 +248,17 @@ The prototype is pure HTML/CSS/Python running locally. Production adds a backend
 │   │   └── engine.py           # Scoring engine — run_scoring() entry point
 │   ├── agents/                 # Claude API calls (2 calls in pipeline)
 │   │   ├── rubric.py           # Dim 1 + Dim 4 rubric scoring
-│   │   └── narrative.py        # Narrative generation (stub)
+│   │   └── narrative.py        # Narrative generation + data quality integration
 │   ├── workers/                # Background job processor
-│   │   └── processor.py        # Job loop with optimistic locking (stub)
+│   │   └── processor.py        # Job loop with optimistic locking, 4-stage pipeline
 │   ├── migrations/             # SQL migrations (applied to Supabase)
 │   │   ├── 003_v2_scoring_columns.sql
-│   │   └── 004_rename_narratives_dimension.sql
+│   │   ├── 004_rename_narratives_dimension.sql
+│   │   ├── 005_quality_report_column.sql
+│   │   └── 006_claim_next_job_rpc.sql
 │   ├── tests/                  # Test suite
-│   │   └── test_scoring.py     # 48 tests for scoring engine
+│   │   ├── test_scoring.py     # 48 tests for scoring engine
+│   │   └── test_narrative.py   # 8 tests for quality report formatting
 │   └── requirements.txt
 └── .github/
     └── workflows/              # GitHub Actions CI/CD
@@ -285,7 +289,7 @@ Ingestion + scoring + Claude call takes 20–60 seconds — too long for a synch
 
 **Job states:** `pending → running → complete` (failed jobs retry up to 3×, then surface an error)
 
-**Queue implementation for beta:** Supabase `jobs` table using `SELECT ... FOR UPDATE SKIP LOCKED` to prevent duplicate claims if workers scale.
+**Queue implementation for beta:** Supabase `jobs` table with `claim_next_job` RPC function using `FOR UPDATE SKIP LOCKED` for atomic job claiming. Worker is a separate Railway service that requires manual redeploy after pushes.
 
 ### Environment Variables
 
