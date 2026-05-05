@@ -324,6 +324,66 @@ export const demoJob: Job = {
       },
       forward_brief:
         '## Priorities\n\nThe fastest compound improvement comes from closing the consistency gap inside Behavioral Signal Strength. Pick a weekly cadence you will keep for 12 weeks and protect it as non-negotiable.\n\n## Quick Wins\n\n- Request two to three recommendations from senior colleagues this month.\n- Add one outcome-led sentence to each of your three most recent Experience entries.\n- Convert one long-form reply you wrote this quarter into a standalone post.',
+      cheat_sheet: {
+        priorities: [
+          {
+            title: 'Close the Consistency Gap',
+            action:
+              'Publish on a fixed weekly cadence — Monday, Wednesday, Friday. Build a two-to-three week content bank so the weekly decision is already made. **Target: zero empty weeks for 12 weeks.**',
+          },
+          {
+            title: 'Request Recommendations Strategically',
+            action:
+              'Identify two to three senior colleagues from your most recent and most prestigious roles. Send specific, personal requests that name what you want them to highlight. **Target: 2 new recommendations in 30 days.**',
+          },
+          {
+            title: 'Sharpen Experience Entries',
+            action:
+              'Rewrite the first bullet of each of your three most recent roles to lead with a business outcome — shifted, reduced, unlocked, shipped — with at least one quantified metric.',
+          },
+          {
+            title: 'Convert a Long Reply into a Post',
+            action:
+              'Pick one substantive reply you wrote this quarter and rebuild it as a standalone post. Lead with the stake you took, keep the specifics, and land on the lesson.',
+          },
+          {
+            title: 'Deepen Comment Quality Over Volume',
+            action:
+              'Hold comment depth (your current 34-word average is a strength). Replace one reaction per day with a substantive comment on a target-audience post instead.',
+          },
+        ],
+        rhythm: [
+          {
+            cadence: 'Every Day',
+            items: [
+              'Reply to any new comments within 24 hours.',
+              'Spend 10 minutes engaging with target-audience posts.',
+            ],
+          },
+          {
+            cadence: 'Every Week',
+            items: [
+              'Publish Mon / Wed / Fri from your content bank.',
+              'Send 10–15 targeted connection requests.',
+              'Review your top post of the week for patterns.',
+            ],
+          },
+          {
+            cadence: 'Every Month',
+            items: [
+              'Send one personal recommendation request to a former colleague, client, or supervisor.',
+              'Rewrite the lead bullet on one Experience entry using outcome-led language.',
+              'Review posting cadence, engagement rate, and audience growth against your baseline.',
+            ],
+          },
+        ],
+        milestones: [
+          { value: '12', label: 'Weeks without a gap' },
+          { value: '36+', label: 'Posts published' },
+          { value: '2', label: 'New recommendations' },
+          { value: '3', label: 'Experience entries rewritten' },
+        ],
+      },
     },
   },
 }

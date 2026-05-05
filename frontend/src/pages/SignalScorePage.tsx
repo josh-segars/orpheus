@@ -91,9 +91,20 @@ export function SignalScorePage() {
         <Link to="/" className="btn-secondary">
           &larr; Return to Groundwork
         </Link>
-        <Link to={`/jobs/${job.id}/forward-brief`} className="btn-primary">
-          View My Forward Brief &rarr;
-        </Link>
+        <div className="actions-group">
+          <Link
+            to={`/jobs/${job.id}/cheat-sheet`}
+            className="btn-secondary"
+          >
+            View Cheat Sheet
+          </Link>
+          <Link
+            to={`/jobs/${job.id}/forward-brief`}
+            className="btn-primary"
+          >
+            View My Forward Brief &rarr;
+          </Link>
+        </div>
       </div>
     </main>
   )

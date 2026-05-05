@@ -307,3 +307,11 @@
   padding: 40px 0;
   text-align: center;
 }
+
+/* Grouped forward actions — two deliverables share the right side of
+   the action bar while the back link stays on the left. */
+.actions-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}

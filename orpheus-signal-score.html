@@ -199,6 +199,13 @@
     /* Watch / neutral — soft dot, muted value text */
     .indicator-watch { color: var(--warm-stone); }
     .indicator-watch .indicator-dot { background-color: var(--warm-border); }
+
+    /* Grouped forward actions (two deliverables on the right) */
+    .actions-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
   </style>
 </head>
 <body>
@@ -396,7 +403,10 @@
     <!-- Action bar -->
     <div class="actions">
       <a href="orpheus-groundwork-v1.html" class="btn-secondary">← Return to Groundwork</a>
-      <a href="orpheus-forward-brief.html" class="btn-primary">View My Forward Brief →</a>
+      <div class="actions-group">
+        <a href="orpheus-cheat-sheet.html" class="btn-secondary">View Cheat Sheet</a>
+        <a href="orpheus-forward-brief.html" class="btn-primary">View My Forward Brief →</a>
+      </div>
     </div>
   </main>
 

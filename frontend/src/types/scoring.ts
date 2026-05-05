@@ -114,11 +114,47 @@ export interface ScoringStageOutput {
 
 // --- Narratives ------------------------------------------------------------
 // Narrative generation returns a dict keyed by dimension name, plus a
-// `forward_brief` Markdown string. See backend/agents/narrative.py.
+// `forward_brief` Markdown string and a structured `cheat_sheet`.
+// See backend/agents/narrative.py.
+
+export interface CheatSheetPriority {
+  /** Short, imperative title (e.g. "Grow Your Follower Base"). */
+  title: string
+  /**
+   * One-to-two sentence action step. Plain text — no markdown. Bolded
+   * target / milestone (if present) should be included as a trailing
+   * sentence in the same string so the client can render it with a
+   * simple "<strong>…</strong>" marker.
+   */
+  action: string
+}
+
+export interface CheatSheetRhythmSection {
+  /** e.g. "Every Day", "Every Week", "Every Month". */
+  cadence: string
+  /** Checklist items, one line each. */
+  items: string[]
+}
+
+export interface CheatSheetMilestone {
+  value: string
+  label: string
+}
+
+export interface CheatSheetContent {
+  /** Exactly 5 priorities, already ordered by leverage. */
+  priorities: CheatSheetPriority[]
+  /** Daily / weekly / monthly (or similar) checklist blocks. */
+  rhythm: CheatSheetRhythmSection[]
+  /** 90-day quantitative targets shown in the dark milestones band. */
+  milestones: CheatSheetMilestone[]
+}
 
 export interface Narratives {
   /** Keyed by dimension name (matches DimensionScore.name). */
   dimension_narratives: Record<string, string>
   /** Markdown-formatted Forward Brief (400–600 words). */
   forward_brief: string
+  /** Structured cheat sheet — printable one-page reference derived from the Forward Brief. */
+  cheat_sheet: CheatSheetContent
 }

@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orpheus Social — Cheat Sheet</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,500;0,8..60,700;0,8..60,900;1,8..60,700;1,8..60,900&family=Source+Sans+3:ital,wght@0,400;0,600;1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="orpheus-styles.css">
+  <style>
+    /* ── Print intro / helper row ─────────────────────────────── */
+    .print-helper {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 18px;
+      background-color: var(--warm-parchment);
+      border: 1px solid var(--warm-border);
+      border-radius: 10px;
+      margin-bottom: 40px;
+      gap: 20px;
+    }
+
+    .print-helper-text {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 13px;
+      font-style: italic;
+      color: var(--warm-stone);
+      line-height: 1.5;
+    }
+
+    .print-helper-text kbd {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 12px;
+      font-style: normal;
+      font-weight: 600;
+      color: var(--warm-text);
+      background-color: var(--warm-ivory);
+      border: 1px solid var(--warm-border);
+      border-radius: 4px;
+      padding: 2px 6px;
+    }
+
+    /* ── Cheat sheet "document" container ─────────────────────── */
+    .cheat-doc {
+      background-color: var(--warm-ivory);
+    }
+
+    .cheat-header {
+      text-align: center;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--warm-border);
+      margin-bottom: 28px;
+    }
+
+    .cheat-eyebrow {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--warm-gold);
+      margin-bottom: 10px;
+    }
+
+    .cheat-title {
+      font-family: 'Source Serif 4', serif;
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--warm-text);
+      line-height: 1.2;
+      margin-bottom: 6px;
+    }
+
+    .cheat-subtitle {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 13px;
+      font-style: italic;
+      color: var(--warm-stone);
+    }
+
+    /* ── Priority mini-cards (compact mirror of Forward Brief) ── */
+    .cheat-section-label {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--warm-gold);
+      margin-bottom: 14px;
+    }
+
+    .cheat-priorities {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .cheat-priority {
+      background-color: var(--warm-parchment);
+      border-radius: 10px;
+      padding: 14px 18px;
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .cheat-priority-number {
+      flex-shrink: 0;
+      width: 32px;
+      font-family: 'Source Serif 4', serif;
+      font-size: 26px;
+      font-weight: 700;
+      font-style: italic;
+      font-variation-settings: "opsz" 26;
+      color: rgba(196, 144, 42, 0.3);
+      line-height: 1;
+      padding-top: 2px;
+      text-align: center;
+    }
+
+    .cheat-priority-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .cheat-priority-title {
+      font-family: 'Source Serif 4', serif;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--warm-text);
+      margin-bottom: 4px;
+      line-height: 1.3;
+    }
+
+    .cheat-priority-action {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 13px;
+      color: var(--warm-text);
+      line-height: 1.55;
+    }
+
+    /* ── Weekly rhythm section ────────────────────────────────── */
+    .rhythm-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .rhythm-block {
+      background-color: var(--warm-parchment);
+      border-radius: 10px;
+      padding: 16px 18px;
+    }
+
+    .rhythm-block-full {
+      grid-column: span 2;
+    }
+
+    .rhythm-label {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--warm-gold);
+      margin-bottom: 10px;
+    }
+
+    .rhythm-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .rhythm-item {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 13px;
+      color: var(--warm-text);
+      line-height: 1.5;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .rhythm-check {
+      flex-shrink: 0;
+      width: 14px;
+      height: 14px;
+      border: 1.5px solid var(--warm-gold);
+      border-radius: 3px;
+      margin-top: 2px;
+    }
+
+    /* ── Milestones band ──────────────────────────────────────── */
+    .milestones {
+      background-color: var(--deep-slate);
+      border-radius: 10px;
+      padding: 18px 22px;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .milestone {
+      flex: 1;
+      text-align: center;
+    }
+
+    .milestone-value {
+      font-family: 'Source Serif 4', serif;
+      font-size: 22px;
+      font-weight: 700;
+      font-style: italic;
+      font-variation-settings: "opsz" 22;
+      color: var(--warm-gold);
+      line-height: 1.1;
+      margin-bottom: 4px;
+    }
+
+    .milestone-label {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: rgba(249, 246, 240, 0.7);
+      line-height: 1.3;
+    }
+
+    .milestones-eyebrow {
+      text-align: center;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--warm-stone);
+      margin-bottom: 10px;
+    }
+
+    /* ── Print optimization ───────────────────────────────────── */
+    @media print {
+      @page {
+        size: letter portrait;
+        margin: 0.5in;
+      }
+
+      body {
+        background: white;
+      }
+
+      .nav,
+      .footer,
+      .print-helper,
+      .cheat-actions {
+        display: none !important;
+      }
+
+      .main-interior {
+        padding: 0;
+        max-width: 100%;
+      }
+
+      .cheat-doc {
+        background: white;
+      }
+
+      .cheat-header {
+        padding-bottom: 14px;
+        margin-bottom: 20px;
+      }
+
+      .cheat-title { font-size: 22px; }
+      .cheat-subtitle { font-size: 11px; }
+
+      .cheat-section-label {
+        font-size: 10px;
+        margin-bottom: 10px;
+      }
+
+      .cheat-priorities { gap: 8px; margin-bottom: 20px; }
+      .cheat-priority { padding: 10px 14px; gap: 12px; }
+      .cheat-priority-number { font-size: 22px; width: 26px; }
+      .cheat-priority-title { font-size: 13px; margin-bottom: 3px; }
+      .cheat-priority-action { font-size: 11px; line-height: 1.45; }
+
+      .rhythm-grid { gap: 8px; margin-bottom: 18px; }
+      .rhythm-block { padding: 12px 14px; }
+      .rhythm-label { font-size: 10px; margin-bottom: 8px; }
+      .rhythm-item { font-size: 11px; line-height: 1.4; gap: 8px; }
+      .rhythm-check { width: 11px; height: 11px; }
+
+      .milestones { padding: 14px 18px; }
+      .milestone-value { font-size: 18px; }
+      .milestone-label { font-size: 9px; }
+
+      /* avoid awkward breaks */
+      .cheat-priority,
+      .rhythm-block,
+      .milestones { page-break-inside: avoid; }
+    }
+
+    /* ── Action bar overrides ─────────────────────────────────── */
+    .cheat-actions {
+      margin-top: 60px;
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="wordmark"><span class="wordmark-orpheus">Orpheus</span><span class="wordmark-social">Social</span></div>
+    <div class="nav-client"><span class="nav-client-label">Confidential Portal for</span><span class="nav-client-name">Jane Doe</span></div>
+  </nav>
+
+  <main class="main-interior">
+    <!-- Screen-only helper (hidden on print) -->
+    <div class="print-helper">
+      <div class="print-helper-text">A one-page reference card drawn from your Forward Brief. Print with <kbd>⌘</kbd> <kbd>P</kbd> (Mac) or <kbd>Ctrl</kbd> <kbd>P</kbd> (Windows) — formatting is optimized for Letter portrait.</div>
+    </div>
+
+    <!-- Cheat Sheet "document" -->
+    <div class="cheat-doc">
+
+      <!-- Document header -->
+      <header class="cheat-header">
+        <div class="cheat-eyebrow">Cheat Sheet</div>
+        <h1 class="cheat-title">Your Signal, at a Glance</h1>
+        <div class="cheat-subtitle">Five priorities and a weekly rhythm — prepared for Jane Doe</div>
+      </header>
+
+      <!-- Priorities -->
+      <div class="cheat-section-label">The Five Priorities</div>
+      <div class="cheat-priorities">
+
+        <div class="cheat-priority">
+          <div class="cheat-priority-number">1</div>
+          <div class="cheat-priority-body">
+            <div class="cheat-priority-title">Grow Your Follower Base</div>
+            <div class="cheat-priority-action">Connect with 10–15 targeted professionals per week. Reply to every comment within 24 hours. <strong>Target: 1,000 followers in 90 days.</strong></div>
+          </div>
+        </div>
+
+        <div class="cheat-priority">
+          <div class="cheat-priority-number">2</div>
+          <div class="cheat-priority-body">
+            <div class="cheat-priority-title">Establish a Publishing Rhythm</div>
+            <div class="cheat-priority-action">Post Monday, Wednesday, Friday — non-negotiable. Build a 2–3 week content bank so weekly publishing isn't a weekly decision.</div>
+          </div>
+        </div>
+
+        <div class="cheat-priority">
+          <div class="cheat-priority-number">3</div>
+          <div class="cheat-priority-body">
+            <div class="cheat-priority-title">Request Recommendations Strategically</div>
+            <div class="cheat-priority-action">Identify 3–5 colleagues from your most recent and prestigious roles. Send specific, personal requests. <strong>Target: 2 new recommendations in 30 days.</strong></div>
+          </div>
+        </div>
+
+        <div class="cheat-priority">
+          <div class="cheat-priority-number">4</div>
+          <div class="cheat-priority-body">
+            <div class="cheat-priority-title">Publish Your First LinkedIn Article</div>
+            <div class="cheat-priority-action">Write one 800–1,200 word piece at the intersection of your expertise and your audience's biggest current challenge. Share it as a post with a short excerpt.</div>
+          </div>
+        </div>
+
+        <div class="cheat-priority">
+          <div class="cheat-priority-number">5</div>
+          <div class="cheat-priority-body">
+            <div class="cheat-priority-title">Sharpen Your Content Voice</div>
+            <div class="cheat-priority-action">Before every post answer: <em>what is my situation, what do I think, why does that matter to my audience?</em> Cut updates and shares that have no personal angle.</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Weekly rhythm -->
+      <div class="cheat-section-label">Your Weekly Rhythm</div>
+      <div class="rhythm-grid">
+
+        <div class="rhythm-block">
+          <div class="rhythm-label">Every Day</div>
+          <ul class="rhythm-list">
+            <li class="rhythm-item"><span class="rhythm-check"></span><span>Reply to any new comments within 24 hours.</span></li>
+            <li class="rhythm-item"><span class="rhythm-check"></span><span>Spend 10 minutes engaging with target-audience posts.</span></li>
+          </ul>
+        </div>
+
+        <div class="rhythm-block">
+          <div class="rhythm-label">Every Week</div>
+          <ul class="rhythm-list">
+            <li class="rhythm-item"><span class="rhythm-check"></span><span>Publish Mon / Wed / Fri from your content bank.</span></li>
+            <li class="rhythm-item"><span class="rhythm-check"></span><span>Send 10–15 targeted connection requests.</span></li>
+            <li class="rhythm-item"><span class="rhythm-check"></span><span>Review your top post of the week for patterns.</span></li>
+          </ul>
+        </div>
+
+        <div class="rhythm-block rhythm-block-full">
+          <div class="rhythm-label">Every Month</div>
+          <ul class="rhythm-list">
+            <li class="rhythm-item"><span class="rhythm-check"></span><span>Send one personal recommendation request to a former colleague, client, or supervisor.</span></li>
+            <li class="rhythm-item"><span class="rhythm-check"></span><span>Draft the next article — even if it doesn't publish this month, keep the pipeline alive.</span></li>
+            <li class="rhythm-item"><span class="rhythm-check"></span><span>Check follower growth, posts-per-week, and engagement rate against your baseline.</span></li>
+          </ul>
+        </div>
+
+      </div>
+
+      <!-- 90-day milestones -->
+      <div class="milestones-eyebrow">90-Day Milestones</div>
+      <div class="milestones">
+        <div class="milestone">
+          <div class="milestone-value">1,000</div>
+          <div class="milestone-label">Followers</div>
+        </div>
+        <div class="milestone">
+          <div class="milestone-value">36+</div>
+          <div class="milestone-label">Posts Published</div>
+        </div>
+        <div class="milestone">
+          <div class="milestone-value">2</div>
+          <div class="milestone-label">New Recommendations</div>
+        </div>
+        <div class="milestone">
+          <div class="milestone-value">1</div>
+          <div class="milestone-label">Long-Form Article</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Screen-only action bar (hidden on print) -->
+    <div class="actions cheat-actions">
+      <a href="orpheus-signal-score.html" class="btn-secondary">← Return to Signal Score</a>
+      <a href="orpheus-forward-brief.html" class="btn-primary">View My Forward Brief →</a>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="wordmark-sm"><span class="wordmark-sm-orpheus">Orpheus</span><span class="wordmark-sm-social">Social</span></div>
+    <div class="footer-links"><a href="#">Terms of Service</a><a href="#">Confidentiality</a><span>Copyright &copy; 2026 All Rights Reserved.</span></div>
+  </footer>
+</body>
+</html>
