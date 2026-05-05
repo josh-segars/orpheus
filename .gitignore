@@ -14,3 +14,12 @@ client-data/
 # Python
 __pycache__/
 *.pyc
+
+# Supabase CLI local artifacts (do not commit).
+# supabase/config.toml and supabase/migrations/ are kept in-repo;
+# everything else is per-developer machine state.
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+# TypeScript incremental build cache — per-machine, never commit.
+*.tsbuildinfo
