@@ -5,3 +5,11 @@ anthropic
 python-dotenv
 pydantic
 openpyxl
+
+# JWT verification for Supabase-issued tokens (ORPHEUS-27).
+PyJWT[crypto]>=2.8.0
+cryptography>=42.0.0
+
+# Test runner (used by backend/tests/*).
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
