@@ -209,4 +209,46 @@ $$;
 
 COMMENT ON COLUMN public.jobs.client_id IS 'Owner of this job. FK to public.clients(id); cascades on account deletion (Decision: LinkedIn Auth, ORPHEUS-23).';
 
+-- ---------------------------------------------------------------------------
+-- One-time backfill
+--
+-- The on_auth_user_created trigger only fires for AFTER INSERT on auth.users,
+-- so any LinkedIn members who signed in before this migration was applied
+-- (for instance, during local smoke testing) won't have a clients row.
+-- This block backfills them using the same logic as the trigger, with
+-- ON CONFLICT DO NOTHING so re-running the migration is harmless.
+--
+-- Unverified-email rows are skipped — they would have been rejected by the
+-- trigger, and we shouldn't grant them client status retroactively.
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.clients (
+    id,
+    linkedin_sub,
+    display_name,
+    given_name,
+    family_name,
+    profile_picture_url,
+    locale
+)
+SELECT
+    u.id,
+    COALESCE(u.raw_user_meta_data->>'sub', u.id::text),
+    COALESCE(
+        NULLIF(u.raw_user_meta_data->>'name', ''),
+        NULLIF(CONCAT_WS(' ',
+            u.raw_user_meta_data->>'given_name',
+            u.raw_user_meta_data->>'family_name'
+        ), ''),
+        split_part(u.email, '@', 1)
+    ),
+    u.raw_user_meta_data->>'given_name',
+    u.raw_user_meta_data->>'family_name',
+    u.raw_user_meta_data->>'picture',
+    u.raw_user_meta_data->>'locale'
+FROM auth.users u
+WHERE COALESCE(u.raw_app_meta_data->>'provider', '') = 'linkedin_oidc'
+  AND u.email_confirmed_at IS NOT NULL
+ON CONFLICT (id) DO NOTHING;
+
 COMMIT;
