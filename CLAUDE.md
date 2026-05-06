@@ -5,9 +5,12 @@ Strategic Digital Presence Advisory** practice. It guides senior executive
 clients through a structured data-gathering phase ("Groundwork"), then
 delivers a **Signal Score** diagnostic and **Forward Brief** action plan.
 
-**Current state:** Fully functional prototype — pure HTML/CSS, no JavaScript, no framework, hosted locally via VS Code Live Server. All 14 portal screens complete.
+**Current state:** two parallel implementations.
 
-**Next phase:** Transitioning to a hosted production stack with a Python backend, database, and React frontend. See "Planned Production Stack" section below.
+- **HTML/CSS prototype** (14 screens, JS-free) lives flat in the repo root and renders via VS Code Live Server. It is the visual source of truth for the design system.
+- **Production stack** is in active development: FastAPI backend (Railway), Supabase Postgres with Auth + RLS, Vite + React frontend (Vercel). As of 2026-05-06, LinkedIn (OIDC) sign-in works end-to-end against local Supabase; the React shell renders Signal Score, Forward Brief, and Cheat Sheet pages with auth, RLS, and the typed JWT contract in place.
+
+**Active phase:** porting the prototype's product flow (Welcome, Groundwork, questionnaire, LinkedIn upload, Analysis-in-Progress) into the React app. See the Plane backlog for the open ORPHEUS-n tickets.
 
 ---
 
@@ -44,9 +47,8 @@ All files live flat in the repo root. Assets go in `assets/screenshots/`.
 ### Border Radius
 10px throughout — no exceptions.
 
-### Input Interaction Pattern
-`:has(input:checked)` CSS selector for radio/checkbox selected states.
-No JavaScript for any UI behavior.
+### Input Interaction Pattern (HTML prototype only)
+`:has(input:checked)` CSS selector for radio/checkbox selected states. No JavaScript in the prototype HTML — all interaction is CSS. The React app naturally uses JS but mirrors the same visual pattern via state-driven `className` toggles.
 
 ---
 
@@ -171,14 +173,15 @@ PDF export was evaluated and deemed redundant — ZIP CSVs contain same profile 
 
 ## Decisions Made
 
-- No JavaScript — all interaction via CSS `:has()` selector
+- HTML prototype is JS-free — all interaction via CSS `:has()` selector. React app uses standard JS and mirrors the same visuals via state.
 - No PDF export step (redundant with ZIP)
 - Data retention: delete after AI processing; Signal Score is the durable record
-- Confidentiality / AI data handling policy: deferred, to be discussed with Andrew
+- **Authentication: LinkedIn (OIDC) only**, via Supabase Auth. Self-serve sign-up; verified-email gate enforced by the `on_auth_user_created` trigger. Client-side and server-side identity both flow from a single Supabase session. See ORPHEUS-23 / `Decision_LinkedIn_Auth_2026-04-21.md` for the full architecture.
+- **Account deletion: hard cascade.** Deleting `auth.users` cascades through `clients` to `jobs`, `ingested_data`, `scores`, and `narratives`. Clients retain their Signal Score / Forward Brief deliverables out-of-band (PDF copy held by Andrew).
+- Confidentiality / AI data handling: LinkedIn API Terms reviewed in `LinkedIn_API_Terms_Review_2026-05-05.docx` (Drive). Project privacy policy + ToS still deferred — compliance follow-up tickets to be cut from that review before public launch.
 - Screenshot assets for LinkedIn instruction pages: deferred
-- "My Groundwork is Complete" button stays disabled (`opacity: 0.35`) until
-  completion logic is implemented (requires JS or backend)
-- Client name "Jane Doe" is the placeholder throughout — will be personalized per client
+- "My Groundwork is Complete" button stays disabled (`opacity: 0.35`) in the prototype; React port will gate via backend completion state.
+- Client identity in the React `PortalNav` is sourced from the Supabase session (LinkedIn OIDC `name` + `picture`, falling back to initials). The `Jane Doe` placeholder only survives in the HTML prototype.
 
 ---
 
@@ -207,7 +210,7 @@ See `PRODUCT_CONTEXT.md` for full sub-dimension specifications, band thresholds,
 
 ## Production Stack
 
-Backend deployed on Railway, database on Supabase. Frontend not yet scaffolded.
+Backend deployed on Railway, database on Supabase, frontend scaffolded with Vite + React. Local development uses Supabase CLI + Docker; see `SETUP_phase1_local_auth.md` for first-time onboarding.
 
 ### Tech Stack
 
@@ -227,41 +230,67 @@ Backend deployed on Railway, database on Supabase. Frontend not yet scaffolded.
 ```
 /
 ├── CLAUDE.md
-├── PRODUCT_CONTEXT.md          # Full scoring specs, schema, decisions
-├── frontend/                   # React app (not yet scaffolded)
+├── PRODUCT_CONTEXT.md                 # Full scoring specs, schema, decisions
+├── SETUP_phase1_local_auth.md         # Onboarding: local Supabase + dev LinkedIn app
+├── Decision_LinkedIn_Auth_2026-04-21.md  # Source markdown for ORPHEUS-23
+├── orpheus-*.html                     # HTML/CSS prototype (visual source of truth)
+├── orpheus-styles.css                 # Shared design system stylesheet
+├── supabase/
+│   └── config.toml                    # Local Supabase CLI config — LinkedIn provider via env interpolation
+├── frontend/                          # Vite + React app
+│   ├── .env.local.example             # Template for VITE_SUPABASE_* / VITE_API_BASE_URL / VITE_ADMIN_EMAILS
+│   ├── package.json                   # @supabase/supabase-js, @tanstack/react-query, react-router-dom
 │   └── src/
-├── backend/                    # FastAPI app
-│   ├── main.py                 # App entry point, CORS, router registration
-│   ├── config.py               # Pydantic Settings (.env loading)
-│   ├── db.py                   # Supabase client init
-│   ├── auth.py                 # FastAPI auth dependency
-│   ├── routers/                # API route handlers (5 routers, 15 endpoints)
-│   ├── models/                 # Pydantic data models
-│   │   ├── job.py              # Job state model
-│   │   └── scoring.py          # v2 scoring output models (ScoringStageOutput)
-│   ├── ingestion/              # LinkedIn ZIP + XLSX parsing (validated)
-│   │   ├── types.py            # JSONB shape models for parsed data
-│   │   ├── zip_parser.py       # ZIP archive parser
-│   │   └── xlsx_parser.py      # Analytics XLSX parser
-│   ├── scoring/                # Deterministic Signal Score computation (4 dimensions)
-│   │   ├── config.py           # All PROVISIONAL thresholds and weights
-│   │   └── engine.py           # Scoring engine — run_scoring() entry point
-│   ├── agents/                 # Claude API calls (2 calls in pipeline)
-│   │   ├── rubric.py           # Dim 1 + Dim 4 rubric scoring
-│   │   └── narrative.py        # Narrative generation + data quality integration
-│   ├── workers/                # Background job processor
-│   │   └── processor.py        # Job loop with optimistic locking, 4-stage pipeline
-│   ├── migrations/             # SQL migrations (applied to Supabase)
+│       ├── App.tsx                    # Routes; ProtectedRoute wraps the portal; /login is public
+│       ├── main.tsx
+│       ├── lib/
+│       │   ├── supabase.ts            # Singleton browser client (fail-fast on missing VITE_SUPABASE_*)
+│       │   ├── auth.ts                # useSession, signInWithLinkedIn, signOut
+│       │   └── apiClient.ts           # Bearer-token-attaching fetch wrapper
+│       ├── pages/                     # LoginPage, SignalScorePage, ForwardBriefPage, CheatSheetPage, NotFoundPage
+│       ├── components/                # PortalLayout, PortalNav (session-aware), SignalMeter, SubSignalDial
+│       ├── types/                     # job.ts + scoring.ts (mirror backend models)
+│       └── mocks/                     # MSW handlers (empty by default; real backend serves /jobs)
+├── backend/                           # FastAPI app
+│   ├── main.py                        # App entry; CORS allowlist + Settings validation at boot
+│   ├── config.py                      # Pydantic BaseSettings — fail-fast validation of required env
+│   ├── db.py                          # get_service_client (RLS-bypass) + user_scoped_supabase(token)
+│   ├── auth.py                        # get_current_client dependency: JWT verification via cached Supabase JWKS
+│   ├── routers/                       # API route handlers
+│   │   ├── __init__.py
+│   │   └── jobs.py                    # GET /jobs/{id} — depends on get_current_client + user_scoped_supabase
+│   ├── models/                        # Pydantic data models
+│   │   ├── job.py                     # Job state model
+│   │   ├── scoring.py                 # v2 scoring output models (ScoringStageOutput)
+│   │   └── quality.py                 # Data quality report
+│   ├── ingestion/                     # LinkedIn ZIP + XLSX parsing
+│   │   ├── types.py                   # JSONB shape models for parsed data
+│   │   ├── zip_parser.py              # ZIP archive parser
+│   │   └── xlsx_parser.py             # Analytics XLSX parser
+│   ├── scoring/                       # Deterministic Signal Score computation
+│   │   ├── config.py                  # All PROVISIONAL thresholds and weights
+│   │   └── engine.py                  # run_scoring() entry point
+│   ├── agents/                        # Claude API calls (2 calls in pipeline)
+│   │   ├── rubric.py                  # Dim 1 + Dim 4 rubric scoring
+│   │   └── narrative.py               # Narrative generation + data quality integration
+│   ├── workers/                       # Background job processor (separate Railway service)
+│   │   └── processor.py               # Job loop with optimistic locking, 4-stage pipeline
+│   ├── migrations/                    # SQL migrations (applied via Studio SQL Editor or `supabase db push`)
 │   │   ├── 003_v2_scoring_columns.sql
 │   │   ├── 004_rename_narratives_dimension.sql
 │   │   ├── 005_quality_report_column.sql
-│   │   └── 006_claim_next_job_rpc.sql
-│   ├── tests/                  # Test suite
-│   │   ├── test_scoring.py     # 48 tests for scoring engine
-│   │   └── test_narrative.py   # 8 tests for quality report formatting
+│   │   ├── 006_claim_next_job_rpc.sql
+│   │   ├── 007_clients_table.sql      # public.clients + on_auth_user_created trigger + jobs.client_id FK + backfill
+│   │   ├── 008_rls_enable.sql         # RLS policies on clients/jobs and (where present) ingested_data/scores/narratives
+│   │   └── 008_rls_verify.sql         # Companion: two-tenant isolation check (BEGIN ... ROLLBACK)
+│   ├── tests/                         # Test suite (pytest)
+│   │   ├── test_scoring.py            # 48 tests for scoring engine
+│   │   ├── test_narrative.py          # 8 tests for quality report formatting
+│   │   └── test_auth.py               # 13 tests for JWT verification edge cases
+│   ├── .env.example                   # Required + optional env vars (mirror Settings class)
 │   └── requirements.txt
 └── .github/
-    └── workflows/              # GitHub Actions CI/CD
+    └── workflows/                     # GitHub Actions CI/CD
 ```
 
 ### Analysis Pipeline
@@ -293,27 +322,62 @@ Ingestion + scoring + Claude call takes 20–60 seconds — too long for a synch
 
 ### Environment Variables
 
+Backend (validated by `backend/config.py` Pydantic `Settings`; missing required vars block boot with a clear `ValidationError`):
+
 ```
+# Required
 SUPABASE_URL=
 SUPABASE_SERVICE_KEY=
 SUPABASE_ANON_KEY=
 ANTHROPIC_API_KEY=
+
+# Optional with defaults
+ADMIN_EMAILS=                                            # CSV; consumed by ORPHEUS-31 admin stopgap
+FRONTEND_ORIGINS=http://localhost:5173                   # CSV; CORS allowlist
+SUPABASE_JWT_AUDIENCE=authenticated                      # JWT aud claim
+
+# For Supabase CLI env interpolation (local dev only — not read by backend)
+SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID=
+SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_SECRET=
 ```
 
-Never committed. Documented in `backend/.env.example`.
+Frontend (`frontend/.env.local`, validated at module load by `src/lib/supabase.ts`):
+
+```
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+VITE_ADMIN_EMAILS=                                       # mirrors backend ADMIN_EMAILS for /admin UX gate
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+None of these are committed. Templates with inline comments live at `backend/.env.example` and `frontend/.env.local.example`.
 
 ### Backend Conventions
 
 - Use `async/await` throughout — FastAPI and Supabase client are both async
-- API routes live in `/backend/routers/` — one file per resource, user-scoped Supabase client via auth dependency
+- All env reads flow through `backend.config.get_settings()` (Pydantic `BaseSettings`). The app fails fast at boot when required vars are missing. Worker process still has its own three `os.environ` reads — consolidating is a small follow-up.
+- API routes live in `/backend/routers/` — one file per resource. Client-facing routes depend on `get_current_client` (in `backend/auth.py`), which JWT-verifies the Bearer token against the cached Supabase JWKS, fetches the matching `public.clients` row, and returns a typed `CurrentClient(user_id, client_id, email, access_token)`.
+- Two Supabase client patterns:
+  - `get_service_client()` — service-role, RLS-bypassing. Cached. Used by the worker, admin endpoints, and the JWT-verification dependency itself (which needs to read `public.clients` before any user context is available).
+  - `user_scoped_supabase(access_token)` — fresh per-request, JWT attached via `postgrest.auth(token)`. Client-facing routes must use this so the migration-008 RLS policies enforce ownership. Caching this client across requests would cause auth bleed.
+- RLS posture: enabled on `clients` and `jobs` (and conditionally on `ingested_data`/`scores`/`narratives` where they exist). Policies key on `auth.uid()`. The `on_auth_user_created` trigger in migration 007 enforces the LinkedIn `email_verified` gate; unverified sign-ins abort cleanly with no orphan rows.
 - Ingestion logic lives in `/backend/ingestion/` — one file per source (zip_parser.py, xlsx_parser.py)
 - Scoring logic lives in `/backend/scoring/` — `config.py` holds all PROVISIONAL thresholds, `engine.py` is the orchestrator
 - Claude calls live in `/backend/agents/` — `rubric.py` (Dim 1 + 4 scoring) and `narrative.py` (report generation)
 - Job queue state managed via `jobs` table in Supabase
 - Pydantic models in `/backend/models/` define the data contracts between pipeline stages
-- Two Supabase client patterns: service client (pipeline, admin ops) and user-scoped client (API routes, RLS enforcement)
 - Worker runs as a separate process (`python -m backend.workers`) — uses service-role client, optimistic locking for job claims
 - All PROVISIONAL scoring parameters serialized into `config_snapshot` on the jobs table for reproducibility
+
+### Frontend Conventions
+
+- Vite + React 18 + TypeScript. React Query for server state. React Router v6 for routing. `@supabase/supabase-js` for auth.
+- `frontend/src/lib/supabase.ts` is the singleton Supabase browser client; throws at module load if `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are missing.
+- `frontend/src/lib/auth.ts` exposes `useSession()`, `signInWithLinkedIn(redirectTo?)`, and `signOut()`. `useSession()` clears the React Query cache on `SIGNED_OUT` to avoid stale data leaking between sessions.
+- Authenticated routes live under a `ProtectedRoute` wrapper in `App.tsx`. `/login` is the only public route in the portal. The `/design/signal-meter` playground is dev-only and bypasses auth and the layout shell.
+- API calls go through `frontend/src/lib/apiClient.ts`, which attaches `Authorization: Bearer <session.access_token>` to every outgoing request automatically.
+- Design tokens come from the shared `orpheus-styles.css` (same file the prototype uses). Per-page styles sit in a sibling `*.css` next to the page component.
+- MSW handlers are intentionally empty (the real backend serves all client-facing routes). Bring back the demo-job handler in `mocks/handlers.ts` only when iterating on UI offline.
 
 ---
 
