@@ -23,3 +23,5 @@ supabase/.temp/
 supabase/.env
 # TypeScript incremental build cache — per-machine, never commit.
 *.tsbuildinfo
+# Supabase Studio per-developer SQL snippet state.
+supabase/snippets/
