@@ -2,12 +2,16 @@ import { type ReactNode } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
 import { PortalLayout } from './components/layout/PortalLayout'
+import { useGroundworkProgress } from './hooks/useGroundworkProgress'
 import { useSession } from './lib/auth'
+import { hasSeenWelcome } from './lib/welcomeFlag'
 import { CheatSheetPage } from './pages/CheatSheetPage'
 import { ForwardBriefPage } from './pages/ForwardBriefPage'
+import { GroundworkPage } from './pages/GroundworkPage'
 import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { SignalScorePage } from './pages/SignalScorePage'
+import { WelcomePage } from './pages/WelcomePage'
 import { SignalMeterPlayground } from './pages/design/SignalMeterPlayground'
 
 export default function App() {
@@ -27,10 +31,14 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        {/* Until /jobs/me lands (ORPHEUS-16/17), authenticated users land on
-            the seeded demo job; an unowned job will surface as a graceful
-            "couldn't load this report" inside SignalScorePage. */}
-        <Route index element={<Navigate to="/jobs/demo" replace />} />
+        {/*
+          Smart index redirect — see SmartIndexRedirect below. Routes the
+          signed-in client to Welcome / Groundwork / Analysis / Signal Score
+          based on their progress, faithful to the prototype flow.
+        */}
+        <Route index element={<SmartIndexRedirect />} />
+        <Route path="/welcome" element={<WelcomePage />} />
+        <Route path="/groundwork" element={<GroundworkPage />} />
         <Route path="/jobs/:jobId" element={<SignalScorePage />} />
         <Route path="/jobs/:jobId/forward-brief" element={<ForwardBriefPage />} />
         <Route path="/jobs/:jobId/cheat-sheet" element={<CheatSheetPage />} />
@@ -62,4 +70,50 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   }
 
   return <>{children}</>
+}
+
+/**
+ * Decide where to send a freshly-arrived authenticated user.
+ *
+ *   no jobs + Welcome unseen   → /welcome
+ *   no jobs + Welcome seen     → /groundwork
+ *   pending or running job     → /jobs/:id/analysis  (rendered by ORPHEUS-20)
+ *   complete job               → /jobs/:id           (Signal Score)
+ *   failed job                 → /groundwork         (let the client retry)
+ *
+ * Until ORPHEUS-20 lands, /jobs/:id/analysis falls through to NotFoundPage,
+ * which is acceptable — the only path that produces a pending job is the
+ * upload flow that ORPHEUS-16 adds, which doesn't exist yet either.
+ */
+function SmartIndexRedirect() {
+  const { data, isLoading, isError } = useGroundworkProgress()
+
+  if (isLoading) {
+    return (
+      <main className="main-interior">
+        <div className="page-status">Loading your portal&hellip;</div>
+      </main>
+    )
+  }
+
+  // If the lightweight Supabase read fails (e.g. RLS misconfig, network),
+  // route to Groundwork rather than blocking the user. They can navigate
+  // around manually from there.
+  if (isError || !data) {
+    return <Navigate to="/groundwork" replace />
+  }
+
+  if (data.latestPendingJobId) {
+    return <Navigate to={`/jobs/${data.latestPendingJobId}/analysis`} replace />
+  }
+
+  if (data.latestCompleteJobId) {
+    return <Navigate to={`/jobs/${data.latestCompleteJobId}`} replace />
+  }
+
+  if (!hasSeenWelcome()) {
+    return <Navigate to="/welcome" replace />
+  }
+
+  return <Navigate to="/groundwork" replace />
 }

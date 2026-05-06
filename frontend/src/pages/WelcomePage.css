@@ -1,0 +1,135 @@
+/*
+ * Welcome page — the first screen authenticated clients see when they
+ * haven't yet started Groundwork. Ported from orpheus-welcome-v6.html.
+ *
+ * The page-level layout deliberately overrides the default `<main>` flex
+ * column with a centered hero + cards layout. We scope the override to
+ * `.welcome-main` so other authenticated pages keep the standard interior
+ * layout.
+ */
+
+.welcome-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 60px;
+  flex-shrink: 0;
+}
+
+.welcome-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding-bottom: 55px;
+}
+
+.welcome-hero-line-1 {
+  font-family: 'Source Serif 4', serif;
+  font-size: 40px;
+  font-weight: 500;
+  font-variation-settings: 'opsz' 40;
+  color: var(--warm-gold);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.welcome-hero-line-2 {
+  font-family: 'Source Serif 4', serif;
+  font-size: 50px;
+  font-weight: 900;
+  font-style: italic;
+  font-variation-settings: 'opsz' 50;
+  color: var(--deep-slate);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.welcome-cards-row {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.welcome-card-dark {
+  background-color: var(--deep-slate);
+  width: 400px;
+  align-self: stretch;
+  padding: 40px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 40px;
+}
+
+.welcome-card-dark-body {
+  font-family: 'Source Serif 4', serif;
+  font-size: 18px;
+  font-weight: 400;
+  font-variation-settings: 'opsz' 18;
+  color: var(--warm-ivory);
+  line-height: normal;
+}
+
+.welcome-btn-start {
+  display: block;
+  width: 100%;
+  background-color: var(--warm-ivory);
+  color: var(--deep-slate);
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.welcome-btn-start:hover {
+  background-color: var(--warm-gold);
+  color: white;
+}
+
+.welcome-cards-right {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 400px;
+}
+
+.welcome-card-step {
+  background-color: var(--warm-parchment);
+  padding: 20px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.welcome-card-step-title {
+  font-family: 'Source Serif 4', serif;
+  font-size: 16px;
+  font-weight: 700;
+  font-variation-settings: 'opsz' 16;
+  color: var(--warm-text);
+  text-align: center;
+  line-height: normal;
+}
+
+.welcome-card-step-body {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--warm-text);
+  line-height: normal;
+}
+
+.welcome-card-step-body em {
+  font-style: italic;
+  font-weight: 600;
+}
