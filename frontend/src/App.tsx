@@ -13,6 +13,15 @@ import { NotFoundPage } from './pages/NotFoundPage'
 import { SignalScorePage } from './pages/SignalScorePage'
 import { WelcomePage } from './pages/WelcomePage'
 import { SignalMeterPlayground } from './pages/design/SignalMeterPlayground'
+import {
+  Section1Page,
+  Section2Page,
+  Section3Page,
+  Section4Page,
+  Section5Page,
+  Section6Page,
+  Section7Page,
+} from './pages/questionnaire/sections'
 
 export default function App() {
   return (
@@ -39,6 +48,13 @@ export default function App() {
         <Route index element={<SmartIndexRedirect />} />
         <Route path="/welcome" element={<WelcomePage />} />
         <Route path="/groundwork" element={<GroundworkPage />} />
+        <Route path="/questionnaire/s1" element={<Section1Page />} />
+        <Route path="/questionnaire/s2" element={<Section2Page />} />
+        <Route path="/questionnaire/s3" element={<Section3Page />} />
+        <Route path="/questionnaire/s4" element={<Section4Page />} />
+        <Route path="/questionnaire/s5" element={<Section5Page />} />
+        <Route path="/questionnaire/s6" element={<Section6Page />} />
+        <Route path="/questionnaire/s7" element={<Section7Page />} />
         <Route path="/jobs/:jobId" element={<SignalScorePage />} />
         <Route path="/jobs/:jobId/forward-brief" element={<ForwardBriefPage />} />
         <Route path="/jobs/:jobId/cheat-sheet" element={<CheatSheetPage />} />

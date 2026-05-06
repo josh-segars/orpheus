@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import type { SectionCompletion } from '../types/questionnaire'
 
 /**
  * Per-item completion state for the Groundwork checklist. The shape mirrors
@@ -7,18 +8,20 @@ import { supabase } from '../lib/supabase'
  * sections). The hook returns booleans for each item plus a derived
  * `allComplete` flag that drives the "My Groundwork is Complete" CTA.
  *
- * Currently this reads only the most recent `jobs` row for the signed-in
- * client. Per-item flags for the questionnaire sections and the LinkedIn
- * upload steps will be filled in by ORPHEUS-18 (questionnaire_responses
- * table) and ORPHEUS-16 (jobs.uploaded_zip / uploaded_xlsx). Until then,
- * everything except the "any work in progress" signal returns `false` so
- * the page renders the empty checklist faithfully.
+ * Sources:
+ *   - Questionnaire flags come from `questionnaire_responses.section_completion`
+ *     (migration 009, populated by ORPHEUS-18's section pages).
+ *   - LinkedIn upload flags come from the most recent `jobs` row's
+ *     uploaded_zip / uploaded_xlsx columns (wired in ORPHEUS-16). Until
+ *     that ships, both flags read `false`.
+ *   - latestPendingJobId / latestCompleteJobId surface the most recent job,
+ *     used by the smart index redirect in App.tsx.
  */
 export interface GroundworkProgress {
   // LinkedIn data uploads — wired in ORPHEUS-16.
   linkedInArchive: boolean
   linkedInAnalytics: boolean
-  // Questionnaire — wired in ORPHEUS-18 against questionnaire_responses.
+  // Questionnaire — driven by questionnaire_responses.section_completion.
   questionnaireS1: boolean
   questionnaireS2: boolean
   questionnaireS3: boolean
@@ -35,50 +38,54 @@ export interface GroundworkProgress {
   latestCompleteJobId: string | null
 }
 
-const EMPTY: GroundworkProgress = {
-  linkedInArchive: false,
-  linkedInAnalytics: false,
-  questionnaireS1: false,
-  questionnaireS2: false,
-  questionnaireS3: false,
-  questionnaireS4: false,
-  questionnaireS5: false,
-  questionnaireS6: false,
-  questionnaireS7: false,
-  allComplete: false,
-  latestPendingJobId: null,
-  latestCompleteJobId: null,
-}
-
 interface JobRow {
   id: string
   status: 'pending' | 'running' | 'complete' | 'failed'
   created_at: string
 }
 
+interface QuestionnaireRow {
+  section_completion: SectionCompletion | null
+}
+
 /**
- * Subscribe to the client's groundwork completion state. Backed by a
- * lightweight Supabase read — RLS scopes the query to the signed-in
- * client's own rows automatically. React Query caches across consumers so
- * the same data is shared between the index redirect and the Groundwork
+ * Subscribe to the client's groundwork completion state. Backed by two
+ * lightweight Supabase reads (jobs + questionnaire_responses) — RLS scopes
+ * each to the signed-in client. React Query caches across consumers so the
+ * same data is shared between the index redirect and the Groundwork
  * checklist without duplicate network calls.
  */
 export function useGroundworkProgress() {
   return useQuery<GroundworkProgress>({
     queryKey: ['groundwork-progress'],
     queryFn: async () => {
-      // RLS filters to the current client's rows (migration 008). We only
-      // need the most recent job to know whether anything is in flight or
-      // already complete.
-      const { data, error } = await supabase
-        .from('jobs')
-        .select('id,status,created_at')
-        .order('created_at', { ascending: false })
-        .limit(1)
+      // Fire both reads in parallel — they're independent. RLS filters each
+      // to the current client's rows, so we don't need a `.eq('client_id',...)`
+      // filter; auth.uid() does it at the row level.
+      //
+      // We use allSettled so a failure on the questionnaire side (e.g.
+      // migration 009 hasn't been applied yet on this database) doesn't
+      // bring down the Groundwork page or smart-index redirect. A failed
+      // questionnaire read is treated as "no completion flags".
+      const [jobsResult, questionnaireResult] = await Promise.allSettled([
+        supabase
+          .from('jobs')
+          .select('id,status,created_at')
+          .order('created_at', { ascending: false })
+          .limit(1),
+        supabase
+          .from('questionnaire_responses')
+          .select('section_completion')
+          .limit(1)
+          .maybeSingle(),
+      ])
 
-      if (error) throw error
+      // Jobs is the more critical read — it drives the smart redirect. Bail
+      // hard on errors here so the caller can show its error state.
+      if (jobsResult.status === 'rejected') throw jobsResult.reason
+      if (jobsResult.value.error) throw jobsResult.value.error
 
-      const latest = (data?.[0] as JobRow | undefined) ?? null
+      const latest = (jobsResult.value.data?.[0] as JobRow | undefined) ?? null
       const latestPendingJobId =
         latest && (latest.status === 'pending' || latest.status === 'running')
           ? latest.id
@@ -86,8 +93,51 @@ export function useGroundworkProgress() {
       const latestCompleteJobId =
         latest && latest.status === 'complete' ? latest.id : null
 
+      // Treat a missing/erroring questionnaire row as "no flags set". This
+      // lets the Groundwork page render meaningfully even before the
+      // migration ships and before the client has saved anything.
+      const sections: SectionCompletion =
+        questionnaireResult.status === 'fulfilled' &&
+        !questionnaireResult.value.error
+          ? ((questionnaireResult.value.data as QuestionnaireRow | null)
+              ?.section_completion ?? {})
+          : {}
+
+      const questionnaireS1 = sections.s1 === true
+      const questionnaireS2 = sections.s2 === true
+      const questionnaireS3 = sections.s3 === true
+      const questionnaireS4 = sections.s4 === true
+      const questionnaireS5 = sections.s5 === true
+      const questionnaireS6 = sections.s6 === true
+      const questionnaireS7 = sections.s7 === true
+
+      // ORPHEUS-16 will replace these stubs with reads from the jobs row
+      // (e.g. jobs.uploaded_zip_path / uploaded_xlsx_path being non-null).
+      const linkedInArchive = false
+      const linkedInAnalytics = false
+
+      const allComplete =
+        linkedInArchive &&
+        linkedInAnalytics &&
+        questionnaireS1 &&
+        questionnaireS2 &&
+        questionnaireS3 &&
+        questionnaireS4 &&
+        questionnaireS5 &&
+        questionnaireS6 &&
+        questionnaireS7
+
       return {
-        ...EMPTY,
+        linkedInArchive,
+        linkedInAnalytics,
+        questionnaireS1,
+        questionnaireS2,
+        questionnaireS3,
+        questionnaireS4,
+        questionnaireS5,
+        questionnaireS6,
+        questionnaireS7,
+        allComplete,
         latestPendingJobId,
         latestCompleteJobId,
       }
