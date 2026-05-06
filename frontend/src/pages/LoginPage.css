@@ -1,0 +1,108 @@
+/* Login page — full-bleed, no PortalLayout. Centered card on the warm-ivory
+   background. Matches the Welcome screen aesthetic from the prototype. */
+
+.login-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  background-color: var(--warm-ivory);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 460px;
+  background-color: var(--warm-parchment);
+  border: 1px solid var(--warm-border);
+  border-radius: 10px;
+  padding: 48px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.login-wordmark {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.login-title {
+  font-family: 'Source Serif 4', serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--warm-text);
+  margin: 0;
+  line-height: 1.25;
+}
+
+.login-blurb {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--warm-stone);
+  margin: 0;
+}
+
+.login-error {
+  background-color: rgba(189, 63, 58, 0.08);
+  border: 1px solid var(--red-clay);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.login-error-label {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--red-clay);
+}
+
+.login-error-body {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--warm-text);
+}
+
+.login-button {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--warm-ivory);
+  background-color: var(--deep-slate);
+  border: 1px solid transparent;
+  padding: 14px 24px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  margin-top: 8px;
+}
+
+.login-button:hover:not(:disabled) {
+  background-color: var(--warm-gold);
+}
+
+.login-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.login-fineprint {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.55;
+  color: var(--warm-stone);
+  margin: 4px 0 0 0;
+  text-align: center;
+}

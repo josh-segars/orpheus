@@ -1,8 +1,16 @@
 /**
- * Thin fetch wrapper. In dev, MSW intercepts requests at the same origin,
- * so the base URL defaults to ''. In production we'll point at the
- * Railway-hosted FastAPI service via VITE_API_BASE_URL.
+ * Thin fetch wrapper. In dev (with VITE_API_BASE_URL pointed at the local
+ * FastAPI on http://localhost:8000), requests hit the real backend. MSW is
+ * still installed for offline frontend playgrounds, but its handlers register
+ * paths only — same-origin matches — so they don't intercept cross-origin
+ * calls to the backend.
+ *
+ * Every authenticated request carries `Authorization: Bearer <access_token>`
+ * pulled from the current Supabase session. The backend's get_current_client
+ * dependency (backend/auth.py) verifies the token against Supabase JWKS.
  */
+
+import { supabase } from './supabase'
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 
@@ -17,19 +25,26 @@ export class ApiError extends Error {
   }
 }
 
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession()
+  const token = data.session?.access_token
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
   const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-    signal,
-  })
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...(await authHeaders()),
+  }
+
+  const res = await fetch(url, { method: 'GET', headers, signal })
   if (!res.ok) {
     let body: unknown = null
     try {
       body = await res.json()
     } catch {
-      // ignore
+      // body wasn't JSON — fine, leave null
     }
     throw new ApiError(`GET ${path} failed: ${res.status}`, res.status, body)
   }
