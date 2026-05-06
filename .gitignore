@@ -25,3 +25,4 @@ supabase/.env
 *.tsbuildinfo
 # Supabase Studio per-developer SQL snippet state.
 supabase/snippets/
+LinkedIn_API_Terms_Review_*.docx
