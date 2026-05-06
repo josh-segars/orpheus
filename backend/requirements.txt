@@ -4,6 +4,7 @@ supabase
 anthropic
 python-dotenv
 pydantic
+pydantic-settings>=2.0.0
 openpyxl
 
 # JWT verification for Supabase-issued tokens (ORPHEUS-27).

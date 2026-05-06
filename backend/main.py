@@ -1,25 +1,31 @@
-"""FastAPI entry point. Wires middleware, routers, and the /health probe."""
+"""FastAPI entry point. Wires middleware, routers, and the /health probe.
 
-import os
+Importing `backend.config` at module load triggers Settings validation,
+so the app refuses to start when required env vars are missing
+(ORPHEUS-32). Pydantic raises a ValidationError listing exactly which
+vars failed — far easier to debug than the previous KeyError-on-first-
+request behavior.
+"""
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.config import get_settings
 from backend.routers import jobs as jobs_router
 
 load_dotenv()
 
-app = FastAPI(title="Orpheus Social API")
+# Resolve settings up front. Any missing required env var raises here,
+# at import time, so uvicorn fails to start with a clear message rather
+# than silently starting a broken app.
+settings = get_settings()
 
-# CORS. Full allowlist + env validation lands in ORPHEUS-32; for now we read
-# a comma-separated FRONTEND_ORIGINS and fall back to the Vite dev default.
-_raw_origins = os.environ.get("FRONTEND_ORIGINS", "http://localhost:5173")
-_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+app = FastAPI(title="Orpheus Social API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_origins,
+    allow_origins=settings.frontend_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

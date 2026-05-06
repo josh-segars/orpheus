@@ -23,7 +23,6 @@ ORPHEUS-27 (expired, wrong audience, unknown kid, missing clients row).
 from __future__ import annotations
 
 import logging
-import os
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -31,6 +30,7 @@ from typing import Any
 import jwt
 from fastapi import Depends, Header, HTTPException, status
 
+from backend.config import get_settings
 from backend.db import get_service_client
 
 logger = logging.getLogger("orpheus.auth")
@@ -39,9 +39,6 @@ logger = logging.getLogger("orpheus.auth")
 # --------------------------------------------------------------------------- #
 # Configuration
 # --------------------------------------------------------------------------- #
-
-# Supabase uses `authenticated` as the JWT audience for logged-in users.
-DEFAULT_JWT_AUDIENCE = "authenticated"
 
 # Re-fetch the JWKS at most this often. Supabase rotates keys rarely; a
 # 10-minute TTL is a reasonable balance for key rotation latency.
@@ -158,14 +155,10 @@ def _verify_jwt(token: str) -> dict[str, Any]:
 
     Raises HTTPException(401) on any verification failure.
     """
-    supabase_url = os.environ.get("SUPABASE_URL")
-    if not supabase_url:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="SUPABASE_URL is not configured on the server.",
-        )
-    audience = os.environ.get("SUPABASE_JWT_AUDIENCE", DEFAULT_JWT_AUDIENCE)
-    issuer = f"{supabase_url.rstrip('/')}/auth/v1"
+    settings = get_settings()
+    supabase_url = settings.supabase_url
+    audience = settings.supabase_jwt_audience
+    issuer = f"{supabase_url}/auth/v1"
 
     # Step 1: parse header to find the key id.
     try:

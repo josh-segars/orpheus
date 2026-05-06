@@ -15,8 +15,6 @@ Plus baseline happy-path and malformed-header coverage.
 
 from __future__ import annotations
 
-import json
-import os
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -29,6 +27,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import HTTPException
 
 from backend import auth as auth_mod
+from backend import config as config_mod
 
 
 SUPABASE_URL = "https://test.supabase.local"
@@ -37,6 +36,18 @@ ISSUER = f"{SUPABASE_URL}/auth/v1"
 KID = "test-kid-1"
 SUB = "11111111-2222-3333-4444-555555555555"
 EMAIL = "jane@example.com"
+
+# Required env vars for backend.config.Settings to instantiate. The auth
+# module under test only reads supabase_url + supabase_jwt_audience, but
+# the Settings class declares the other three as required, so we provide
+# placeholder values here.
+_REQUIRED_PLACEHOLDERS = {
+    "SUPABASE_URL": SUPABASE_URL,
+    "SUPABASE_SERVICE_KEY": "test-service-key",
+    "SUPABASE_ANON_KEY": "test-anon-key",
+    "ANTHROPIC_API_KEY": "test-anthropic-key",
+    "SUPABASE_JWT_AUDIENCE": AUDIENCE,
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -56,8 +67,13 @@ def _reset_env_and_cache(monkeypatch, rsa_keypair):
     """Ensure every test starts from a clean module-level cache and env."""
     private_key, public_key = rsa_keypair
 
-    monkeypatch.setenv("SUPABASE_URL", SUPABASE_URL)
-    monkeypatch.setenv("SUPABASE_JWT_AUDIENCE", AUDIENCE)
+    for name, value in _REQUIRED_PLACEHOLDERS.items():
+        monkeypatch.setenv(name, value)
+
+    # Settings is cached via lru_cache; clear it so each test re-reads the
+    # monkeypatched env. Do this BEFORE the JWKS cache reset since the JWKS
+    # refresh path calls get_settings().
+    config_mod._reset_settings_cache_for_tests()
 
     auth_mod._reset_jwks_cache_for_tests()
 
