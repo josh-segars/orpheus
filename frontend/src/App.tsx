@@ -2,6 +2,7 @@ import { type ReactNode } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
 import { PortalLayout } from './components/layout/PortalLayout'
+import { LinkedInUploadProvider } from './contexts/LinkedInUploadContext'
 import { useGroundworkProgress } from './hooks/useGroundworkProgress'
 import { useSession } from './lib/auth'
 import { hasSeenWelcome } from './lib/welcomeFlag'
@@ -12,6 +13,8 @@ import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { SignalScorePage } from './pages/SignalScorePage'
 import { WelcomePage } from './pages/WelcomePage'
+import { LinkedInStep1Page } from './pages/linkedin/Step1Page'
+import { LinkedInStep2Page } from './pages/linkedin/Step2Page'
 import { SignalMeterPlayground } from './pages/design/SignalMeterPlayground'
 import {
   Section1Page,
@@ -32,11 +35,15 @@ export default function App() {
       {/* Public auth route — its own shell */}
       <Route path="/login" element={<LoginPage />} />
 
-      {/* Authenticated portal */}
+      {/* Authenticated portal — LinkedInUploadProvider wraps the layout so
+          the in-memory ZIP/XLSX File state persists across navigation
+          between Step 1, Step 2, and the Groundwork submit. */}
       <Route
         element={
           <ProtectedRoute>
-            <PortalLayout />
+            <LinkedInUploadProvider>
+              <PortalLayout />
+            </LinkedInUploadProvider>
           </ProtectedRoute>
         }
       >
@@ -48,6 +55,8 @@ export default function App() {
         <Route index element={<SmartIndexRedirect />} />
         <Route path="/welcome" element={<WelcomePage />} />
         <Route path="/groundwork" element={<GroundworkPage />} />
+        <Route path="/linkedin/step1" element={<LinkedInStep1Page />} />
+        <Route path="/linkedin/step2" element={<LinkedInStep2Page />} />
         <Route path="/questionnaire/s1" element={<Section1Page />} />
         <Route path="/questionnaire/s2" element={<Section2Page />} />
         <Route path="/questionnaire/s3" element={<Section3Page />} />

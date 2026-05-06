@@ -1,5 +1,10 @@
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+
+import { useLinkedInUpload } from '../contexts/LinkedInUploadContext'
+import { useCreateJob } from '../hooks/useCreateJob'
 import { useGroundworkProgress } from '../hooks/useGroundworkProgress'
+import { ApiError } from '../lib/apiClient'
 import './GroundworkPage.css'
 
 /**
@@ -7,32 +12,85 @@ import './GroundworkPage.css'
  * questionnaire section and LinkedIn upload step. Ported from
  * orpheus-groundwork-v1.html.
  *
- * Per-item completion state is read from useGroundworkProgress(). Until
- * ORPHEUS-16 (LinkedIn uploads) and ORPHEUS-18 (questionnaire_responses)
- * land, every item renders as incomplete and the "My Groundwork is
- * Complete" CTA stays disabled — matching the prototype's empty state.
+ * Per-item completion sources:
+ *   - LinkedIn data items reflect the in-memory file state held in
+ *     LinkedInUploadContext (ORPHEUS-16). Picked files survive route
+ *     navigation but not a hard refresh.
+ *   - Questionnaire sections reflect questionnaire_responses.section_completion
+ *     (ORPHEUS-18, migration 009).
+ *   - Latest pending/complete job is read from the jobs table.
+ *
+ * "My Groundwork is Complete" submits the multipart POST /jobs with both
+ * files; on success we navigate to /jobs/:id/analysis (ORPHEUS-20). If the
+ * client already has a pending job (re-clicking the button), we route them
+ * straight to the existing analysis page without resubmitting.
  */
 export function GroundworkPage() {
   const { data, isLoading } = useGroundworkProgress()
+  const { archive, analytics, clear: clearUploads } = useLinkedInUpload()
+  const createJob = useCreateJob()
   const navigate = useNavigate()
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
-  // Render the checklist with empty progress while we wait for the first
-  // round-trip. The prototype is a fully static page, so this is fine — no
-  // skeleton needed beyond a tiny placeholder.
-  const progress = data ?? null
+  // LinkedIn flags come from the in-memory upload context — overrides the
+  // stub `false` values from useGroundworkProgress.
+  const linkedInArchive = !!archive
+  const linkedInAnalytics = !!analytics
 
-  const handleComplete = () => {
-    if (!progress?.allComplete) return
-    if (progress.latestPendingJobId) {
-      navigate(`/jobs/${progress.latestPendingJobId}/analysis`)
-    } else {
-      // ORPHEUS-16 will create the job inside the LinkedIn upload flow, so
-      // by the time the checklist is fully complete the latest job should
-      // already exist. This fallback exists so the button isn't a dead end
-      // if state lags briefly.
-      navigate('/analysis')
+  // Derived "all complete" using the live LinkedIn flags. Questionnaire
+  // flags continue to come from the server-side row.
+  const allComplete =
+    linkedInArchive &&
+    linkedInAnalytics &&
+    !!data?.questionnaireS1 &&
+    !!data?.questionnaireS2 &&
+    !!data?.questionnaireS3 &&
+    !!data?.questionnaireS4 &&
+    !!data?.questionnaireS5 &&
+    !!data?.questionnaireS6 &&
+    !!data?.questionnaireS7
+
+  const handleComplete = async () => {
+    setSubmitError(null)
+
+    // If we already have a pending job (e.g. user double-clicked or refreshed
+    // between submit and navigation), just send them to its analysis page.
+    if (data?.latestPendingJobId) {
+      navigate(`/jobs/${data.latestPendingJobId}/analysis`)
+      return
+    }
+
+    if (!archive || !analytics) {
+      setSubmitError(
+        'Please re-upload your LinkedIn files. The browser may have cleared them after a refresh.',
+      )
+      return
+    }
+
+    try {
+      const job = await createJob.mutateAsync({ archive, analytics })
+      // Drop the in-memory blobs once the server has them — they're no
+      // longer needed and we don't want to keep them resident.
+      clearUploads()
+      navigate(`/jobs/${job.id}/analysis`)
+    } catch (err) {
+      const message =
+        err instanceof ApiError && typeof err.body === 'object' && err.body
+          ? // FastAPI returns { detail: "..." } for HTTPExceptions.
+            ((err.body as { detail?: string }).detail ??
+              'We couldn’t submit your data. Please try again.')
+          : err instanceof Error
+            ? err.message
+            : 'We couldn’t submit your data. Please try again.'
+      setSubmitError(message)
     }
   }
+
+  const buttonDisabled =
+    !allComplete || isLoading || createJob.isPending
+  const buttonLabel = createJob.isPending
+    ? 'Submitting…'
+    : 'My Groundwork is Complete'
 
   return (
     <main className="groundwork-main">
@@ -56,12 +114,12 @@ export function GroundworkPage() {
             to="/linkedin/step1"
             title="Request Your Data Archive"
             badge="Up to 24 hours"
-            complete={progress?.linkedInArchive ?? false}
+            complete={linkedInArchive}
           />
           <ChecklistItem
             to="/linkedin/step2"
             title="Export Your Analytics"
-            complete={progress?.linkedInAnalytics ?? false}
+            complete={linkedInAnalytics}
           />
         </div>
 
@@ -70,64 +128,58 @@ export function GroundworkPage() {
           <ChecklistItem
             to="/questionnaire/s1"
             title="Professional Identity"
-            complete={progress?.questionnaireS1 ?? false}
+            complete={data?.questionnaireS1 ?? false}
           />
           <ChecklistItem
             to="/questionnaire/s2"
             title="Career Stage & Context"
-            complete={progress?.questionnaireS2 ?? false}
+            complete={data?.questionnaireS2 ?? false}
           />
           <ChecklistItem
             to="/questionnaire/s3"
             title="Target Audiences"
-            complete={progress?.questionnaireS3 ?? false}
+            complete={data?.questionnaireS3 ?? false}
           />
           <ChecklistItem
             to="/questionnaire/s4"
             title="Goals"
-            complete={progress?.questionnaireS4 ?? false}
+            complete={data?.questionnaireS4 ?? false}
           />
           <ChecklistItem
             to="/questionnaire/s5"
             title="Current LinkedIn Relationship"
-            complete={progress?.questionnaireS5 ?? false}
+            complete={data?.questionnaireS5 ?? false}
           />
           <ChecklistItem
             to="/questionnaire/s6"
             title="Voice & Style"
-            complete={progress?.questionnaireS6 ?? false}
+            complete={data?.questionnaireS6 ?? false}
           />
           <ChecklistItem
             to="/questionnaire/s7"
             title="Practical Parameters"
-            complete={progress?.questionnaireS7 ?? false}
+            complete={data?.questionnaireS7 ?? false}
           />
         </div>
       </div>
 
       <div className="groundwork-completion-row">
-        {/*
-          The prototype renders an `<a>`. We render a `<button>` because the
-          target depends on whether a job already exists for this client, so
-          we need to compute the destination at click time. Disabled state
-          is reflected by the absence of the `.active` modifier — the
-          prototype's `:not(.active)` selector keeps the cursor as
-          not-allowed and opacity at 0.35.
-        */}
         <button
           type="button"
           className={
-            progress?.allComplete
+            allComplete
               ? 'groundwork-btn-complete active'
               : 'groundwork-btn-complete'
           }
           onClick={handleComplete}
-          disabled={!progress?.allComplete || isLoading}
+          disabled={buttonDisabled}
         >
-          My Groundwork is Complete
+          {buttonLabel}
         </button>
         <span className="groundwork-completion-note">
-          Available once all items above are complete.
+          {submitError
+            ? submitError
+            : 'Available once all items above are complete.'}
         </span>
       </div>
     </main>

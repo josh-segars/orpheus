@@ -7,6 +7,10 @@ pydantic
 pydantic-settings>=2.0.0
 openpyxl
 
+# FastAPI's UploadFile / Form parameters require python-multipart for
+# parsing multipart/form-data bodies (ORPHEUS-16 POST /jobs).
+python-multipart>=0.0.9
+
 # JWT verification for Supabase-issued tokens (ORPHEUS-27).
 PyJWT[crypto]>=2.8.0
 cryptography>=42.0.0

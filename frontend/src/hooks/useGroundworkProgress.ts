@@ -111,11 +111,19 @@ export function useGroundworkProgress() {
       const questionnaireS6 = sections.s6 === true
       const questionnaireS7 = sections.s7 === true
 
-      // ORPHEUS-16 will replace these stubs with reads from the jobs row
-      // (e.g. jobs.uploaded_zip_path / uploaded_xlsx_path being non-null).
+      // LinkedIn upload flags are tracked client-side in
+      // LinkedInUploadContext (in-memory File objects) rather than on the
+      // server, so this hook can't determine them. GroundworkPage
+      // overrides these locally before computing `allComplete`. We
+      // surface `false` here so any other consumer treats LinkedIn items
+      // as incomplete by default.
       const linkedInArchive = false
       const linkedInAnalytics = false
 
+      // The hook-level `allComplete` matches the conservative read: it's
+      // only true when every signal we can see server-side is true.
+      // GroundworkPage recomputes this against the in-memory upload state
+      // before enabling the submit CTA.
       const allComplete =
         linkedInArchive &&
         linkedInAnalytics &&

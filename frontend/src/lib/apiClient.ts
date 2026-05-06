@@ -50,3 +50,40 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
   }
   return (await res.json()) as T
 }
+
+/**
+ * POST a multipart/form-data body. Used by the LinkedIn upload flow
+ * (ORPHEUS-16) to submit the ZIP archive + XLSX analytics to /jobs.
+ *
+ * We deliberately don't set a Content-Type header — the browser's fetch
+ * implementation generates one with the correct multipart boundary when
+ * the body is a FormData instance.
+ */
+export async function apiPostMultipart<T>(
+  path: string,
+  formData: FormData,
+  signal?: AbortSignal,
+): Promise<T> {
+  const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...(await authHeaders()),
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: formData,
+    signal,
+  })
+  if (!res.ok) {
+    let body: unknown = null
+    try {
+      body = await res.json()
+    } catch {
+      // body wasn't JSON — fine, leave null
+    }
+    throw new ApiError(`POST ${path} failed: ${res.status}`, res.status, body)
+  }
+  return (await res.json()) as T
+}

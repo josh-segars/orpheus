@@ -747,6 +747,22 @@ textarea::placeholder { color: var(--warm-border); }
   transition: border-color 0.15s ease;
 }
 .upload-area:hover { border-color: var(--warm-gold); }
+.upload-area-dragging {
+  border-color: var(--warm-gold);
+  background-color: #f3edde;
+}
+.upload-clear {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--warm-gold);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.upload-clear:hover { color: var(--deep-slate); }
 .upload-icon svg {
   width: 36px;
   height: 36px;
