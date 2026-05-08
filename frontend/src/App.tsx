@@ -6,6 +6,7 @@ import { LinkedInUploadProvider } from './contexts/LinkedInUploadContext'
 import { useGroundworkProgress } from './hooks/useGroundworkProgress'
 import { useSession } from './lib/auth'
 import { hasSeenWelcome } from './lib/welcomeFlag'
+import { AnalysisPage } from './pages/AnalysisPage'
 import { CheatSheetPage } from './pages/CheatSheetPage'
 import { ForwardBriefPage } from './pages/ForwardBriefPage'
 import { GroundworkPage } from './pages/GroundworkPage'
@@ -64,6 +65,7 @@ export default function App() {
         <Route path="/questionnaire/s5" element={<Section5Page />} />
         <Route path="/questionnaire/s6" element={<Section6Page />} />
         <Route path="/questionnaire/s7" element={<Section7Page />} />
+        <Route path="/jobs/:jobId/analysis" element={<AnalysisPage />} />
         <Route path="/jobs/:jobId" element={<SignalScorePage />} />
         <Route path="/jobs/:jobId/forward-brief" element={<ForwardBriefPage />} />
         <Route path="/jobs/:jobId/cheat-sheet" element={<CheatSheetPage />} />
@@ -102,13 +104,9 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
  *
  *   no jobs + Welcome unseen   → /welcome
  *   no jobs + Welcome seen     → /groundwork
- *   pending or running job     → /jobs/:id/analysis  (rendered by ORPHEUS-20)
+ *   pending or running job     → /jobs/:id/analysis  (AnalysisPage polls)
  *   complete job               → /jobs/:id           (Signal Score)
  *   failed job                 → /groundwork         (let the client retry)
- *
- * Until ORPHEUS-20 lands, /jobs/:id/analysis falls through to NotFoundPage,
- * which is acceptable — the only path that produces a pending job is the
- * upload flow that ORPHEUS-16 adds, which doesn't exist yet either.
  */
 function SmartIndexRedirect() {
   const { data, isLoading, isError } = useGroundworkProgress()

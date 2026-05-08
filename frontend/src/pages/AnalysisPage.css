@@ -1,0 +1,69 @@
+/*
+ * Analysis-in-Progress holding screen. Ported from
+ * orpheus-analysis.html — the same pulsing gold dots, the same vertical
+ * rhythm, the same centered "Return to Groundwork" CTA.
+ *
+ * The keyframe is namespaced (`orpheus-analysis-pulse`) to avoid clashes
+ * with any future generic `pulse` animation. Class names match the
+ * prototype since none collide with anything else in the React app.
+ */
+
+@keyframes orpheus-analysis-pulse {
+  0%   { opacity: 0.2; }
+  50%  { opacity: 1; }
+  100% { opacity: 0.2; }
+}
+
+.analysis-status {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  margin: 60px 0;
+}
+
+.status-dots {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--warm-gold);
+  animation: orpheus-analysis-pulse 1.4s infinite;
+}
+
+.status-dot:nth-child(1) { animation-delay: 0s; }
+.status-dot:nth-child(2) { animation-delay: 0.2s; }
+.status-dot:nth-child(3) { animation-delay: 0.4s; }
+
+.status-label {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--warm-stone);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.centered-button {
+  display: flex;
+  justify-content: center;
+  margin-top: 60px;
+}
+
+.centered-button .btn-secondary {
+  width: auto;
+}
+
+/* Respect users who've asked the OS to reduce motion. The dots are
+   decorative; a steady, dim state still reads as "system working". */
+@media (prefers-reduced-motion: reduce) {
+  .status-dot {
+    animation: none;
+    opacity: 0.7;
+  }
+}
