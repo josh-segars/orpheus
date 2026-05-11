@@ -1,3 +1,20 @@
+-- =====================================================================
+-- HISTORICAL — DO NOT RUN AGAINST PROD OR ON TOP OF 001_base_schema.sql.
+-- =====================================================================
+-- This migration designs simpler `auth.uid()`-direct RLS policies that
+-- assume the migration-007 clients model (id = auth.users.id). Prod
+-- (and 001_base_schema.sql) instead uses dual `_as_advisor` /
+-- `_as_client` policies with SECURITY DEFINER helpers
+-- (get_advisor_id, get_client_id) — a more sophisticated design that
+-- accounts for the advisor-managed-invite flow.
+--
+-- Running this on top of 001 would re-enable RLS (no-op; already on)
+-- and then add policies that may conflict with the prod design. The
+-- result is a confused policy set rather than a clean override.
+--
+-- Kept for historical record. See ORPHEUS-35 for the broader drift.
+-- =====================================================================
+--
 -- Migration 008: enable Row Level Security across the Orpheus app schema.
 --
 -- Implements the access-control boundary from Decision: LinkedIn Auth

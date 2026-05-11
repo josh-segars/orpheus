@@ -1,3 +1,29 @@
+-- =====================================================================
+-- HISTORICAL — DO NOT RUN AGAINST PROD OR ON TOP OF 001_base_schema.sql.
+-- =====================================================================
+-- This migration creates `public.questionnaire_responses` with a
+-- different shape than the one already in prod:
+--
+--   This migration         vs.   Prod (in 001_base_schema.sql)
+--   ------------------------     ----------------------------------
+--   client_id PRIMARY KEY        id PK + client_id UNIQUE
+--   answers jsonb                responses jsonb
+--   section_completion jsonb     (absent)
+--   created_at                   (absent)
+--                                schema_version, completed_at
+--
+-- CREATE TABLE IF NOT EXISTS means this is a silent no-op against any
+-- DB that already has 001 applied. The trigger / RLS policy creation
+-- portions still attempt to run and may add a redundant
+-- questionnaire_responses_set_updated_at trigger plus policies named
+-- questionnaire_responses_(select|insert|update)_own that don't match
+-- prod's `qr_*_as_(advisor|client)` design.
+--
+-- Migration 011_questionnaire_align_to_spec.sql is the correct path on
+-- top of 001 — it reshapes the existing table to the spec shape rather
+-- than trying to create it from scratch.
+-- =====================================================================
+--
 -- Migration 009: public.questionnaire_responses table for ORPHEUS-18.
 --
 -- Stores per-client questionnaire answers (Q1–Q23 across 7 sections) plus

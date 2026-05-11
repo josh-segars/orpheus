@@ -1,3 +1,20 @@
+-- =====================================================================
+-- HISTORICAL — DO NOT RUN AGAINST PROD OR ON TOP OF 001_base_schema.sql.
+-- =====================================================================
+-- This migration was authored as the prod-application path for the
+-- ORPHEUS-33 questionnaire shape change, assuming a DB shaped like
+-- migration 009. Against current prod (and against
+-- 001_base_schema.sql), the column it drops (`section_completion`)
+-- never existed — the DROP COLUMN IF EXISTS is a silent no-op — and
+-- the column rename it never performed (`responses` → `answers`) is
+-- the real work needed.
+--
+-- Migration 011_questionnaire_align_to_spec.sql supersedes this file
+-- for any DB that started from 001. This file is retained as the path
+-- that would apply on a 009-shaped DB (i.e., the local-dev path that
+-- predated 001).
+-- =====================================================================
+--
 -- Migration 010: simplified 9-question intake questionnaire (ORPHEUS-33).
 --
 -- Replaces the 23-question, 7-section questionnaire shipped under ORPHEUS-18

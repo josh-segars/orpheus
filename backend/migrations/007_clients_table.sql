@@ -1,3 +1,26 @@
+-- =====================================================================
+-- HISTORICAL — DO NOT RUN AGAINST PROD OR ON TOP OF 001_base_schema.sql.
+-- =====================================================================
+-- This migration was authored against a fresh (empty) database and
+-- creates a `public.clients` table with a different conceptual model
+-- than the one already in prod. Prod's `clients` table is part of an
+-- advisor-managed-invite design (advisor_id NOT NULL, invitation_status,
+-- separate `advisors` table); this migration designs a LinkedIn-1:1
+-- self-serve table (id = auth.users.id, linkedin_sub, etc.).
+--
+-- Against a DB that has 001_base_schema.sql applied, the CREATE TABLE
+-- IF NOT EXISTS guard means the table-creation portion is a silent
+-- no-op, but the on_auth_user_created trigger here would still attempt
+-- to insert into the prod-shape clients table with columns that don't
+-- exist (linkedin_sub, given_name, etc.), which would fail at runtime.
+--
+-- Kept in the repo for historical record (the design here is what the
+-- current frontend/backend code still targets — local-dev only). See
+-- ORPHEUS-35 for the full drift story; a future migration will need to
+-- bring prod into a coherent architecture before this file's design
+-- can ship.
+-- =====================================================================
+--
 -- Migration 007: public.clients table + on_auth_user_created trigger + FK on jobs
 --
 -- Implements the data model from Decision: LinkedIn Auth (2026-04-21) — ORPHEUS-23.
