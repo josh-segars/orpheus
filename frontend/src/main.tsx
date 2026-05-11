@@ -10,13 +10,26 @@ import '../../orpheus-styles.css'
 import App from './App'
 
 async function bootstrap() {
-  // Start MSW in development so the app can render against mock data
-  // until the FastAPI endpoints are built.
+  // Start MSW in development only when there are handlers to register.
+  // The handlers array is intentionally empty in normal dev (the real
+  // FastAPI backend serves /jobs and friends); if we still call
+  // worker.start() in that case, the registered service worker has to
+  // fall through to passthrough for every request, and stale versions
+  // of the on-disk mockServiceWorker.js can break real fetches with an
+  // opaque "Failed to fetch". Gating on handlers.length means "no
+  // mocks → no worker → no chance of interception."
+  //
+  // To iterate on UI offline, add a handler in src/mocks/handlers.ts
+  // (the file's docstring shows the pattern); the worker will start
+  // on next reload.
   if (import.meta.env.DEV) {
-    const { worker } = await import('./mocks/browser')
-    await worker.start({
-      onUnhandledRequest: 'bypass',
-    })
+    const { handlers } = await import('./mocks/handlers')
+    if (handlers.length > 0) {
+      const { worker } = await import('./mocks/browser')
+      await worker.start({
+        onUnhandledRequest: 'bypass',
+      })
+    }
   }
 
   const queryClient = new QueryClient({
