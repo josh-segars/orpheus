@@ -181,6 +181,19 @@ For quantitative sub-dimensions (Dimensions 2 and 3, scale 0–5):
 **Score 4:** Strong activity level. Affirm the pattern.
 **Score 5:** Exceptional volume. Brief acknowledgment.
 
+## Using the intake questionnaire
+
+The questionnaire is a 9-question intake the client completes before the diagnostic. Use it to shape voice, framing, and emphasis — not to drive scoring (scores are final before you see them).
+
+- **Q1 (current situation)** and **Q2 (actively pursuing)** anchor how you frame relevance. A client between roles pursuing board positions reads differently than an active founder pursuing investor relationships.
+- **Q3 (what's driving interest in this engagement now)** anchors the opening of the Forward Brief. Use the client's stated motivation as the entry point.
+- **Q4 (current LinkedIn approach)** and **Q5 (comfort with current presence)** anchor the dimension narratives. A "passive" or "uncertain" client should hear recommendations framed as low-friction starting points; an "active and engaged" client should hear refinement-level observations.
+- **Q6 (familiarity with how LinkedIn works)** and **Q7 (understanding of online-presence impact)** calibrate how much explaining you do. Low familiarity → spell out what the observations mean in plain terms. High familiarity → reference patterns without belaboring them. Combine with the configured system_mechanics setting; never override that setting, just calibrate within it.
+- **Q8 (12-month success picture)** anchors the Forward Brief's Priorities and Quick Wins. Recommendations should plausibly move the client toward what they described. If they chose "All of the above," treat all four targets as in scope.
+- **Q9** is a wildcard. If the client provided substantive context, acknowledge it explicitly somewhere appropriate. If they wrote "Nothing to add" or similar, ignore it.
+
+Treat the questionnaire as a brief from the client, not as constraints. If the data contradicts what the client said about themselves, name the gap honestly without moralizing.
+
 {voice_instructions}
 
 {directness_instructions}
@@ -326,25 +339,137 @@ def _format_forward_brief_data(scoring_output: ScoringStageOutput) -> str:
     return "\n".join(parts)
 
 
-def _format_questionnaire(questionnaire: dict) -> str:
-    """Format questionnaire answers for the prompt.
+# Canonical "Other" option label — mirrors frontend OTHER_OPTION constant.
+# Defined here (not imported) to keep the backend module self-contained.
+_OTHER_OPTION = "Other"
 
-    Questionnaire responses are stored as a JSONB dict. Keys vary but
-    typically map to question numbers or section names.
+
+# Verbatim question text from Spec_Simplified_Intake_Questionnaire_2026-05-11.md.
+# Ordered as the client encounters them in QuestionnairePage.tsx. The "type"
+# values match the JSONB shape: multi → string[], single → string,
+# freetext → string. q1..q4 have a parallel `<key>_other` field that holds
+# the free-text content when the user selected Other.
+QUESTIONNAIRE_QUESTIONS: list[dict] = [
+    {
+        "key": "q1",
+        "text": "Which of the following best describes your current situation? (Select all that apply.)",
+        "type": "multi",
+        "has_other": True,
+    },
+    {
+        "key": "q2",
+        "text": "Are you actively pursuing any of the following? (Select all that apply.)",
+        "type": "multi",
+        "has_other": True,
+    },
+    {
+        "key": "q3",
+        "text": "What is driving your interest in this engagement now?",
+        "type": "single",
+        "has_other": True,
+    },
+    {
+        "key": "q4",
+        "text": "How would you describe your current approach to LinkedIn?",
+        "type": "single",
+        "has_other": True,
+    },
+    {
+        "key": "q5",
+        "text": "How comfortable are you with your current LinkedIn presence?",
+        "type": "single",
+        "has_other": False,
+    },
+    {
+        "key": "q6",
+        "text": "How would you rate your familiarity with how LinkedIn actually works as a professional visibility system?",
+        "type": "single",
+        "has_other": False,
+    },
+    {
+        "key": "q7",
+        "text": "How well do you understand the impact your online presence has on how you're discovered and evaluated by the people who matter most to your work?",
+        "type": "single",
+        "has_other": False,
+    },
+    {
+        "key": "q8",
+        "text": "What does a successful online presence look like for you 12 months from now?",
+        "type": "single",
+        "has_other": False,
+    },
+    {
+        "key": "q9",
+        "text": "Is there anything else you'd like us to know before we begin?",
+        "type": "freetext",
+        "has_other": False,
+    },
+]
+
+
+def _render_other(other_text: str) -> str:
+    """Render an "Other" selection with its free-text content."""
+    cleaned = (other_text or "").strip()
+    if cleaned:
+        return f'Other (specified: "{cleaned}")'
+    return "Other (no detail provided)"
+
+
+def _format_questionnaire(questionnaire: dict | None) -> str:
+    """Format the 9-question intake (ORPHEUS-33 shape) for the prompt.
+
+    The intake stores answers in a flat JSONB map keyed by q1..q9. q1 and
+    q2 are multi-select arrays of canonical option labels. q3..q8 are
+    single-select strings. q9 is free text. q1..q4 have a parallel
+    `<key>_other` field that holds the free-text content when the user
+    picked the literal canonical option "Other". See
+    Spec_Simplified_Intake_Questionnaire_2026-05-11.md for the verbatim
+    questions and locked decisions.
+
+    Rendering prints each question's full text plus the user's answer in
+    a human-readable form so Claude has full context, not opaque keys.
+    Missing or empty answers render as "[no answer]" — Claude is
+    instructed elsewhere to acknowledge gaps honestly rather than
+    fabricate.
     """
     if not questionnaire:
         return "[No questionnaire responses provided]"
 
     parts = ["=== CLIENT QUESTIONNAIRE ANSWERS ===", ""]
 
-    # Try to present in a readable order
-    for key in sorted(questionnaire.keys(), key=str):
-        value = questionnaire[key]
-        if isinstance(value, list):
-            value = ", ".join(str(v) for v in value)
-        parts.append(f"{key}: {value}")
+    for q in QUESTIONNAIRE_QUESTIONS:
+        key = q["key"]
+        qtype = q["type"]
+        raw = questionnaire.get(key)
+        other_text = questionnaire.get(f"{key}_other", "") if q["has_other"] else ""
 
-    return "\n".join(parts)
+        rendered = "[no answer]"
+
+        if qtype == "multi":
+            values = raw if isinstance(raw, list) else []
+            if values:
+                expanded = []
+                for v in values:
+                    if v == _OTHER_OPTION:
+                        expanded.append(_render_other(other_text))
+                    else:
+                        expanded.append(str(v))
+                rendered = "; ".join(expanded)
+        elif qtype == "single":
+            if isinstance(raw, str) and raw.strip():
+                if raw == _OTHER_OPTION:
+                    rendered = _render_other(other_text)
+                else:
+                    rendered = raw
+        elif qtype == "freetext":
+            if isinstance(raw, str) and raw.strip():
+                rendered = raw.strip()
+
+        parts.append(f"{key.upper()}. {q['text']}")
+        parts.append(f"   → {rendered}")
+        parts.append("")
+
+    return "\n".join(parts).rstrip() + "\n"
 
 
 def _format_quality_report(quality_report: DataQualityReport | None) -> str:

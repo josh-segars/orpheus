@@ -311,15 +311,18 @@ async def run_pipeline(supabase, anthropic_client: Anthropic, job: dict):
     is_advisory = not client_row["advisors"]["is_individual"]
     narrative_config = client_row["advisors"].get("narrative_config")
 
-    # Fetch questionnaire answers
+    # Fetch questionnaire answers. The column is `answers` (migration 009);
+    # an earlier draft of this file used `responses` and would 500 on first
+    # call — fixed alongside ORPHEUS-34 since the narrative-prompt rewrite
+    # is moot if the worker can't fetch the data to pass in.
     q_row = (
         supabase.table("questionnaire_responses")
-        .select("responses")
+        .select("answers")
         .eq("client_id", client_id)
         .single()
         .execute()
     ).data
-    questionnaire = q_row["responses"] if q_row else {}
+    questionnaire = q_row["answers"] if q_row else {}
 
     # Stage 1: Ingestion
     zip_data, xlsx_data, quality_report = await stage_ingestion(

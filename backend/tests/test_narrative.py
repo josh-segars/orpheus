@@ -381,21 +381,83 @@ class TestFormatForwardBriefData:
 
 
 class TestFormatQuestionnaire:
+    """Covers the 9-question intake shape from ORPHEUS-33.
 
-    def test_formats_simple_answers(self):
+    The formatter prints each question's verbatim text and the user's
+    answer in human-readable form. q1/q2 are multi-select arrays;
+    q3..q8 are single-select strings; q9 is free text. q1..q4 have a
+    parallel `<key>_other` field that's substituted when the user
+    picked the literal "Other" option.
+    """
+
+    def test_formats_single_select_answer(self):
         q = {
-            "Q1": "I lead digital transformation initiatives",
-            "Q8": "C-suite executives in healthcare",
+            "q3": "A specific transition or career moment",
+            "q9": "Nothing to add",
         }
         text = _format_questionnaire(q)
-        assert "digital transformation" in text
-        assert "healthcare" in text
+        # Question text appears verbatim
+        assert "What is driving your interest in this engagement now?" in text
+        # Answer is rendered after the arrow
+        assert "A specific transition or career moment" in text
+        # Free-text answer flows through
+        assert "Nothing to add" in text
 
-    def test_formats_list_answers(self):
-        q = {"Q12": ["Build thought leadership", "Generate leads", "Expand network"]}
+    def test_formats_multi_select_answer(self):
+        q = {
+            "q2": [
+                "Board positions",
+                "Speaking opportunities",
+                "Thought leadership",
+            ],
+        }
         text = _format_questionnaire(q)
-        assert "Build thought leadership" in text
-        assert "Generate leads" in text
+        # All selected canonical labels appear
+        assert "Board positions" in text
+        assert "Speaking opportunities" in text
+        assert "Thought leadership" in text
+        # Semicolon-joined in the rendered line
+        assert "Board positions; Speaking opportunities; Thought leadership" in text
+
+    def test_other_text_substituted_for_single_select(self):
+        q = {
+            "q3": "Other",
+            "q3_other": "Preparing for a board search",
+        }
+        text = _format_questionnaire(q)
+        assert "Preparing for a board search" in text
+        # Literal "Other" still appears so Claude knows the canonical
+        # bucket; the typed text is shown alongside.
+        assert "Other (specified:" in text
+
+    def test_other_text_substituted_for_multi_select(self):
+        q = {
+            "q1": ["Independent consultant, advisor, or principal", "Other"],
+            "q1_other": "Operating partner at a PE firm",
+        }
+        text = _format_questionnaire(q)
+        assert "Independent consultant, advisor, or principal" in text
+        assert "Operating partner at a PE firm" in text
+
+    def test_other_without_text_marked_as_missing(self):
+        # Defensive: the frontend predicate blocks submission in this state,
+        # but a draft fetched mid-write could still hit the worker. The
+        # formatter shouldn't crash or silently swallow the Other selection.
+        q = {"q3": "Other", "q3_other": ""}
+        text = _format_questionnaire(q)
+        assert "Other (no detail provided)" in text
+
+    def test_unanswered_questions_render_as_missing(self):
+        # Partial answers — only q1 is populated. The other 8 should still
+        # appear in the prompt context as "[no answer]" so Claude sees the
+        # full structure, not just a sparse slice.
+        q = {"q1": ["Between roles"]}
+        text = _format_questionnaire(q)
+        assert "Between roles" in text
+        assert "[no answer]" in text
+        # All 9 question keys should appear in the rendered output.
+        for key in ["Q1.", "Q2.", "Q3.", "Q4.", "Q5.", "Q6.", "Q7.", "Q8.", "Q9."]:
+            assert key in text
 
     def test_empty_questionnaire(self):
         text = _format_questionnaire({})
