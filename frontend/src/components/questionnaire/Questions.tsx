@@ -188,110 +188,112 @@ export function RadioWithOtherQuestion({
   )
 }
 
-// ── Checkbox question (multi-select) ───────────────────────────────────
+// ── Checkbox with inline "Other" text input ────────────────────────────
 
 export interface CheckboxOption {
   value: string
   label: string
 }
 
-interface CheckboxQuestionProps {
+interface CheckboxWithOtherQuestionProps {
   number: number
   text: string
   helper?: string
   name: string
+  /** All options including the "other" choice in its natural position. */
   options: readonly CheckboxOption[]
+  /** Which option's value triggers the inline free-text input. */
+  otherValue: string
+  /** Currently-selected option values (may include `otherValue`). */
   values: readonly string[] | undefined
+  /** Free-text content of the "other" input, regardless of selection. */
+  otherText: string | undefined
   onChange: (values: string[]) => void
+  onOtherTextChange: (text: string) => void
 }
 
-export function CheckboxQuestion({
+/**
+ * Multi-select with an "Other" option that reveals an inline free-text
+ * input. Mirrors the behavior of `RadioWithOtherQuestion`:
+ *
+ *   - Selection order doesn't matter — output array follows the options'
+ *     canonical display order so the saved JSONB is stable across edits.
+ *   - Typing into the Other text input auto-checks the Other option if it
+ *     isn't already checked, matching the prototype's "natural feel."
+ *   - Unchecking Other preserves the typed text so the user can re-check
+ *     without retyping (the parallel `qN_other` field is independent of
+ *     whether Other is currently selected).
+ */
+export function CheckboxWithOtherQuestion({
   number,
   text,
   helper,
   name,
   options,
+  otherValue,
   values,
+  otherText,
   onChange,
-}: CheckboxQuestionProps) {
+  onOtherTextChange,
+}: CheckboxWithOtherQuestionProps) {
   const selected = new Set(values ?? [])
 
   const toggle = (val: string) => {
     const next = new Set(selected)
     if (next.has(val)) next.delete(val)
     else next.add(val)
-    // Preserve canonical order so saved JSONB is stable across edits.
+    onChange(options.map((o) => o.value).filter((v) => next.has(v)))
+  }
+
+  const ensureOtherSelected = () => {
+    if (selected.has(otherValue)) return
+    const next = new Set(selected)
+    next.add(otherValue)
     onChange(options.map((o) => o.value).filter((v) => next.has(v)))
   }
 
   return (
     <QuestionShell number={number} text={text} helper={helper}>
       <div className="checkbox-group">
-        {options.map((opt) => (
-          <label className="checkbox-option" key={opt.value}>
-            <input
-              type="checkbox"
-              name={name}
-              value={opt.value}
-              checked={selected.has(opt.value)}
-              onChange={() => toggle(opt.value)}
-            />
-            <span className="checkbox-indicator">
-              <span className="checkbox-check">&#10003;</span>
-            </span>
-            <span className="option-text">{opt.label}</span>
-          </label>
-        ))}
-      </div>
-    </QuestionShell>
-  )
-}
-
-// ── Scale question (1-5 with labels) ───────────────────────────────────
-
-export interface ScaleOption {
-  value: number
-  label: string
-}
-
-interface ScaleQuestionProps {
-  number: number
-  text: string
-  helper?: string
-  name: string
-  options: readonly ScaleOption[]
-  value: number | undefined
-  onChange: (value: number) => void
-}
-
-export function ScaleQuestion({
-  number,
-  text,
-  helper,
-  name,
-  options,
-  value,
-  onChange,
-}: ScaleQuestionProps) {
-  return (
-    <QuestionShell number={number} text={text} helper={helper}>
-      <div className="scale-group">
-        <div className="scale-options">
-          {options.map((opt) => (
-            <label className="scale-option" key={opt.value}>
+        {options.map((opt) => {
+          const isOther = opt.value === otherValue
+          return (
+            <label className="checkbox-option" key={opt.value}>
               <input
-                type="radio"
+                type="checkbox"
                 name={name}
                 value={opt.value}
-                checked={value === opt.value}
-                onChange={() => onChange(opt.value)}
+                checked={selected.has(opt.value)}
+                onChange={() => toggle(opt.value)}
               />
-              <div className="scale-pip">{opt.value}</div>
-              <span className="scale-label">{opt.label}</span>
+              <span className="checkbox-indicator">
+                <span className="checkbox-check">&#10003;</span>
+              </span>
+              <span className="option-text">
+                {opt.label}
+                {isOther ? ' ' : ''}
+              </span>
+              {isOther && (
+                <input
+                  type="text"
+                  className="other-input"
+                  placeholder="Please describe"
+                  value={otherText ?? ''}
+                  onChange={(e) => {
+                    onOtherTextChange(e.target.value)
+                    // Auto-select "Other" once the user actually types
+                    // something. Mirrors RadioWithOtherQuestion's behavior.
+                    if (e.target.value.length > 0) {
+                      ensureOtherSelected()
+                    }
+                  }}
+                />
+              )}
             </label>
-          ))}
-        </div>
+          )
+        })}
       </div>
     </QuestionShell>
   )
 }
+
