@@ -6,9 +6,9 @@ The flow:
 
   1. Request arrives with Authorization: Bearer <supabase_jwt>.
   2. `get_current_client` parses the header, fetches the Supabase project's
-     JWKS (RS256 public keys), verifies signature + iss + aud + exp,
-     extracts `sub`, looks up the matching public.clients row via the
-     service-role client, and returns a typed CurrentClient.
+     JWKS (RS256 or ES256 public keys), verifies signature + iss + aud +
+     exp, extracts `sub`, looks up the matching public.clients row via
+     the service-role client, and returns a typed CurrentClient.
   3. Route handlers depend on `get_current_client` and use
      `user_scoped_supabase(token)` from backend/db.py for all data queries
      so RLS policies see auth.uid() == client_id.
@@ -97,7 +97,11 @@ class _JWKSCache:
         import urllib.request
         import json as _json
 
-        url = f"{supabase_url.rstrip('/')}/auth/v1/jwks"
+        # Supabase Auth (GoTrue v2) exposes JWKS at the standard well-known
+        # path. Older versions used /auth/v1/jwks (no longer routed by
+        # Kong). The well-known path is what `iss + /.well-known/jwks.json`
+        # would be too — keep this in sync with whatever Supabase ships.
+        url = f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
         try:
             with urllib.request.urlopen(url, timeout=5) as resp:
                 raw = _json.loads(resp.read().decode("utf-8"))
@@ -113,11 +117,33 @@ class _JWKSCache:
             kid = jwk.get("kid")
             if not kid:
                 continue
-            keys_by_kid[kid] = jwt.algorithms.RSAAlgorithm.from_jwk(_json.dumps(jwk))
+            keys_by_kid[kid] = _public_key_from_jwk(jwk)
 
         self._keys = keys_by_kid
         self._fetched_at = time.time()
         logger.info("Refreshed Supabase JWKS cache — %d keys", len(keys_by_kid))
+
+
+def _public_key_from_jwk(jwk: dict[str, Any]) -> Any:
+    """Build a PyJWT-compatible public key from a JWK, dispatching on `kty`.
+
+    Supabase has historically issued RS256-signed tokens (`kty: "RSA"`). Newer
+    Supabase CLI / GoTrue versions issue ES256-signed tokens (`kty: "EC"`,
+    P-256 curve). We support both so the same backend code works against any
+    in-use Supabase version, local or hosted, without redeploys.
+    """
+    import json as _json
+
+    kty = jwk.get("kty")
+    payload = _json.dumps(jwk)
+    if kty == "RSA":
+        return jwt.algorithms.RSAAlgorithm.from_jwk(payload)
+    if kty == "EC":
+        return jwt.algorithms.ECAlgorithm.from_jwk(payload)
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=f"Unsupported JWK key type: {kty!r}.",
+    )
 
 
 _jwks_cache = _JWKSCache()
@@ -183,7 +209,10 @@ def _verify_jwt(token: str) -> dict[str, Any]:
         claims: dict[str, Any] = jwt.decode(
             token,
             key=public_key,
-            algorithms=["RS256"],
+            # Supabase signs with RS256 (legacy) or ES256 (current GoTrue).
+            # PyJWT picks the matching algorithm based on the public key's
+            # type, so listing both is safe — it doesn't loosen verification.
+            algorithms=["RS256", "ES256"],
             audience=audience,
             issuer=issuer,
             options={"require": ["exp", "iss", "aud", "sub"]},
