@@ -10,7 +10,7 @@ delivers a **Signal Score** diagnostic and **Forward Brief** action plan.
 - **HTML/CSS prototype** (14 screens, JS-free) lives flat in the repo root and renders via VS Code Live Server. It is the visual source of truth for the design system.
 - **Production stack** is in active development: FastAPI backend (Railway), Supabase Postgres with Auth + RLS, Vite + React frontend (Vercel). As of 2026-05-06, LinkedIn (OIDC) sign-in works end-to-end against local Supabase; the React shell renders Signal Score, Forward Brief, and Cheat Sheet pages with auth, RLS, and the typed JWT contract in place.
 
-**Active phase:** porting the prototype's product flow (Welcome, Groundwork, questionnaire, LinkedIn upload, Analysis-in-Progress) into the React app. See the Plane backlog for the open ORPHEUS-n tickets.
+**Active phase:** the prototype's product flow is ported (Welcome, Groundwork, questionnaire, LinkedIn upload, Analysis-in-Progress all live in React). Open work is the simplified intake's downstream effects — narrative-prompt rewrite (ORPHEUS-34) and base-schema migration for full-pipeline local verification (ORPHEUS-35). See the Plane backlog for the open ORPHEUS-n tickets.
 
 ---
 
@@ -97,13 +97,7 @@ a `<style>` block in the page's `<head>`.
 | `orpheus-groundwork-v1.html` | Groundwork Checklist | ✅ Complete |
 | `orpheus-linkedin-step1.html` | LinkedIn Data — Step 1: Request Archive | ✅ Complete |
 | `orpheus-linkedin-step2.html` | LinkedIn Data — Step 2: Export Analytics | ✅ Complete |
-| `orpheus-questionnaire-s1.html` | Q: Professional Identity (Q1–Q4) | ✅ Complete |
-| `orpheus-questionnaire-s2.html` | Q: Career Stage & Context (Q5–Q7) | ✅ Complete |
-| `orpheus-questionnaire-s3.html` | Q: Target Audiences (Q8–Q10) | ✅ Complete |
-| `orpheus-questionnaire-s4.html` | Q: Goals (Q11–Q13) | ✅ Complete |
-| `orpheus-questionnaire-s5.html` | Q: Current LinkedIn Relationship (Q14–Q17) | ✅ Complete |
-| `orpheus-questionnaire-s6.html` | Q: Voice & Style (Q18–Q20) | ✅ Complete |
-| `orpheus-questionnaire-s7.html` | Q: Practical Parameters (Q21–Q23) | ✅ Complete |
+| `orpheus-questionnaire-v2.html` | Intake Questionnaire (Q1–Q9, single page) | ✅ Complete |
 | `orpheus-analysis.html` | Analysis in Progress (holding state) | ✅ Complete |
 | `orpheus-signal-score.html` | Signal Score delivery | ✅ Complete |
 | `orpheus-forward-brief.html` | Forward Brief delivery | ✅ Complete |
@@ -150,24 +144,21 @@ PDF export was evaluated and deemed redundant — ZIP CSVs contain same profile 
 
 ## Questionnaire Questions Reference
 
-| # | Section | Type |
+The intake questionnaire was simplified from 23 questions across 7 sections to 9 questions on a single page on 2026-05-11 (ORPHEUS-33). See `Spec_Simplified_Intake_Questionnaire_2026-05-11.md` for the verbatim question text and locked decisions.
+
+| # | Topic | Type |
 |---|---|---|
-| 1–4 | Professional Identity | Open text |
-| 5 | Career Stage & Context | Radio (5 options + Other w/ inline text) |
-| 6 | Career Stage & Context | Radio (4 options) |
-| 7 | Career Stage & Context | Open text |
-| 8–10 | Target Audiences | Open text |
-| 11 | Goals | Open text |
-| 12 | Goals | Checkboxes (7 options, select all that apply) |
-| 13 | Goals | Open text |
-| 14 | Current LinkedIn Relationship | Radio (5 options) |
-| 15 | Current LinkedIn Relationship | Radio (5 options) |
-| 16 | Current LinkedIn Relationship | Scale 1–5 |
-| 17 | Current LinkedIn Relationship | Open text |
-| 18–20 | Voice & Style | Open text |
-| 21 | Practical Parameters | Radio (4 options) |
-| 22 | Practical Parameters | Radio (3 options, "Yes" has inline text) |
-| 23 | Practical Parameters | Open text |
+| 1 | Current situation | Checkboxes (5 options + Other w/ inline text, select all that apply) |
+| 2 | Actively pursuing | Checkboxes (8 options + "None of these" + Other w/ inline text, select all that apply) |
+| 3 | What's driving interest now | Radio (4 options + Other w/ inline text) |
+| 4 | Current LinkedIn approach | Radio (5 options + Other w/ inline text) |
+| 5 | Comfort with current presence | Radio (5 options) |
+| 6 | Familiarity with how LinkedIn works | Radio (4 options) |
+| 7 | Understanding of online-presence impact | Radio (4 options) |
+| 8 | 12-month success picture | Radio (4 options + "All of the above", stored literal) |
+| 9 | Anything else | Open text (required, "Nothing to add" acceptable) |
+
+Storage shape: flat JSONB map with `q1`/`q2` as canonical-label string arrays, `q3`/`q4` as canonical-label strings (plus `qN_other` for Other text on q1–q4), `q5`–`q8` as canonical-label strings, `q9` as free text. Completion is derived at read time by `isQuestionnaireComplete` — no persisted completion flag.
 
 ---
 
@@ -182,6 +173,7 @@ PDF export was evaluated and deemed redundant — ZIP CSVs contain same profile 
 - Screenshot assets for LinkedIn instruction pages: deferred
 - "My Groundwork is Complete" button stays disabled (`opacity: 0.35`) in the prototype; React port will gate via backend completion state.
 - Client identity in the React `PortalNav` is sourced from the Supabase session (LinkedIn OIDC `name` + `picture`, falling back to initials). The `Jane Doe` placeholder only survives in the HTML prototype.
+- **Intake questionnaire simplified to 9 questions on a single page on 2026-05-11** (ORPHEUS-33). Replaces the 23-question, 7-section flow. Completion derived at read time from answers content; `section_completion` column dropped in migration 010. See `Spec_Simplified_Intake_Questionnaire_2026-05-11.md` for the locked decisions.
 
 ---
 
@@ -282,7 +274,9 @@ Backend deployed on Railway, database on Supabase, frontend scaffolded with Vite
 │   │   ├── 006_claim_next_job_rpc.sql
 │   │   ├── 007_clients_table.sql      # public.clients + on_auth_user_created trigger + jobs.client_id FK + backfill
 │   │   ├── 008_rls_enable.sql         # RLS policies on clients/jobs and (where present) ingested_data/scores/narratives
-│   │   └── 008_rls_verify.sql         # Companion: two-tenant isolation check (BEGIN ... ROLLBACK)
+│   │   ├── 008_rls_verify.sql         # Companion: two-tenant isolation check (BEGIN ... ROLLBACK)
+│   │   ├── 009_questionnaire_responses.sql  # public.questionnaire_responses + RLS (ORPHEUS-18 shape, superseded by 010)
+│   │   └── 010_questionnaire_simplified.sql # TRUNCATE + DROP section_completion for 9-question intake (ORPHEUS-33)
 │   ├── tests/                         # Test suite (pytest)
 │   │   ├── test_scoring.py            # 48 tests for scoring engine
 │   │   ├── test_narrative.py          # 8 tests for quality report formatting
@@ -356,7 +350,7 @@ None of these are committed. Templates with inline comments live at `backend/.en
 
 - Use `async/await` throughout — FastAPI and Supabase client are both async
 - All env reads flow through `backend.config.get_settings()` (Pydantic `BaseSettings`). The app fails fast at boot when required vars are missing. Worker process still has its own three `os.environ` reads — consolidating is a small follow-up.
-- API routes live in `/backend/routers/` — one file per resource. Client-facing routes depend on `get_current_client` (in `backend/auth.py`), which JWT-verifies the Bearer token against the cached Supabase JWKS, fetches the matching `public.clients` row, and returns a typed `CurrentClient(user_id, client_id, email, access_token)`.
+- API routes live in `/backend/routers/` — one file per resource. Client-facing routes depend on `get_current_client` (in `backend/auth.py`), which JWT-verifies the Bearer token against the cached Supabase JWKS, fetches the matching `public.clients` row, and returns a typed `CurrentClient(user_id, client_id, email, access_token)`. `auth.py` supports both RS256 and ES256 signatures and reads JWKS from `/auth/v1/.well-known/jwks.json` (the post-GoTrue-v2 path).
 - Two Supabase client patterns:
   - `get_service_client()` — service-role, RLS-bypassing. Cached. Used by the worker, admin endpoints, and the JWT-verification dependency itself (which needs to read `public.clients` before any user context is available).
   - `user_scoped_supabase(access_token)` — fresh per-request, JWT attached via `postgrest.auth(token)`. Client-facing routes must use this so the migration-008 RLS policies enforce ownership. Caching this client across requests would cause auth bleed.
