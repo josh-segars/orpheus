@@ -251,11 +251,17 @@ async def get_job(
 
     row = result.data[0]
 
-    # The frontend's JobResultPayload lives in two columns: the scoring engine
-    # output and the narratives. Join them here into the `result` dict the
-    # React client expects. When either is missing (state != complete), we
-    # pass `None`.
-    payload = _build_result_payload(supabase, job_id)
+    # The frontend's JobResultPayload lives in two tables: scores and
+    # narratives. Only fetch them once the worker has finished writing —
+    # for pending/running/failed jobs, those rows don't exist yet, and
+    # querying them is both wasteful and (on a partial dev schema) fatal.
+    # The AnalysisPage polls this endpoint every 3s; a cheap pending
+    # response keeps that quiet.
+    payload = (
+        _build_result_payload(supabase, job_id)
+        if row["status"] == "complete"
+        else None
+    )
 
     return Job(
         id=str(row["id"]),
