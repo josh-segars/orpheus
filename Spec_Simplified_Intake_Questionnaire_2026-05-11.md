@@ -256,7 +256,7 @@ Per locked decision #8, the rewritten prompt does **not** require Andrew's revie
 
 Steps 1–7 are scope for the first ticket. Step 8 is scope for the second.
 
-## Tickets to file
+## Tickets
 
-- **ORPHEUS-? (first ticket):** "Replace 23-question questionnaire with 9-question intake." Scope: migration 010, prototype HTML, frontend port, primitive add/remove, groundwork checklist update.
-- **ORPHEUS-? (second ticket):** "Rewrite narrative-generation prompt for simplified questionnaire shape." Scope: `agents/narrative.py` prompt block, accompanying tests if any. Iterate from first generated narrative in production.
+- **ORPHEUS-33** — "Replace 23-question questionnaire with 9-question intake." Scope: migration 010, prototype HTML, frontend port, primitive add/remove, groundwork checklist update.
+- **ORPHEUS-34** — "Rewrite narrative-generation prompt for simplified questionnaire shape." Scope: `agents/narrative.py` prompt block, accompanying tests if any. Iterate from first generated narrative in production. **Depends on ORPHEUS-33.**
