@@ -5,7 +5,6 @@ import { supabase } from '../lib/supabase'
 import type {
   QuestionnaireAnswers,
   QuestionnaireResponse,
-  SectionId,
 } from '../types/questionnaire'
 
 const QUERY_KEY = ['questionnaire-response'] as const
@@ -13,7 +12,6 @@ const QUERY_KEY = ['questionnaire-response'] as const
 const EMPTY: QuestionnaireResponse = {
   client_id: '',
   answers: {},
-  section_completion: {},
   // The `as` casts let us share an immutable empty object across consumers
   // without having to fabricate timestamps the UI never reads.
   created_at: '',
@@ -23,9 +21,9 @@ const EMPTY: QuestionnaireResponse = {
 /**
  * Read the current client's questionnaire response row from Supabase.
  *
- * RLS scopes the SELECT to the signed-in client's own row (migration 009).
- * Returns the EMPTY shape if no row exists yet — the first save will INSERT
- * via the upsert path in `useUpsertQuestionnaire`.
+ * RLS scopes the SELECT to the signed-in client's own row (migration 009 +
+ * 010). Returns the EMPTY shape if no row exists yet — the first save will
+ * INSERT via the upsert path in `useUpsertQuestionnaire`.
  */
 export function useQuestionnaireResponse() {
   return useQuery<QuestionnaireResponse>({
@@ -47,9 +45,7 @@ export function useQuestionnaireResponse() {
 
 interface UpsertArgs {
   /** New answers to merge into the existing answers map. */
-  answers?: QuestionnaireAnswers
-  /** Section completion flags to merge into existing flags. */
-  sectionCompletion?: Partial<Record<SectionId, boolean>>
+  answers: QuestionnaireAnswers
 }
 
 /**
@@ -65,7 +61,7 @@ export function useUpsertQuestionnaire() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ answers, sectionCompletion }: UpsertArgs) => {
+    mutationFn: async ({ answers }: UpsertArgs) => {
       const { data: sessionData } = await supabase.auth.getSession()
       const userId = sessionData.session?.user.id
       if (!userId) {
@@ -80,11 +76,7 @@ export function useUpsertQuestionnaire() {
 
       const mergedAnswers: QuestionnaireAnswers = {
         ...current.answers,
-        ...(answers ?? {}),
-      }
-      const mergedCompletion = {
-        ...current.section_completion,
-        ...(sectionCompletion ?? {}),
+        ...answers,
       }
 
       const { data, error } = await supabase
@@ -93,7 +85,6 @@ export function useUpsertQuestionnaire() {
           {
             client_id: userId,
             answers: mergedAnswers,
-            section_completion: mergedCompletion,
           },
           { onConflict: 'client_id' },
         )
@@ -105,31 +96,31 @@ export function useUpsertQuestionnaire() {
     },
     onSuccess: (row) => {
       queryClient.setQueryData<QuestionnaireResponse>(QUERY_KEY, row)
-      // Section completion drives the Groundwork checklist — invalidate so
-      // the next read recomputes the per-item flags.
+      // Groundwork progress derives questionnaireComplete from answers, so
+      // any save invalidates that row's completion flag.
       queryClient.invalidateQueries({ queryKey: ['groundwork-progress'] })
     },
   })
 }
 
 /**
- * Per-section state container with debounced autosave.
+ * Working-copy state container with debounced autosave for the single-page
+ * questionnaire (ORPHEUS-33).
  *
- * Components call this once at the top of a section page, get back a
+ * Components call this once at the top of `QuestionnairePage`, get back a
  * controlled `answers` object plus a setter, and don't have to think about
  * persistence — changes flush to Supabase 700ms after the last edit. A
- * manual `flush()` is exposed for the "Save My Answers" / "This Section is
- * Complete" buttons that need to wait until the write lands before
- * navigating.
+ * manual `flush()` is exposed for the "Save My Answers" /
+ * "This Section is Complete" buttons that need to wait until the write
+ * lands before navigating.
  */
-export function useSectionDraft() {
+export function useQuestionnaireDraft() {
   const { data: row, isLoading } = useQuestionnaireResponse()
   const upsert = useUpsertQuestionnaire()
 
   // The form's working copy. Initialised from the latest server snapshot
-  // and re-synced when the snapshot changes (e.g. after a successful save
-  // from another section's autosave). We avoid clobbering the user's
-  // in-flight edits by only re-initialising when our local copy is empty.
+  // and re-synced when the snapshot changes. We avoid clobbering the
+  // user's in-flight edits by only re-initialising once.
   const [draft, setDraft] = useState<QuestionnaireAnswers>(row?.answers ?? {})
   const initialised = useRef(false)
 
@@ -175,25 +166,18 @@ export function useSectionDraft() {
    * Force any pending debounced save to flush immediately. Returns a
    * promise that resolves when the write completes — callers should await
    * before navigating away so the row reflects the final state.
-   *
-   * If `markComplete` is provided, the flush also writes
-   * section_completion[section] = true atomically with the answers.
    */
-  const flush = async (markComplete?: SectionId): Promise<void> => {
+  const flush = async (): Promise<void> => {
     if (timerRef.current) {
       clearTimeout(timerRef.current)
       timerRef.current = null
     }
-    const answersPayload = pendingRef.current ?? undefined
+    const answersPayload = pendingRef.current
     pendingRef.current = null
 
-    // Nothing to do — no pending answers and no completion flag to set.
-    if (!answersPayload && !markComplete) return
+    if (!answersPayload) return
 
-    await upsert.mutateAsync({
-      answers: answersPayload,
-      sectionCompletion: markComplete ? { [markComplete]: true } : undefined,
-    })
+    await upsert.mutateAsync({ answers: answersPayload })
   }
 
   return {
@@ -203,6 +187,5 @@ export function useSectionDraft() {
     isLoading,
     isSaving: upsert.isPending,
     saveError: upsert.error,
-    sectionCompletion: row?.section_completion ?? {},
   }
 }

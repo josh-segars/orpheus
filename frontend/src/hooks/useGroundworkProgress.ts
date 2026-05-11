@@ -1,39 +1,37 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import type { SectionCompletion } from '../types/questionnaire'
+import {
+  isQuestionnaireComplete,
+  type QuestionnaireAnswers,
+} from '../types/questionnaire'
 
 /**
- * Per-item completion state for the Groundwork checklist. The shape mirrors
- * the prototype's checklist sections (LinkedIn data + 7 questionnaire
- * sections). The hook returns booleans for each item plus a derived
- * `allComplete` flag that drives the "My Groundwork is Complete" CTA.
+ * Per-item completion state for the Groundwork checklist. After ORPHEUS-33
+ * the checklist is three rows: the intake questionnaire and the two
+ * LinkedIn data items. Questionnaire completion is derived at read time
+ * from the answers JSONB (migration 010 dropped the persisted
+ * section_completion column).
  *
  * Sources:
- *   - Questionnaire flags come from `questionnaire_responses.section_completion`
- *     (migration 009, populated by ORPHEUS-18's section pages).
- *   - LinkedIn upload flags come from the most recent `jobs` row's
- *     uploaded_zip / uploaded_xlsx columns (wired in ORPHEUS-16). Until
- *     that ships, both flags read `false`.
- *   - latestPendingJobId / latestCompleteJobId surface the most recent job,
- *     used by the smart index redirect in App.tsx.
+ *   - questionnaireComplete is `isQuestionnaireComplete(answers)` — all 9
+ *     required keys populated, with non-empty qN_other text when the user
+ *     selected Other on q1..q4.
+ *   - LinkedIn upload flags come from the in-memory File state held in
+ *     LinkedInUploadContext. This hook returns `false` for both; the
+ *     Groundwork page overrides locally before computing the gate.
+ *   - latestPendingJobId / latestCompleteJobId surface the most recent
+ *     job, used by the smart index redirect in App.tsx.
  */
 export interface GroundworkProgress {
-  // LinkedIn data uploads — wired in ORPHEUS-16.
+  // LinkedIn data uploads — overridden locally by GroundworkPage from
+  // LinkedInUploadContext (in-memory File state, lost on hard refresh).
   linkedInArchive: boolean
   linkedInAnalytics: boolean
-  // Questionnaire — driven by questionnaire_responses.section_completion.
-  questionnaireS1: boolean
-  questionnaireS2: boolean
-  questionnaireS3: boolean
-  questionnaireS4: boolean
-  questionnaireS5: boolean
-  questionnaireS6: boolean
-  questionnaireS7: boolean
+  // Questionnaire — derived from questionnaire_responses.answers.
+  questionnaireComplete: boolean
   // Derived: every item above true → enable "My Groundwork is Complete".
   allComplete: boolean
-  // Latest in-flight job, if any. Set when an upload has been submitted —
-  // index/Groundwork redirect logic uses it to send the client to the
-  // Analysis-in-Progress screen instead of looping back to Groundwork.
+  // Latest in-flight job, if any.
   latestPendingJobId: string | null
   latestCompleteJobId: string | null
 }
@@ -45,7 +43,7 @@ interface JobRow {
 }
 
 interface QuestionnaireRow {
-  section_completion: SectionCompletion | null
+  answers: QuestionnaireAnswers | null
 }
 
 /**
@@ -59,14 +57,14 @@ export function useGroundworkProgress() {
   return useQuery<GroundworkProgress>({
     queryKey: ['groundwork-progress'],
     queryFn: async () => {
-      // Fire both reads in parallel — they're independent. RLS filters each
-      // to the current client's rows, so we don't need a `.eq('client_id',...)`
-      // filter; auth.uid() does it at the row level.
+      // Fire both reads in parallel — they're independent. RLS filters
+      // each to the current client's rows, so we don't need an explicit
+      // `.eq('client_id',...)` filter; auth.uid() does it at the row
+      // level.
       //
-      // We use allSettled so a failure on the questionnaire side (e.g.
-      // migration 009 hasn't been applied yet on this database) doesn't
-      // bring down the Groundwork page or smart-index redirect. A failed
-      // questionnaire read is treated as "no completion flags".
+      // allSettled keeps the page rendering when one read fails (e.g.
+      // migrations 009/010 not yet applied on this database). A failed
+      // questionnaire read is treated as "no answers".
       const [jobsResult, questionnaireResult] = await Promise.allSettled([
         supabase
           .from('jobs')
@@ -75,13 +73,13 @@ export function useGroundworkProgress() {
           .limit(1),
         supabase
           .from('questionnaire_responses')
-          .select('section_completion')
+          .select('answers')
           .limit(1)
           .maybeSingle(),
       ])
 
-      // Jobs is the more critical read — it drives the smart redirect. Bail
-      // hard on errors here so the caller can show its error state.
+      // Jobs is the more critical read — it drives the smart redirect.
+      // Bail hard on errors here so the caller can show its error state.
       if (jobsResult.status === 'rejected') throw jobsResult.reason
       if (jobsResult.value.error) throw jobsResult.value.error
 
@@ -93,23 +91,16 @@ export function useGroundworkProgress() {
       const latestCompleteJobId =
         latest && latest.status === 'complete' ? latest.id : null
 
-      // Treat a missing/erroring questionnaire row as "no flags set". This
-      // lets the Groundwork page render meaningfully even before the
-      // migration ships and before the client has saved anything.
-      const sections: SectionCompletion =
+      // Treat a missing/erroring questionnaire row as "no answers". This
+      // lets Groundwork render before the client has saved anything.
+      const answers: QuestionnaireAnswers =
         questionnaireResult.status === 'fulfilled' &&
         !questionnaireResult.value.error
           ? ((questionnaireResult.value.data as QuestionnaireRow | null)
-              ?.section_completion ?? {})
+              ?.answers ?? {})
           : {}
 
-      const questionnaireS1 = sections.s1 === true
-      const questionnaireS2 = sections.s2 === true
-      const questionnaireS3 = sections.s3 === true
-      const questionnaireS4 = sections.s4 === true
-      const questionnaireS5 = sections.s5 === true
-      const questionnaireS6 = sections.s6 === true
-      const questionnaireS7 = sections.s7 === true
+      const questionnaireComplete = isQuestionnaireComplete(answers)
 
       // LinkedIn upload flags are tracked client-side in
       // LinkedInUploadContext (in-memory File objects) rather than on the
@@ -120,38 +111,21 @@ export function useGroundworkProgress() {
       const linkedInArchive = false
       const linkedInAnalytics = false
 
-      // The hook-level `allComplete` matches the conservative read: it's
-      // only true when every signal we can see server-side is true.
-      // GroundworkPage recomputes this against the in-memory upload state
+      // The hook-level `allComplete` matches the conservative read:
+      // GroundworkPage recomputes against the in-memory upload state
       // before enabling the submit CTA.
       const allComplete =
-        linkedInArchive &&
-        linkedInAnalytics &&
-        questionnaireS1 &&
-        questionnaireS2 &&
-        questionnaireS3 &&
-        questionnaireS4 &&
-        questionnaireS5 &&
-        questionnaireS6 &&
-        questionnaireS7
+        linkedInArchive && linkedInAnalytics && questionnaireComplete
 
       return {
         linkedInArchive,
         linkedInAnalytics,
-        questionnaireS1,
-        questionnaireS2,
-        questionnaireS3,
-        questionnaireS4,
-        questionnaireS5,
-        questionnaireS6,
-        questionnaireS7,
+        questionnaireComplete,
         allComplete,
         latestPendingJobId,
         latestCompleteJobId,
       }
     },
-    // Cheap query, but cache for a few seconds so navigating between
-    // Welcome/Groundwork doesn't refetch on every transition.
     staleTime: 5_000,
   })
 }

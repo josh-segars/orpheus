@@ -12,20 +12,12 @@ import { ForwardBriefPage } from './pages/ForwardBriefPage'
 import { GroundworkPage } from './pages/GroundworkPage'
 import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { QuestionnairePage } from './pages/QuestionnairePage'
 import { SignalScorePage } from './pages/SignalScorePage'
 import { WelcomePage } from './pages/WelcomePage'
 import { LinkedInStep1Page } from './pages/linkedin/Step1Page'
 import { LinkedInStep2Page } from './pages/linkedin/Step2Page'
 import { SignalMeterPlayground } from './pages/design/SignalMeterPlayground'
-import {
-  Section1Page,
-  Section2Page,
-  Section3Page,
-  Section4Page,
-  Section5Page,
-  Section6Page,
-  Section7Page,
-} from './pages/questionnaire/sections'
 
 export default function App() {
   return (
@@ -58,13 +50,7 @@ export default function App() {
         <Route path="/groundwork" element={<GroundworkPage />} />
         <Route path="/linkedin/step1" element={<LinkedInStep1Page />} />
         <Route path="/linkedin/step2" element={<LinkedInStep2Page />} />
-        <Route path="/questionnaire/s1" element={<Section1Page />} />
-        <Route path="/questionnaire/s2" element={<Section2Page />} />
-        <Route path="/questionnaire/s3" element={<Section3Page />} />
-        <Route path="/questionnaire/s4" element={<Section4Page />} />
-        <Route path="/questionnaire/s5" element={<Section5Page />} />
-        <Route path="/questionnaire/s6" element={<Section6Page />} />
-        <Route path="/questionnaire/s7" element={<Section7Page />} />
+        <Route path="/questionnaire" element={<QuestionnairePage />} />
         <Route path="/jobs/:jobId/analysis" element={<AnalysisPage />} />
         <Route path="/jobs/:jobId" element={<SignalScorePage />} />
         <Route path="/jobs/:jobId/forward-brief" element={<ForwardBriefPage />} />

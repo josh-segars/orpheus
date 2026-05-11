@@ -8,16 +8,16 @@ import { ApiError } from '../lib/apiClient'
 import './GroundworkPage.css'
 
 /**
- * Groundwork Checklist — the hub the client returns to between every
- * questionnaire section and LinkedIn upload step. Ported from
+ * Groundwork Checklist — the hub the client returns to between the intake
+ * questionnaire and each LinkedIn upload step. Ported from
  * orpheus-groundwork-v1.html.
  *
  * Per-item completion sources:
  *   - LinkedIn data items reflect the in-memory file state held in
  *     LinkedInUploadContext (ORPHEUS-16). Picked files survive route
  *     navigation but not a hard refresh.
- *   - Questionnaire sections reflect questionnaire_responses.section_completion
- *     (ORPHEUS-18, migration 009).
+ *   - Questionnaire completion is derived at read time from
+ *     questionnaire_responses.answers (ORPHEUS-33, migration 010).
  *   - Latest pending/complete job is read from the jobs table.
  *
  * "My Groundwork is Complete" submits the multipart POST /jobs with both
@@ -38,17 +38,9 @@ export function GroundworkPage() {
   const linkedInAnalytics = !!analytics
 
   // Derived "all complete" using the live LinkedIn flags. Questionnaire
-  // flags continue to come from the server-side row.
+  // completion is a single derived boolean (see useGroundworkProgress).
   const allComplete =
-    linkedInArchive &&
-    linkedInAnalytics &&
-    !!data?.questionnaireS1 &&
-    !!data?.questionnaireS2 &&
-    !!data?.questionnaireS3 &&
-    !!data?.questionnaireS4 &&
-    !!data?.questionnaireS5 &&
-    !!data?.questionnaireS6 &&
-    !!data?.questionnaireS7
+    linkedInArchive && linkedInAnalytics && !!data?.questionnaireComplete
 
   const handleComplete = async () => {
     setSubmitError(null)
@@ -126,39 +118,9 @@ export function GroundworkPage() {
         <div className="groundwork-checklist-group">
           <div className="groundwork-group-label">Questionnaire</div>
           <ChecklistItem
-            to="/questionnaire/s1"
-            title="Professional Identity"
-            complete={data?.questionnaireS1 ?? false}
-          />
-          <ChecklistItem
-            to="/questionnaire/s2"
-            title="Career Stage & Context"
-            complete={data?.questionnaireS2 ?? false}
-          />
-          <ChecklistItem
-            to="/questionnaire/s3"
-            title="Target Audiences"
-            complete={data?.questionnaireS3 ?? false}
-          />
-          <ChecklistItem
-            to="/questionnaire/s4"
-            title="Goals"
-            complete={data?.questionnaireS4 ?? false}
-          />
-          <ChecklistItem
-            to="/questionnaire/s5"
-            title="Current LinkedIn Relationship"
-            complete={data?.questionnaireS5 ?? false}
-          />
-          <ChecklistItem
-            to="/questionnaire/s6"
-            title="Voice & Style"
-            complete={data?.questionnaireS6 ?? false}
-          />
-          <ChecklistItem
-            to="/questionnaire/s7"
-            title="Practical Parameters"
-            complete={data?.questionnaireS7 ?? false}
+            to="/questionnaire"
+            title="Intake Questionnaire"
+            complete={data?.questionnaireComplete ?? false}
           />
         </div>
       </div>
