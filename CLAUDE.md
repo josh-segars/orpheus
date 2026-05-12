@@ -174,6 +174,7 @@ Storage shape: flat JSONB map with `q1`/`q2` as canonical-label string arrays, `
 - "My Groundwork is Complete" button stays disabled (`opacity: 0.35`) in the prototype; React port will gate via backend completion state.
 - Client identity in the React `PortalNav` is sourced from the Supabase session (LinkedIn OIDC `name` + `picture`, falling back to initials). The `Jane Doe` placeholder only survives in the HTML prototype.
 - **Intake questionnaire simplified to 9 questions on a single page on 2026-05-11** (ORPHEUS-33). Replaces the 23-question, 7-section flow. Completion derived at read time from answers content; `section_completion` column dropped in migration 010. See `Spec_Simplified_Intake_Questionnaire_2026-05-11.md` for the locked decisions.
+- **Self-serve + advisor invite flow adopted 2026-05-11** (ORPHEUS-36 onward). One `auth.users` row can own up to one `advisors` row and up to one `clients` row simultaneously, created lazily. Beta is invitation-only (no `/signup`, no Stripe). Supersedes the LinkedIn-1:1 self-serve model from `Decision_LinkedIn_Auth_2026-04-21.md` — specifically the migration-007 `on_auth_user_created` trigger and the `clients.id = auth.users.id` PK constraint. See `Decision_Self_Serve_And_Advisor_Invite_2026-05-11.md` for the full architecture.
 
 ---
 
@@ -268,15 +269,18 @@ Backend deployed on Railway, database on Supabase, frontend scaffolded with Vite
 │   ├── workers/                       # Background job processor (separate Railway service)
 │   │   └── processor.py               # Job loop with optimistic locking, 4-stage pipeline
 │   ├── migrations/                    # SQL migrations (applied via Studio SQL Editor or `supabase db push`)
+│   │   ├── 001_base_schema.sql        # Snapshot of prod public schema as of 2026-05-11 (ORPHEUS-35)
 │   │   ├── 003_v2_scoring_columns.sql
 │   │   ├── 004_rename_narratives_dimension.sql
 │   │   ├── 005_quality_report_column.sql
 │   │   ├── 006_claim_next_job_rpc.sql
-│   │   ├── 007_clients_table.sql      # public.clients + on_auth_user_created trigger + jobs.client_id FK + backfill
-│   │   ├── 008_rls_enable.sql         # RLS policies on clients/jobs and (where present) ingested_data/scores/narratives
+│   │   ├── 007_clients_table.sql      # HISTORICAL — LinkedIn 1:1 design, on_auth_user_created trigger retired by ORPHEUS-36
+│   │   ├── 008_rls_enable.sql         # HISTORICAL — simpler RLS than prod's _as_advisor/_as_client framework
 │   │   ├── 008_rls_verify.sql         # Companion: two-tenant isolation check (BEGIN ... ROLLBACK)
-│   │   ├── 009_questionnaire_responses.sql  # public.questionnaire_responses + RLS (ORPHEUS-18 shape, superseded by 010)
-│   │   └── 010_questionnaire_simplified.sql # TRUNCATE + DROP section_completion for 9-question intake (ORPHEUS-33)
+│   │   ├── 009_questionnaire_responses.sql  # HISTORICAL — superseded by 010 (and by 011 against the prod-base path)
+│   │   ├── 010_questionnaire_simplified.sql # HISTORICAL — local-dev path; on the prod-base path use 011 instead
+│   │   ├── 011_questionnaire_align_to_spec.sql  # Reshape questionnaire_responses to ORPHEUS-33 spec on top of 001 (ORPHEUS-35)
+│   │   └── 012_clients_invitation_columns.sql   # invitation_token + invitation_expires_at on public.clients (ORPHEUS-36)
 │   ├── tests/                         # Test suite (pytest)
 │   │   ├── test_scoring.py            # 48 tests for scoring engine
 │   │   ├── test_narrative.py          # 8 tests for quality report formatting

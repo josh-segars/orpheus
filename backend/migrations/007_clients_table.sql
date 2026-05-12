@@ -19,6 +19,17 @@
 -- ORPHEUS-35 for the full drift story; a future migration will need to
 -- bring prod into a coherent architecture before this file's design
 -- can ship.
+--
+-- 2026-05-12 update (ORPHEUS-36): the on_auth_user_created trigger
+-- below is explicitly RETIRED. The advisor-managed invitation flow
+-- from Decision_Self_Serve_And_Advisor_Invite_2026-05-11.md supersedes
+-- the auto-create-on-first-LinkedIn-sign-in design: clients rows are
+-- now created by /clients/invite ahead of LinkedIn sign-in, then
+-- linked at /accept-invitation. There is no scenario in which the
+-- post-decision codebase wants this trigger active. The trigger
+-- function and CREATE TRIGGER statement remain in this file purely as
+-- historical record of the ORPHEUS-23 design intent — they must NEVER
+-- be applied to prod.
 -- =====================================================================
 --
 -- Migration 007: public.clients table + on_auth_user_created trigger + FK on jobs
