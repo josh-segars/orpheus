@@ -6,8 +6,9 @@
  * calls to the backend.
  *
  * Every authenticated request carries `Authorization: Bearer <access_token>`
- * pulled from the current Supabase session. The backend's get_current_client
- * dependency (backend/auth.py) verifies the token against Supabase JWKS.
+ * pulled from the current Supabase session. The backend's
+ * get_current_session_roles dependency (backend/auth.py) verifies the token
+ * against Supabase JWKS and resolves the user's advisor/client role(s).
  */
 
 import { supabase } from './supabase'

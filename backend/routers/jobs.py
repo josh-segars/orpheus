@@ -19,7 +19,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
-from backend.auth import CurrentClient, get_current_client
+from backend.auth import SessionRoles, get_current_session_roles
 from backend.db import get_service_client, user_scoped_supabase
 from backend.ingestion.xlsx_parser import parse_xlsx
 from backend.ingestion.zip_parser import parse_zip
@@ -49,7 +49,7 @@ _MAX_ANALYTICS_BYTES = 25 * 1024 * 1024  # 25 MB
 async def create_job(
     archive: Annotated[UploadFile, File(description="LinkedIn complete data archive (ZIP).")],
     analytics: Annotated[UploadFile, File(description="LinkedIn Analytics export (XLSX).")],
-    current: CurrentClient = Depends(get_current_client),
+    roles: SessionRoles = Depends(get_current_session_roles),
 ) -> Job:
     """Create a new analysis job from a client's uploaded LinkedIn data.
 
@@ -69,7 +69,19 @@ async def create_job(
     Returns the freshly-created Job (state=pending, no result yet). The
     frontend redirects to the Analysis-in-Progress screen which polls
     GET /jobs/{id} for completion.
+
+    Requires the client role — advisors hitting this endpoint without an
+    accompanying clients row get a 403, not silent acceptance into a
+    job they couldn't see afterward.
     """
+
+    if not roles.is_client():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Submitting a diagnostic requires a client profile.",
+        )
+    client_id = roles.client_id
+    assert client_id is not None  # narrowed by is_client() guard above
 
     # ── 1. Read & validate uploads ─────────────────────────────────────
 
@@ -86,7 +98,7 @@ async def create_job(
         # parse_zip raises BadZipFile / FileNotFoundError / KeyError on
         # malformed inputs. Surface a stable 400 to the client.
         logger.warning(
-            "ZIP parse failed for client %s: %s", current.client_id, exc
+            "ZIP parse failed for client %s: %s", client_id, exc
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -101,7 +113,7 @@ async def create_job(
         xlsx_data = parse_xlsx(analytics_bytes)
     except Exception as exc:
         logger.warning(
-            "XLSX parse failed for client %s: %s", current.client_id, exc
+            "XLSX parse failed for client %s: %s", client_id, exc
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -120,7 +132,7 @@ async def create_job(
         supabase.table("jobs")
         .insert(
             {
-                "client_id": current.client_id,
+                "client_id": client_id,
                 "status": "pending",
             }
         )
@@ -135,16 +147,16 @@ async def create_job(
     job_id = str(job_row["id"])
 
     logger.info(
-        "Created pending job %s for client %s", job_id, current.client_id
+        "Created pending job %s for client %s", job_id, client_id
     )
 
     # ── 4. Upload raw bytes to Supabase Storage ────────────────────────
 
     archive_path = (
-        f"{current.client_id}/{job_id}/{_ARCHIVE_FILENAME}"
+        f"{client_id}/{job_id}/{_ARCHIVE_FILENAME}"
     )
     analytics_path = (
-        f"{current.client_id}/{job_id}/{_ANALYTICS_FILENAME}"
+        f"{client_id}/{job_id}/{_ANALYTICS_FILENAME}"
     )
     try:
         supabase.storage.from_(_STORAGE_BUCKET).upload(
@@ -225,20 +237,32 @@ async def create_job(
 @router.get("/{job_id}", response_model=Job)
 async def get_job(
     job_id: str,
-    current: CurrentClient = Depends(get_current_client),
+    roles: SessionRoles = Depends(get_current_session_roles),
 ) -> Job:
     """Fetch a single job by id. Caller must own it.
 
     Returns 404 for either "no such job" or "job belongs to someone else" —
     we don't leak the existence of another client's jobs.
+
+    Requires the client role; advisor-only sessions get a 403. (Advisor
+    visibility into client jobs goes through the future /advisor/clients
+    routes, which use the advisor's own RLS policy on jobs.)
     """
-    supabase = user_scoped_supabase(current.access_token)
+    if not roles.is_client():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Viewing a diagnostic requires a client profile.",
+        )
+    client_id = roles.client_id
+    assert client_id is not None  # narrowed by is_client() guard above
+
+    supabase = user_scoped_supabase(roles.access_token)
 
     result = (
         supabase.table("jobs")
         .select("*")
         .eq("id", job_id)
-        .eq("client_id", current.client_id)
+        .eq("client_id", client_id)
         .limit(1)
         .execute()
     )

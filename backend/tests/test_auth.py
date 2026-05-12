@@ -4,13 +4,19 @@ We generate our own RSA keypair and sign tokens with it, then monkey-patch
 the JWKS cache to return the matching public key. This exercises the real
 PyJWT verification path without needing a live Supabase instance.
 
-Acceptance criteria from ORPHEUS-27:
-  - expired token → 401
-  - wrong audience → 401
-  - unknown kid    → 401
-  - missing sub    → 401
-  - no clients row → 401
-Plus baseline happy-path and malformed-header coverage.
+Coverage:
+  Token-verification (inherited from ORPHEUS-27):
+    - expired token → 401
+    - wrong audience → 401
+    - wrong issuer → 401
+    - unknown kid → 401
+    - missing sub → 401
+    - malformed or missing Authorization header → 401
+  Role resolution (ORPHEUS-37):
+    - advisor-only user → SessionRoles with advisor_id set, client_id None
+    - client-only user → SessionRoles with client_id set, advisor_id None
+    - both roles → SessionRoles with both populated
+    - neither role → 401 with "not invited" detail (NOT 500)
 """
 
 from __future__ import annotations
@@ -36,6 +42,8 @@ ISSUER = f"{SUPABASE_URL}/auth/v1"
 KID = "test-kid-1"
 SUB = "11111111-2222-3333-4444-555555555555"
 EMAIL = "jane@example.com"
+ADVISOR_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+CLIENT_ID = "99999999-8888-7777-6666-555555555555"
 
 # Required env vars for backend.config.Settings to instantiate. The auth
 # module under test only reads supabase_url + supabase_jwt_audience, but
@@ -118,7 +126,13 @@ class FakeResult:
 
 
 class FakeTable:
-    """Minimal stand-in for supabase-py's query builder."""
+    """Minimal stand-in for supabase-py's query builder.
+
+    Accepts any chain of `.select(...).eq(...).limit(...)` and returns a
+    pre-baked row (or empty list) on `.execute()`. The chain isn't
+    actually inspected — we trust the caller to construct it correctly
+    and only assert on the resolver's externally observable behavior.
+    """
 
     def __init__(self, row: dict | None):
         self._row = row
@@ -137,34 +151,120 @@ class FakeTable:
 
 
 class FakeServiceClient:
-    def __init__(self, clients_row: dict | None):
+    """Fake supabase service client supporting independent advisors + clients rows.
+
+    Pass `advisors_row` and/or `clients_row` to model each of the four
+    role permutations (advisor-only, client-only, both, neither). Each
+    table call is dispatched to its own FakeTable so the resolver's two
+    SELECTs are exercised independently.
+    """
+
+    def __init__(
+        self,
+        *,
+        advisors_row: dict | None = None,
+        clients_row: dict | None = None,
+    ):
+        self._advisors_row = advisors_row
         self._clients_row = clients_row
 
     def table(self, name: str):
+        if name == "advisors":
+            return FakeTable(self._advisors_row)
         if name == "clients":
             return FakeTable(self._clients_row)
         raise AssertionError(f"Unexpected table access: {name}")
 
 
+def _service_client_with(
+    *,
+    advisors_row: dict | None = None,
+    clients_row: dict | None = None,
+):
+    """Build a `patch.object(auth_mod, 'get_service_client', return_value=...)` context."""
+    return patch.object(
+        auth_mod,
+        "get_service_client",
+        return_value=FakeServiceClient(
+            advisors_row=advisors_row,
+            clients_row=clients_row,
+        ),
+    )
+
+
 # --------------------------------------------------------------------------- #
-# Tests
+# Happy paths — role permutations
 # --------------------------------------------------------------------------- #
 
 @pytest.mark.asyncio
-async def test_happy_path_returns_current_client(rsa_keypair):
+async def test_advisor_only_role(rsa_keypair):
+    """User has an advisors row but no clients row — advisor_id set, client_id None."""
     private_key, _ = rsa_keypair
     token = _sign(_valid_claims(), private_key)
 
-    with patch.object(
-        auth_mod, "get_service_client", return_value=FakeServiceClient({"id": SUB})
+    with _service_client_with(advisors_row={"id": ADVISOR_ID}, clients_row=None):
+        roles = await auth_mod.get_current_session_roles(f"Bearer {token}")
+
+    assert roles.user_id == SUB
+    assert roles.email == EMAIL
+    assert roles.access_token == token
+    assert roles.advisor_id == ADVISOR_ID
+    assert roles.client_id is None
+    assert roles.is_advisor() is True
+    assert roles.is_client() is False
+
+
+@pytest.mark.asyncio
+async def test_client_only_role(rsa_keypair):
+    """User has a clients row but no advisors row — client_id set, advisor_id None."""
+    private_key, _ = rsa_keypair
+    token = _sign(_valid_claims(), private_key)
+
+    with _service_client_with(advisors_row=None, clients_row={"id": CLIENT_ID}):
+        roles = await auth_mod.get_current_session_roles(f"Bearer {token}")
+
+    assert roles.user_id == SUB
+    assert roles.advisor_id is None
+    assert roles.client_id == CLIENT_ID
+    assert roles.is_advisor() is False
+    assert roles.is_client() is True
+
+
+@pytest.mark.asyncio
+async def test_both_roles(rsa_keypair):
+    """User holds both an advisors row and a clients row — Andrew's case."""
+    private_key, _ = rsa_keypair
+    token = _sign(_valid_claims(), private_key)
+
+    with _service_client_with(
+        advisors_row={"id": ADVISOR_ID},
+        clients_row={"id": CLIENT_ID},
     ):
-        current = await auth_mod.get_current_client(f"Bearer {token}")
+        roles = await auth_mod.get_current_session_roles(f"Bearer {token}")
 
-    assert current.user_id == SUB
-    assert current.client_id == SUB
-    assert current.email == EMAIL
-    assert current.access_token == token
+    assert roles.advisor_id == ADVISOR_ID
+    assert roles.client_id == CLIENT_ID
+    assert roles.is_advisor() is True
+    assert roles.is_client() is True
 
+
+@pytest.mark.asyncio
+async def test_neither_role_returns_401(rsa_keypair):
+    """Token is valid but no advisors or clients row exists — clean 401, not a 500."""
+    private_key, _ = rsa_keypair
+    token = _sign(_valid_claims(), private_key)
+
+    with _service_client_with(advisors_row=None, clients_row=None):
+        with pytest.raises(HTTPException) as exc:
+            await auth_mod.get_current_session_roles(f"Bearer {token}")
+
+    assert exc.value.status_code == 401
+    assert "advisor or client profile" in exc.value.detail.lower()
+
+
+# --------------------------------------------------------------------------- #
+# Token-verification edge cases
+# --------------------------------------------------------------------------- #
 
 @pytest.mark.asyncio
 async def test_expired_token_returns_401(rsa_keypair):
@@ -172,11 +272,9 @@ async def test_expired_token_returns_401(rsa_keypair):
     claims = _valid_claims(exp=int(time.time()) - 10, iat=int(time.time()) - 3600)
     token = _sign(claims, private_key)
 
-    with patch.object(
-        auth_mod, "get_service_client", return_value=FakeServiceClient({"id": SUB})
-    ):
+    with _service_client_with(clients_row={"id": CLIENT_ID}):
         with pytest.raises(HTTPException) as exc:
-            await auth_mod.get_current_client(f"Bearer {token}")
+            await auth_mod.get_current_session_roles(f"Bearer {token}")
 
     assert exc.value.status_code == 401
     assert "expired" in exc.value.detail.lower()
@@ -187,11 +285,9 @@ async def test_wrong_audience_returns_401(rsa_keypair):
     private_key, _ = rsa_keypair
     token = _sign(_valid_claims(aud="some-other-audience"), private_key)
 
-    with patch.object(
-        auth_mod, "get_service_client", return_value=FakeServiceClient({"id": SUB})
-    ):
+    with _service_client_with(clients_row={"id": CLIENT_ID}):
         with pytest.raises(HTTPException) as exc:
-            await auth_mod.get_current_client(f"Bearer {token}")
+            await auth_mod.get_current_session_roles(f"Bearer {token}")
 
     assert exc.value.status_code == 401
     assert "audience" in exc.value.detail.lower()
@@ -202,11 +298,9 @@ async def test_wrong_issuer_returns_401(rsa_keypair):
     private_key, _ = rsa_keypair
     token = _sign(_valid_claims(iss="https://evil.example.com/auth/v1"), private_key)
 
-    with patch.object(
-        auth_mod, "get_service_client", return_value=FakeServiceClient({"id": SUB})
-    ):
+    with _service_client_with(clients_row={"id": CLIENT_ID}):
         with pytest.raises(HTTPException) as exc:
-            await auth_mod.get_current_client(f"Bearer {token}")
+            await auth_mod.get_current_session_roles(f"Bearer {token}")
 
     assert exc.value.status_code == 401
     assert "issuer" in exc.value.detail.lower()
@@ -224,11 +318,9 @@ async def test_unknown_kid_returns_401(rsa_keypair, monkeypatch):
 
     monkeypatch.setattr(auth_mod._JWKSCache, "_refresh", _no_refresh)
 
-    with patch.object(
-        auth_mod, "get_service_client", return_value=FakeServiceClient({"id": SUB})
-    ):
+    with _service_client_with(clients_row={"id": CLIENT_ID}):
         with pytest.raises(HTTPException) as exc:
-            await auth_mod.get_current_client(f"Bearer {token}")
+            await auth_mod.get_current_session_roles(f"Bearer {token}")
 
     assert exc.value.status_code == 401
     assert "kid" in exc.value.detail.lower()
@@ -246,29 +338,11 @@ async def test_missing_sub_returns_401(rsa_keypair):
     claims.pop("sub")
     token = _sign(claims, private_key)
 
-    with patch.object(
-        auth_mod, "get_service_client", return_value=FakeServiceClient({"id": SUB})
-    ):
+    with _service_client_with(clients_row={"id": CLIENT_ID}):
         with pytest.raises(HTTPException) as exc:
-            await auth_mod.get_current_client(f"Bearer {token}")
+            await auth_mod.get_current_session_roles(f"Bearer {token}")
 
     assert exc.value.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_no_clients_row_returns_401(rsa_keypair):
-    """Token is valid but no public.clients row exists (e.g. unverified email that slipped the trigger)."""
-    private_key, _ = rsa_keypair
-    token = _sign(_valid_claims(), private_key)
-
-    with patch.object(
-        auth_mod, "get_service_client", return_value=FakeServiceClient(None)
-    ):
-        with pytest.raises(HTTPException) as exc:
-            await auth_mod.get_current_client(f"Bearer {token}")
-
-    assert exc.value.status_code == 401
-    assert "client profile" in exc.value.detail.lower()
 
 
 @pytest.mark.asyncio
@@ -285,6 +359,6 @@ async def test_no_clients_row_returns_401(rsa_keypair):
 )
 async def test_malformed_or_missing_header_returns_401(header):
     with pytest.raises(HTTPException) as exc:
-        await auth_mod.get_current_client(header)
+        await auth_mod.get_current_session_roles(header)
 
     assert exc.value.status_code == 401

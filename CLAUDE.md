@@ -248,10 +248,10 @@ Backend deployed on Railway, database on Supabase, frontend scaffolded with Vite
 │   ├── main.py                        # App entry; CORS allowlist + Settings validation at boot
 │   ├── config.py                      # Pydantic BaseSettings — fail-fast validation of required env
 │   ├── db.py                          # get_service_client (RLS-bypass) + user_scoped_supabase(token)
-│   ├── auth.py                        # get_current_client dependency: JWT verification via cached Supabase JWKS
+│   ├── auth.py                        # get_current_session_roles dependency: JWT verification via cached Supabase JWKS
 │   ├── routers/                       # API route handlers
 │   │   ├── __init__.py
-│   │   └── jobs.py                    # GET /jobs/{id} — depends on get_current_client + user_scoped_supabase
+│   │   └── jobs.py                    # GET /jobs/{id} — depends on get_current_session_roles + user_scoped_supabase
 │   ├── models/                        # Pydantic data models
 │   │   ├── job.py                     # Job state model
 │   │   ├── scoring.py                 # v2 scoring output models (ScoringStageOutput)
@@ -354,7 +354,7 @@ None of these are committed. Templates with inline comments live at `backend/.en
 
 - Use `async/await` throughout — FastAPI and Supabase client are both async
 - All env reads flow through `backend.config.get_settings()` (Pydantic `BaseSettings`). The app fails fast at boot when required vars are missing. Worker process still has its own three `os.environ` reads — consolidating is a small follow-up.
-- API routes live in `/backend/routers/` — one file per resource. Client-facing routes depend on `get_current_client` (in `backend/auth.py`), which JWT-verifies the Bearer token against the cached Supabase JWKS, fetches the matching `public.clients` row, and returns a typed `CurrentClient(user_id, client_id, email, access_token)`. `auth.py` supports both RS256 and ES256 signatures and reads JWKS from `/auth/v1/.well-known/jwks.json` (the post-GoTrue-v2 path).
+- API routes live in `/backend/routers/` — one file per resource. Client-facing routes depend on `get_current_session_roles` (in `backend/auth.py`), which JWT-verifies the Bearer token against the cached Supabase JWKS and then runs two independent SELECTs against `public.advisors` and `public.clients` (keyed on `user_id = sub`) to populate a typed `SessionRoles(user_id, email, access_token, advisor_id, client_id)`. A user may hold one role, both, or — for the typed 401 "not invited" case — neither. Route handlers gate themselves on `roles.is_advisor()` / `roles.is_client()` and raise 403 if their required role is missing. `auth.py` supports both RS256 and ES256 signatures and reads JWKS from `/auth/v1/.well-known/jwks.json` (the post-GoTrue-v2 path). Replaces the pre-ORPHEUS-37 `CurrentClient` / `get_current_client` single-role dependency.
 - Two Supabase client patterns:
   - `get_service_client()` — service-role, RLS-bypassing. Cached. Used by the worker, admin endpoints, and the JWT-verification dependency itself (which needs to read `public.clients` before any user context is available).
   - `user_scoped_supabase(access_token)` — fresh per-request, JWT attached via `postgrest.auth(token)`. Client-facing routes must use this so the migration-008 RLS policies enforce ownership. Caching this client across requests would cause auth bleed.

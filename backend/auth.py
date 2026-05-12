@@ -1,23 +1,46 @@
 """FastAPI auth dependencies for client-facing and admin-facing routes.
 
-Ships with ORPHEUS-27 (client) — ORPHEUS-31 adds the admin dependency.
+Refactored under ORPHEUS-37 to support the post-2026-05-11 decision
+(Decision_Self_Serve_And_Advisor_Invite_2026-05-11.md):
+
+  A single `auth.users` row can own up to one `public.advisors` row AND
+  up to one `public.clients` row at the same time. Andrew (the advisor
+  running the practice + analyzing himself) is the motivating case.
 
 The flow:
 
   1. Request arrives with Authorization: Bearer <supabase_jwt>.
-  2. `get_current_client` parses the header, fetches the Supabase project's
-     JWKS (RS256 or ES256 public keys), verifies signature + iss + aud +
-     exp, extracts `sub`, looks up the matching public.clients row via
-     the service-role client, and returns a typed CurrentClient.
-  3. Route handlers depend on `get_current_client` and use
-     `user_scoped_supabase(token)` from backend/db.py for all data queries
-     so RLS policies see auth.uid() == client_id.
+  2. `get_current_session_roles` parses the header, fetches the Supabase
+     project's JWKS (RS256 or ES256 public keys), verifies signature +
+     iss + aud + exp, extracts `sub`.
+  3. Two independent SELECTs against `public.advisors` and
+     `public.clients` keyed on `user_id = sub` populate the optional
+     `advisor_id` and `client_id` fields of a `SessionRoles` dataclass.
+  4. If the token verifies but neither business row exists, the resolver
+     raises a clean 401 ("not invited") rather than letting downstream
+     RLS quietly return empty result sets that would surface as a 500
+     somewhere.
+  5. Route handlers depend on `get_current_session_roles` and gate
+     themselves on `roles.is_client()` / `roles.is_advisor()` to express
+     which role(s) they require. For data queries they use
+     `user_scoped_supabase(token)` from backend/db.py so RLS policies see
+     auth.uid() and the prod `get_advisor_id()` / `get_client_id()`
+     SECURITY DEFINER helpers resolve correctly.
 
 The JWKS is cached with a TTL so we're not fetching on every request but
 key rotation still lands within a reasonable window.
 
-Testing: backend/tests/test_auth.py covers the edge cases called out in
-ORPHEUS-27 (expired, wrong audience, unknown kid, missing clients row).
+Replaces the pre-ORPHEUS-37 `CurrentClient` / `get_current_client`
+single-role dependency. That model assumed `clients.id = auth.users.id`
+(LinkedIn 1:1, migration 007). Prod has been on the advisor-managed
+invite shape for a while now: `clients.id` is a separate uuid, linked
+to `auth.users.id` via `clients.user_id`, and the same auth user can
+simultaneously own an `advisors` row.
+
+Testing: backend/tests/test_auth.py covers the role permutations
+(advisor-only / client-only / both / neither) plus the inherited token-
+verification edge cases (expired, wrong audience, wrong issuer, unknown
+kid, missing sub, malformed/missing header).
 """
 
 from __future__ import annotations
@@ -28,7 +51,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import jwt
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Header, HTTPException, status
 
 from backend.config import get_settings
 from backend.db import get_service_client
@@ -50,17 +73,34 @@ JWKS_CACHE_SECONDS = 600
 # --------------------------------------------------------------------------- #
 
 @dataclass(frozen=True)
-class CurrentClient:
-    """Resolved identity for a logged-in portal client.
+class SessionRoles:
+    """Resolved identity + role assignments for a logged-in Supabase user.
 
-    `user_id` and `client_id` are the same uuid (public.clients.id == auth.users.id),
-    but we expose both so call sites can express intent clearly.
+    `user_id` is always populated from the JWT `sub` claim. `advisor_id`
+    and `client_id` are the matching business-row PKs (NOT the auth user
+    id — `clients.id` and `advisors.id` are separate uuids that link to
+    auth.users via their `user_id` column). Either may be `None` if the
+    user holds only one role; both may be set if the user is both an
+    advisor and a client (e.g. Andrew running his own diagnostic).
+
+    `access_token` is passed through so route handlers can construct a
+    per-request user-scoped Supabase client for RLS-bounded data queries.
+
+    The "neither role" case never reaches a SessionRoles instance —
+    `get_current_session_roles` raises 401 first.
     """
 
     user_id: str
-    client_id: str
     email: str
-    access_token: str  # passed through so route handlers can build a user-scoped Supabase client
+    access_token: str
+    advisor_id: str | None
+    client_id: str | None
+
+    def is_advisor(self) -> bool:
+        return self.advisor_id is not None
+
+    def is_client(self) -> bool:
+        return self.client_id is not None
 
 
 # --------------------------------------------------------------------------- #
@@ -242,20 +282,54 @@ def _verify_jwt(token: str) -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------- #
+# Role lookup
+# --------------------------------------------------------------------------- #
+
+def _lookup_role_id(table: str, user_id: str) -> str | None:
+    """Return `{table}.id` for the row where `user_id = user_id`, or None.
+
+    Uses the service-role client because we don't have user RLS context
+    yet — the whole point of this lookup is to establish that context.
+    The query is keyed on `user_id` (FK to auth.users), not on `id`, so
+    it works for both the advisors and clients tables, which both use
+    surrogate uuid PKs distinct from auth.users.id.
+    """
+    service = get_service_client()
+    result = (
+        service.table(table)
+        .select("id")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        return None
+    return str(result.data[0]["id"])
+
+
+# --------------------------------------------------------------------------- #
 # FastAPI dependencies
 # --------------------------------------------------------------------------- #
 
-async def get_current_client(
+async def get_current_session_roles(
     authorization: str | None = Header(default=None),
-) -> CurrentClient:
-    """FastAPI dependency resolving the caller to a CurrentClient.
+) -> SessionRoles:
+    """FastAPI dependency resolving the caller to a SessionRoles dataclass.
 
-    Raises 401 if any step of verification fails, or if no public.clients row
-    exists for the token's subject. The "no clients row" branch should only
-    fire if something broke between auth.users insertion and the
-    on_auth_user_created trigger (migration 007). In practice that means
-    unverified emails, which the trigger explicitly aborts — so a 401 here is
-    the correct response, not a 404.
+    Verifies the bearer JWT, then issues two independent SELECTs against
+    `public.advisors` and `public.clients` keyed on `user_id = sub`. The
+    queries are sequential but semantically parallel — each table has
+    its own RLS scope (here bypassed via service-role) and the results
+    don't depend on each other.
+
+    Raises 401 if:
+      - The Authorization header is missing or malformed.
+      - The JWT fails signature / iss / aud / exp / required-claims checks.
+      - The JWT verifies but neither an advisors nor a clients row links
+        to it. This case represents "authenticated user, never invited
+        and never signed up" — the frontend can use the typed 401 to
+        show a clean error UI rather than redirecting to /login as if
+        the session expired.
     """
     token = _extract_bearer_token(authorization)
     claims = _verify_jwt(token)
@@ -268,31 +342,23 @@ async def get_current_client(
             detail="JWT missing required claims (sub, email).",
         )
 
-    service = get_service_client()
-    result = (
-        service.table("clients")
-        .select("id")
-        .eq("id", sub)
-        .limit(1)
-        .execute()
-    )
+    advisor_id = _lookup_role_id("advisors", str(sub))
+    client_id = _lookup_role_id("clients", str(sub))
 
-    if not result.data:
-        # Auth row exists but no business row — treat as "unknown client".
-        # Most commonly: a pre-trigger sign-in that was aborted, or a row
-        # deleted out of band. Either way, the caller is not authorized.
+    if advisor_id is None and client_id is None:
+        # The token is cryptographically valid but no business row owns
+        # the user. Most commonly: a Supabase signup that never received
+        # an invitation (or whose invitation hasn't been accepted yet).
+        # The frontend treats this as a typed "not invited" state.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No client profile is associated with this account.",
+            detail="No advisor or client profile is associated with this account.",
         )
 
-    return CurrentClient(
+    return SessionRoles(
         user_id=str(sub),
-        client_id=str(sub),
         email=str(email),
         access_token=token,
+        advisor_id=advisor_id,
+        client_id=client_id,
     )
-
-
-# Alias for route handlers that prefer a named dependency.
-CurrentClientDep = Depends(get_current_client)
