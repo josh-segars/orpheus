@@ -1,0 +1,62 @@
+/* Visual styles for the email-mismatch confirmation card.
+ *
+ * v1 ships plain — no logo, no brand color beyond the design tokens
+ * inherited from orpheus-styles.css. The visual design pass per the
+ * ORPHEUS-38 spec happens after the first real client sees this UI.
+ */
+
+.mismatch-card {
+  /* Slightly wider than the login card to fit two emails side by side. */
+  max-width: 520px;
+}
+
+.mismatch-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 24px 0;
+  padding: 20px;
+  background: var(--warm-parchment);
+  border: 1px solid var(--warm-border);
+  border-radius: 10px;
+}
+
+.mismatch-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.mismatch-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--warm-stone);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mismatch-value {
+  margin: 0;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 1rem;
+  color: var(--warm-text);
+  word-break: break-all;
+}
+
+.mismatch-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.mismatch-cancel {
+  background: transparent;
+  color: var(--deep-slate);
+  border: 1px solid var(--warm-border);
+}
+
+.mismatch-cancel:hover:not(:disabled) {
+  background: var(--warm-parchment);
+}

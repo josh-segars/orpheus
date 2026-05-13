@@ -346,10 +346,6 @@ function InterpretationProse({ composite, band }: InterpretationProseProps) {
 
 // --- Helpers --------------------------------------------------------------
 
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n))
-}
-
 /**
  * Map a sub-dimension score onto one of three visual tones used by the
  * indicator list. Rubric and quantitative scores are on different scales,

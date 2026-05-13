@@ -10,6 +10,7 @@ import { AnalysisPage } from './pages/AnalysisPage'
 import { CheatSheetPage } from './pages/CheatSheetPage'
 import { ForwardBriefPage } from './pages/ForwardBriefPage'
 import { GroundworkPage } from './pages/GroundworkPage'
+import { InviteCallbackPage } from './pages/InviteCallbackPage'
 import { InviteLandingPage } from './pages/InviteLandingPage'
 import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
@@ -31,9 +32,17 @@ export default function App() {
 
       {/* Invitation landing — public, side-effect-only redirect into LinkedIn OAuth.
           MUST sit outside ProtectedRoute: the visitor is by definition not yet
-          authenticated, and the callback (/invite/callback, commit #9) needs to
-          run before they have a clients row to satisfy ProtectedRoute. */}
+          authenticated, and the callback (/invite/callback) needs to run before
+          they have a clients row to satisfy ProtectedRoute. */}
       <Route path="/invite/:token" element={<InviteLandingPage />} />
+
+      {/* Post-OAuth callback — calls POST /accept-invitation, then either
+          surfaces the email-mismatch confirmation UI or redirects to /.
+          Public because the user has a Supabase session but no clients row
+          yet; ProtectedRoute (or the future session-roles check) would
+          bounce them otherwise. React Router v6 prioritises static
+          segments, so this path matches before /invite/:token. */}
+      <Route path="/invite/callback" element={<InviteCallbackPage />} />
 
       {/* Authenticated portal — LinkedInUploadProvider wraps the layout so
           the in-memory ZIP/XLSX File state persists across navigation

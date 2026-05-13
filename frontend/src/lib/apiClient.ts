@@ -53,6 +53,49 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
 }
 
 /**
+ * POST a JSON body. Used by the invitation flow (ORPHEUS-38) and any
+ * future endpoint where the request shape isn't multipart.
+ *
+ * Pairs with the backend's Pydantic-validated request models — the
+ * shape mismatch case surfaces as a 422 with FastAPI's standard
+ * `{detail: [{loc, msg, type}, ...]}` body, which the ApiError carries
+ * through to callers.
+ */
+export async function apiPostJson<T>(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    ...(await authHeaders()),
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+    signal,
+  })
+  if (!res.ok) {
+    let responseBody: unknown = null
+    try {
+      responseBody = await res.json()
+    } catch {
+      // body wasn't JSON — fine, leave null
+    }
+    throw new ApiError(
+      `POST ${path} failed: ${res.status}`,
+      res.status,
+      responseBody,
+    )
+  }
+  return (await res.json()) as T
+}
+
+/**
  * POST a multipart/form-data body. Used by the LinkedIn upload flow
  * (ORPHEUS-16) to submit the ZIP archive + XLSX analytics to /jobs.
  *
