@@ -86,6 +86,42 @@ class Settings(BaseSettings):
         description="Comma-separated list of allowed CORS origins. Vite dev server by default.",
     )
 
+    # --- Resend / invitation flow (ORPHEUS-38) ---------------------------- #
+
+    resend_api_key: str = Field(
+        ...,
+        alias="RESEND_API_KEY",
+        description=(
+            "Resend transactional-email API key. Production keys start with "
+            "`re_`. Keys starting with `test_` (or the literal `test`) "
+            "trigger sandbox mode in backend/email/resend_client.py — the "
+            "wrapper logs the would-be email and returns a fake message id "
+            "instead of making a network call. Used in pytest + CI."
+        ),
+    )
+
+    app_base_url: str = Field(
+        ...,
+        alias="APP_BASE_URL",
+        description=(
+            "Public base URL of the frontend app. Used to construct the "
+            "invitation link sent in transactional emails "
+            "(`{APP_BASE_URL}/invite/<token>`). Prod: "
+            "https://app.orpheussocial.com. Local e2e: http://localhost:5173."
+        ),
+    )
+
+    invitation_expiry_days: int = Field(
+        default=14,
+        alias="INVITATION_EXPIRY_DAYS",
+        description=(
+            "Lifetime of an unaccepted invitation, in days. The backend "
+            "enforces expiry at acceptance time (no DB-level check), so "
+            "shortening this only affects newly issued tokens. Default "
+            "matches the spec — 14 days."
+        ),
+    )
+
     # --- Validators ------------------------------------------------------- #
 
     @field_validator("supabase_url")
@@ -99,6 +135,31 @@ class Settings(BaseSettings):
                 f"(got: {value!r})"
             )
         return value.rstrip("/")
+
+    @field_validator("app_base_url")
+    @classmethod
+    def _validate_app_base_url(cls, value: str) -> str:
+        # The invitation email contains a link built from this value; if it's
+        # malformed we'd ship broken links to clients. Cheap to validate at
+        # boot.
+        if not value:
+            raise ValueError("APP_BASE_URL must be set")
+        if not (value.startswith("http://") or value.startswith("https://")):
+            raise ValueError(
+                "APP_BASE_URL must start with http:// or https:// "
+                f"(got: {value!r})"
+            )
+        return value.rstrip("/")
+
+    @field_validator("invitation_expiry_days")
+    @classmethod
+    def _validate_invitation_expiry_days(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError(
+                "INVITATION_EXPIRY_DAYS must be >= 1 "
+                f"(got: {value})"
+            )
+        return value
 
     @field_validator("frontend_origins")
     @classmethod

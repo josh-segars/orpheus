@@ -10,19 +10,26 @@ Refactored under ORPHEUS-37 to support the post-2026-05-11 decision
 The flow:
 
   1. Request arrives with Authorization: Bearer <supabase_jwt>.
-  2. `get_current_session_roles` parses the header, fetches the Supabase
-     project's JWKS (RS256 or ES256 public keys), verifies signature +
-     iss + aud + exp, extracts `sub`.
+  2. `_resolve_session` parses the header, fetches the Supabase project's
+     JWKS (RS256 or ES256 public keys), verifies signature + iss + aud +
+     exp, extracts `sub`.
   3. Two independent SELECTs against `public.advisors` and
      `public.clients` keyed on `user_id = sub` populate the optional
      `advisor_id` and `client_id` fields of a `SessionRoles` dataclass.
-  4. If the token verifies but neither business row exists, the resolver
-     raises a clean 401 ("not invited") rather than letting downstream
-     RLS quietly return empty result sets that would surface as a 500
-     somewhere.
-  5. Route handlers depend on `get_current_session_roles` and gate
-     themselves on `roles.is_client()` / `roles.is_advisor()` to express
-     which role(s) they require. For data queries they use
+  4. Two public dependencies wrap `_resolve_session`:
+       * `get_current_session_roles` raises a clean 401 ("not invited")
+         when neither business row exists. This is the right behavior for
+         the 99% of authenticated routes that need a known role —
+         downstream RLS would otherwise return empty result sets that
+         surface as confusing 500s.
+       * `get_verified_session` (ORPHEUS-38) accepts the neither-role
+         case and returns a SessionRoles with both role fields `None`.
+         Used by `/accept-invitation` (where the caller is freshly
+         signed in but the clients row hasn't been linked yet) and by
+         `GET /session` (the canonical "is the user invited" probe).
+  5. Route handlers depend on the appropriate variant and gate themselves
+     on `roles.is_client()` / `roles.is_advisor()` to express which
+     role(s) they require. For data queries they use
      `user_scoped_supabase(token)` from backend/db.py so RLS policies see
      auth.uid() and the prod `get_advisor_id()` / `get_client_id()`
      SECURITY DEFINER helpers resolve correctly.
@@ -86,8 +93,12 @@ class SessionRoles:
     `access_token` is passed through so route handlers can construct a
     per-request user-scoped Supabase client for RLS-bounded data queries.
 
-    The "neither role" case never reaches a SessionRoles instance —
-    `get_current_session_roles` raises 401 first.
+    The "neither role" case (`advisor_id is None and client_id is None`)
+    only ever reaches handlers via `get_verified_session` — the default
+    `get_current_session_roles` dependency raises 401 before constructing
+    such an instance. Endpoints that legitimately need the neither-role
+    state (`/accept-invitation`, `GET /session`) depend on
+    `get_verified_session` explicitly.
     """
 
     user_id: str
@@ -311,10 +322,13 @@ def _lookup_role_id(table: str, user_id: str) -> str | None:
 # FastAPI dependencies
 # --------------------------------------------------------------------------- #
 
-async def get_current_session_roles(
-    authorization: str | None = Header(default=None),
+async def _resolve_session(
+    authorization: str | None,
+    *,
+    allow_no_roles: bool,
 ) -> SessionRoles:
-    """FastAPI dependency resolving the caller to a SessionRoles dataclass.
+    """Shared implementation behind `get_current_session_roles` /
+    `get_verified_session`.
 
     Verifies the bearer JWT, then issues two independent SELECTs against
     `public.advisors` and `public.clients` keyed on `user_id = sub`. The
@@ -322,14 +336,21 @@ async def get_current_session_roles(
     its own RLS scope (here bypassed via service-role) and the results
     don't depend on each other.
 
-    Raises 401 if:
+    Behavior is identical between the two public wrappers EXCEPT for the
+    neither-role case:
+
+      * `allow_no_roles=False` (default in `get_current_session_roles`)
+        raises 401 when neither row exists. Right for routes that
+        require a known role.
+      * `allow_no_roles=True` (used by `get_verified_session`) returns
+        a SessionRoles with both fields `None`. Right for routes that
+        legitimately serve users mid-flow (`/accept-invitation`) or
+        that exist precisely to surface the neither-role state
+        (`GET /session`).
+
+    Raises 401 in BOTH variants if:
       - The Authorization header is missing or malformed.
       - The JWT fails signature / iss / aud / exp / required-claims checks.
-      - The JWT verifies but neither an advisors nor a clients row links
-        to it. This case represents "authenticated user, never invited
-        and never signed up" — the frontend can use the typed 401 to
-        show a clean error UI rather than redirecting to /login as if
-        the session expired.
     """
     token = _extract_bearer_token(authorization)
     claims = _verify_jwt(token)
@@ -345,11 +366,13 @@ async def get_current_session_roles(
     advisor_id = _lookup_role_id("advisors", str(sub))
     client_id = _lookup_role_id("clients", str(sub))
 
-    if advisor_id is None and client_id is None:
+    if advisor_id is None and client_id is None and not allow_no_roles:
         # The token is cryptographically valid but no business row owns
         # the user. Most commonly: a Supabase signup that never received
         # an invitation (or whose invitation hasn't been accepted yet).
-        # The frontend treats this as a typed "not invited" state.
+        # The frontend treats this as a typed "not invited" state — but
+        # only routes that explicitly opt into `get_verified_session`
+        # see the SessionRoles; everything else gets the typed 401.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="No advisor or client profile is associated with this account.",
@@ -362,3 +385,40 @@ async def get_current_session_roles(
         advisor_id=advisor_id,
         client_id=client_id,
     )
+
+
+async def get_current_session_roles(
+    authorization: str | None = Header(default=None),
+) -> SessionRoles:
+    """FastAPI dependency resolving the caller to a SessionRoles dataclass.
+
+    Default session dependency — used by the 99% of authenticated routes
+    that require at least one business-row role. Raises 401 in the
+    neither-role case so the frontend gets a typed "not invited" signal
+    instead of redirecting to /login as if the session had expired.
+    """
+    return await _resolve_session(authorization, allow_no_roles=False)
+
+
+async def get_verified_session(
+    authorization: str | None = Header(default=None),
+) -> SessionRoles:
+    """FastAPI dependency that allows the neither-role case (ORPHEUS-38).
+
+    Variant of `get_current_session_roles` used by the small set of
+    routes that need to serve freshly-authenticated users whose
+    `clients` row hasn't been linked yet:
+
+      * `POST /accept-invitation` — caller is post-OAuth but the
+        invitation acceptance is the very thing that links the
+        `clients` row to their auth user.
+      * `GET /session` — the canonical "is the user invited" probe;
+        returning `{advisor_id: null, client_id: null}` IS the
+        meaningful response for not-yet-invited users.
+
+    Still raises 401 on token / header / claims problems. The only
+    semantic difference from `get_current_session_roles` is that the
+    neither-role case returns a SessionRoles instance with both role
+    fields set to `None`, rather than raising 401.
+    """
+    return await _resolve_session(authorization, allow_no_roles=True)

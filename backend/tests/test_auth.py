@@ -47,7 +47,7 @@ CLIENT_ID = "99999999-8888-7777-6666-555555555555"
 
 # Required env vars for backend.config.Settings to instantiate. The auth
 # module under test only reads supabase_url + supabase_jwt_audience, but
-# the Settings class declares the other three as required, so we provide
+# the Settings class declares the others as required, so we provide
 # placeholder values here.
 _REQUIRED_PLACEHOLDERS = {
     "SUPABASE_URL": SUPABASE_URL,
@@ -55,6 +55,10 @@ _REQUIRED_PLACEHOLDERS = {
     "SUPABASE_ANON_KEY": "test-anon-key",
     "ANTHROPIC_API_KEY": "test-anthropic-key",
     "SUPABASE_JWT_AUDIENCE": AUDIENCE,
+    # ORPHEUS-38 required-at-boot additions. The auth module doesn't read
+    # these, but Settings won't instantiate without them.
+    "RESEND_API_KEY": "test-resend-key",
+    "APP_BASE_URL": "https://app.test.local",
 }
 
 
@@ -360,5 +364,88 @@ async def test_missing_sub_returns_401(rsa_keypair):
 async def test_malformed_or_missing_header_returns_401(header):
     with pytest.raises(HTTPException) as exc:
         await auth_mod.get_current_session_roles(header)
+
+    assert exc.value.status_code == 401
+
+
+# --------------------------------------------------------------------------- #
+# get_verified_session — ORPHEUS-38 variant that allows neither-role
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_verified_session_allows_no_roles(rsa_keypair):
+    """ORPHEUS-38: the verified variant returns a SessionRoles in the
+    neither-role case instead of raising 401.
+
+    This is the case `/accept-invitation` and `GET /session` rely on —
+    a freshly-authenticated user whose business row hasn't been linked
+    yet must be able to proceed.
+    """
+    private_key, _ = rsa_keypair
+    token = _sign(_valid_claims(), private_key)
+
+    with _service_client_with(advisors_row=None, clients_row=None):
+        roles = await auth_mod.get_verified_session(f"Bearer {token}")
+
+    assert roles.user_id == SUB
+    assert roles.email == EMAIL
+    assert roles.access_token == token
+    assert roles.advisor_id is None
+    assert roles.client_id is None
+    assert roles.is_advisor() is False
+    assert roles.is_client() is False
+
+
+@pytest.mark.asyncio
+async def test_verified_session_passes_through_roles(rsa_keypair):
+    """ORPHEUS-38: the verified variant still resolves roles correctly when present.
+
+    `allow_no_roles=True` only changes the neither-role behavior — the
+    happy paths must be identical to `get_current_session_roles`.
+    """
+    private_key, _ = rsa_keypair
+    token = _sign(_valid_claims(), private_key)
+
+    with _service_client_with(
+        advisors_row={"id": ADVISOR_ID},
+        clients_row={"id": CLIENT_ID},
+    ):
+        roles = await auth_mod.get_verified_session(f"Bearer {token}")
+
+    assert roles.advisor_id == ADVISOR_ID
+    assert roles.client_id == CLIENT_ID
+    assert roles.is_advisor() is True
+    assert roles.is_client() is True
+
+
+@pytest.mark.asyncio
+async def test_verified_session_still_rejects_invalid_jwt(rsa_keypair):
+    """ORPHEUS-38: token-verification failures must still 401 the verified variant.
+
+    `allow_no_roles=True` is a relaxation of the role-presence check
+    only. Signature / iss / aud / exp failures are not legitimate
+    neither-role cases — they're unauthenticated requests, and the
+    distinction matters because /accept-invitation must not accept
+    forged tokens.
+    """
+    private_key, _ = rsa_keypair
+    expired = _sign(
+        _valid_claims(exp=int(time.time()) - 10, iat=int(time.time()) - 3600),
+        private_key,
+    )
+
+    with _service_client_with(advisors_row=None, clients_row=None):
+        with pytest.raises(HTTPException) as exc:
+            await auth_mod.get_verified_session(f"Bearer {expired}")
+
+    assert exc.value.status_code == 401
+    assert "expired" in exc.value.detail.lower()
+
+
+@pytest.mark.asyncio
+async def test_verified_session_rejects_missing_header():
+    """ORPHEUS-38: a missing Authorization header is still a 401 even for the verified variant."""
+    with pytest.raises(HTTPException) as exc:
+        await auth_mod.get_verified_session(None)
 
     assert exc.value.status_code == 401
