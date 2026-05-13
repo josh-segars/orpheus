@@ -10,6 +10,7 @@ import { AnalysisPage } from './pages/AnalysisPage'
 import { CheatSheetPage } from './pages/CheatSheetPage'
 import { ForwardBriefPage } from './pages/ForwardBriefPage'
 import { GroundworkPage } from './pages/GroundworkPage'
+import { InviteLandingPage } from './pages/InviteLandingPage'
 import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { QuestionnairePage } from './pages/QuestionnairePage'
@@ -27,6 +28,12 @@ export default function App() {
 
       {/* Public auth route — its own shell */}
       <Route path="/login" element={<LoginPage />} />
+
+      {/* Invitation landing — public, side-effect-only redirect into LinkedIn OAuth.
+          MUST sit outside ProtectedRoute: the visitor is by definition not yet
+          authenticated, and the callback (/invite/callback, commit #9) needs to
+          run before they have a clients row to satisfy ProtectedRoute. */}
+      <Route path="/invite/:token" element={<InviteLandingPage />} />
 
       {/* Authenticated portal — LinkedInUploadProvider wraps the layout so
           the in-memory ZIP/XLSX File state persists across navigation
