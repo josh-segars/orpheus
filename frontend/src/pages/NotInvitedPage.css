@@ -1,0 +1,23 @@
+/* Visual styles for /not-invited.
+ *
+ * Plain v1 — relies on the shared .login-shell / .login-card scaffold
+ * from LoginPage.css. Only the cause-list needs its own treatment to
+ * sit comfortably between the blurb and the action button.
+ */
+
+.not-invited-causes {
+  margin: 0 0 24px 0;
+  padding-left: 24px;
+  font-family: 'Source Sans 3', sans-serif;
+  color: var(--warm-text);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.not-invited-causes li {
+  margin-bottom: 8px;
+}
+
+.not-invited-causes li:last-child {
+  margin-bottom: 0;
+}

@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { ApiError, apiPostJson } from '../lib/apiClient'
 
@@ -45,6 +45,7 @@ export interface AcceptInvitationResponse {
  * state is consistent across both passes.
  */
 export function useAcceptInvitation() {
+  const queryClient = useQueryClient()
   return useMutation<
     AcceptInvitationResponse,
     ApiError,
@@ -55,6 +56,19 @@ export function useAcceptInvitation() {
         token,
         confirmed: confirmed ?? false,
       }),
+    onSuccess: (data) => {
+      // Once acceptance commits server-side, the user has a real
+      // clients row that the ProtectedRoute / NotInvitedPage logic
+      // gates on. Invalidate the cached GET /session response so
+      // the next render reads fresh state instead of the
+      // pre-acceptance "neither role" snapshot. Skip the
+      // invalidation in the mismatch case — nothing changed
+      // server-side yet, the row is still pending until the user
+      // confirms with `{confirmed: true}`.
+      if (!data.requires_confirmation) {
+        void queryClient.invalidateQueries({ queryKey: ['session'] })
+      }
+    },
   })
 }
 
