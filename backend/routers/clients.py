@@ -451,3 +451,182 @@ async def accept_invitation(
         client_id=row_id,
         requires_confirmation=False,
     )
+
+
+# --------------------------------------------------------------------------- #
+# POST /clients/{client_id}/resend-invitation
+# --------------------------------------------------------------------------- #
+
+@router.post(
+    "/{client_id}/resend-invitation",
+    response_model=InviteClientResponse,
+)
+async def resend_invitation(
+    client_id: str,
+    roles: Annotated[SessionRoles, Depends(get_current_session_roles)],
+) -> InviteClientResponse:
+    """Rotate a client's invitation token + expiry and re-send the email.
+
+    Lets the advisor recover from any reason an invitation didn't
+    land: expired before the client clicked, lost in inbox triage,
+    sent to a typo'd address that the advisor has since updated, etc.
+
+    Flow:
+
+      1. 403 if not roles.is_advisor().
+      2. SELECT the clients row filtered on BOTH id and
+         advisor_id = roles.advisor_id. Returning 404 for "wrong
+         advisor" alongside "no such client" prevents leaking the
+         existence of other advisors' clients.
+      3. 409 if invitation_status == 'accepted'. Resending would
+         orphan the accepted state — the advisor needs a separate
+         revoke-and-reinvite flow for that (not in beta scope).
+         Status 'expired' or 'pending' both resend cleanly.
+      4. Look up the advisor's display-name for the email body
+         (same fallback chain as /clients/invite).
+      5. Generate fresh uuid4 token + new expiry. UPDATE the clients
+         row with the new values and reset status to 'pending'.
+      6. Send the new email via Resend. If Resend rejects, 502 — but
+         the token has ALREADY been rotated, so the old email link
+         is dead. The 502 detail tells the advisor the token has
+         been refreshed (i.e. retrying the endpoint will not reuse
+         the same token, but will work assuming Resend recovers).
+
+    Returns the same client_id (the row's PK isn't rotated, just its
+    invitation fields).
+    """
+    if not roles.is_advisor():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Resending invitations requires an advisor profile.",
+        )
+    advisor_id = roles.advisor_id
+    assert advisor_id is not None  # narrowed by is_advisor() guard above
+
+    settings = get_settings()
+    supabase = get_service_client()
+
+    # ── SELECT the clients row ─────────────────────────────────────────
+
+    lookup = (
+        supabase.table("clients")
+        .select("*")
+        .eq("id", client_id)
+        .eq("advisor_id", advisor_id)
+        .limit(1)
+        .execute()
+    )
+    if not lookup.data:
+        # Either no such client or it belongs to another advisor.
+        # We don't differentiate — see docstring.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Client not found.",
+        )
+    row = lookup.data[0]
+
+    if row.get("invitation_status") == "accepted":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This client has already accepted their invitation. "
+                "Resending would invalidate the accepted state — if you "
+                "need to re-invite, contact support to revoke and "
+                "reissue."
+            ),
+        )
+
+    client_email = row.get("email")
+    if not client_email:
+        # Defensive: a clients row without an email shouldn't exist
+        # under migration 001's NOT NULL constraint, but if it did
+        # we'd want a clear failure rather than a confusing email send.
+        logger.error("Clients row %s has no email; cannot resend", client_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Client row is missing an email address.",
+        )
+
+    # ── Advisor display-name lookup (same fallback chain as /invite) ───
+
+    advisor_lookup = (
+        supabase.table("advisors")
+        .select("practice_name")
+        .eq("id", advisor_id)
+        .limit(1)
+        .execute()
+    )
+    advisor_display_name = roles.email
+    if advisor_lookup.data:
+        practice_name = advisor_lookup.data[0].get("practice_name")
+        if isinstance(practice_name, str) and practice_name.strip():
+            advisor_display_name = practice_name.strip()
+
+    # ── Rotate token + expiry, reset status ────────────────────────────
+
+    new_token = str(uuid4())
+    new_expires_at = datetime.now(timezone.utc) + timedelta(
+        days=settings.invitation_expiry_days
+    )
+
+    update_result = (
+        supabase.table("clients")
+        .update(
+            {
+                "invitation_token": new_token,
+                "invitation_expires_at": new_expires_at.isoformat(),
+                "invitation_status": "pending",
+            }
+        )
+        .eq("id", client_id)
+        .execute()
+    )
+    if not update_result.data:
+        logger.error(
+            "Failed to rotate token on client %s (empty update result)",
+            client_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to refresh the invitation.",
+        )
+
+    # ── Send the new email ─────────────────────────────────────────────
+
+    invite_url = f"{settings.app_base_url}/invite/{new_token}"
+
+    try:
+        send_invitation_email(
+            to_email=client_email,
+            advisor_name=advisor_display_name,
+            invite_url=invite_url,
+        )
+    except EmailSendError as exc:
+        # Token has already been rotated. The OLD email link is now
+        # dead regardless. Surface a 502 telling the advisor the
+        # token refresh worked but the send didn't — they can try
+        # again, which will rotate the token AGAIN (idempotent from
+        # the advisor's perspective).
+        logger.exception(
+            "Resend send failed for client %s (advisor %s): %s",
+            client_id,
+            advisor_id,
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "Failed to send the new invitation email. The "
+                "invitation token has been refreshed, so you can "
+                "safely retry."
+            ),
+        ) from exc
+
+    logger.info(
+        "Resent invitation: advisor=%s client=%s email=%s",
+        advisor_id,
+        client_id,
+        client_email,
+    )
+
+    return InviteClientResponse(client_id=client_id)
