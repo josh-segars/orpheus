@@ -34,6 +34,7 @@ app.add_middleware(
 
 app.include_router(jobs_router.router)
 app.include_router(clients_router.router)
+app.include_router(clients_router.accept_router)
 
 
 @app.get("/health")

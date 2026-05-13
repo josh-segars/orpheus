@@ -37,14 +37,26 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
-from backend.auth import SessionRoles, get_current_session_roles
+from backend.auth import (
+    SessionRoles,
+    get_current_session_roles,
+    get_verified_session,
+)
 from backend.config import get_settings
 from backend.db import get_service_client
 from backend.email.resend_client import EmailSendError, send_invitation_email
 
 logger = logging.getLogger("orpheus.clients")
 
+# Two routers in this module:
+#   * `router` with prefix="/clients" hosts the advisor-owned routes
+#     (POST /clients/invite, POST /clients/{id}/resend-invitation).
+#   * `accept_router` has no prefix and hosts POST /accept-invitation —
+#     it sits outside the clients namespace because the caller has no
+#     clients row yet (the acceptance IS the linkage step). Both are
+#     registered separately in backend.main.
 router = APIRouter(prefix="/clients", tags=["clients"])
+accept_router = APIRouter(tags=["clients"])
 
 
 # --------------------------------------------------------------------------- #
@@ -248,3 +260,194 @@ async def invite_client(
     )
 
     return InviteClientResponse(client_id=client_id)
+
+
+# --------------------------------------------------------------------------- #
+# POST /accept-invitation
+# --------------------------------------------------------------------------- #
+
+class AcceptInvitationRequest(BaseModel):
+    """Body for POST /accept-invitation.
+
+    The token comes from the email link the client clicked. `confirmed`
+    is the soft-confirmation flag the frontend sends after the user
+    OKs an email-mismatch warning (i.e. their invitation went to one
+    address but they're signed in to LinkedIn with another).
+    """
+
+    token: str = Field(..., min_length=1)
+    confirmed: bool = False
+
+
+class AcceptInvitationResponse(BaseModel):
+    """Response from POST /accept-invitation.
+
+    `requires_confirmation=True` indicates the invitation email differs
+    from the LinkedIn email; `invitation_email` + `linkedin_email` are
+    populated so the frontend can render the confirmation card. The
+    response is 200 either way — mismatch is a soft state, not an
+    error.
+    """
+
+    client_id: str
+    requires_confirmation: bool
+    invitation_email: str | None = None
+    linkedin_email: str | None = None
+
+
+@accept_router.post(
+    "/accept-invitation",
+    response_model=AcceptInvitationResponse,
+)
+async def accept_invitation(
+    request: AcceptInvitationRequest,
+    roles: Annotated[SessionRoles, Depends(get_verified_session)],
+) -> AcceptInvitationResponse:
+    """Accept an invitation: link the clients row to the caller's auth user.
+
+    Depends on `get_verified_session` rather than the default
+    `get_current_session_roles` because the caller's clients row
+    hasn't been linked yet — this endpoint IS the linkage step.
+
+    Decision tree:
+
+      1. SELECT by token. 401 if no row.
+      2. If `invitation_status == 'accepted'`: replay case.
+           - `clients.user_id == roles.user_id`: idempotent 200 with
+             the existing client_id. The token is intentionally
+             preserved through acceptance (see implementation note
+             below) so the same user clicking an old email link lands
+             cleanly.
+           - Otherwise: 401. A different user trying to claim a token
+             already burned by someone else.
+      3. Check expiry (only for non-accepted statuses): 401 if past.
+      4. Compute case-insensitive email mismatch.
+           - Mismatch + `confirmed=False`: 200 with
+             `requires_confirmation=True` and both emails populated so
+             the frontend can render the confirmation card. NO update.
+           - Match or `confirmed=True`: proceed to UPDATE.
+      5. UPDATE: set `user_id` and flip `invitation_status` to
+         'accepted'. Return 200 with `client_id`.
+
+    Implementation note (deviation from spec): the spec's UPDATE clause
+    says to null `invitation_token` and `invitation_expires_at` on
+    acceptance, but its replay-by-same-user case can't work that way —
+    the row would no longer be reachable via the token. We preserve
+    both fields and only flip status. The partial unique index on
+    `invitation_token WHERE invitation_token IS NOT NULL` still
+    enforces uniqueness for newly-issued invitations, and resend-
+    invitation (commit #6) refuses to overwrite accepted rows, so
+    accepted tokens never get reused.
+    """
+    supabase = get_service_client()
+
+    lookup = (
+        supabase.table("clients")
+        .select("*")
+        .eq("invitation_token", request.token)
+        .limit(1)
+        .execute()
+    )
+    if not lookup.data:
+        # Either the token never existed, or it's been rotated away by
+        # a resend-invitation. We don't distinguish — both surface to
+        # the frontend as the same "invitation not found" state.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invitation not found or no longer valid.",
+        )
+
+    row = lookup.data[0]
+    row_id = str(row["id"])
+    invitation_status_value = row.get("invitation_status")
+
+    # ── Replay of already-accepted invitation ───────────────────────────
+    if invitation_status_value == "accepted":
+        if row.get("user_id") == roles.user_id:
+            # Same user clicking an old email link. Treat as a no-op
+            # success rather than confusing them with a 401.
+            return AcceptInvitationResponse(
+                client_id=row_id,
+                requires_confirmation=False,
+            )
+        # Different user trying to claim a token that's already been
+        # burned. Refuse without leaking which user owns it now.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="This invitation has already been accepted.",
+        )
+
+    # ── Expiry check (only applies to non-accepted rows) ────────────────
+    expires_at_str = row.get("invitation_expires_at")
+    if expires_at_str:
+        try:
+            expires_at = datetime.fromisoformat(expires_at_str)
+        except ValueError as exc:
+            logger.exception(
+                "Malformed invitation_expires_at for client %s: %r",
+                row_id,
+                expires_at_str,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Invitation timestamp is malformed.",
+            ) from exc
+        if expires_at < datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="This invitation has expired. Ask your advisor to resend.",
+            )
+
+    # ── Email mismatch check ────────────────────────────────────────────
+    invitation_email_raw = row.get("email") or ""
+    invitation_email_norm = invitation_email_raw.strip().lower()
+    linkedin_email_norm = (roles.email or "").strip().lower()
+    is_mismatch = invitation_email_norm != linkedin_email_norm
+
+    if is_mismatch and not request.confirmed:
+        # Soft confirmation: hand both emails back so the frontend can
+        # render the "you were invited as X but signed in as Y, OK?"
+        # card. No UPDATE; the row stays pending until the user
+        # confirms.
+        return AcceptInvitationResponse(
+            client_id=row_id,
+            requires_confirmation=True,
+            invitation_email=invitation_email_raw,
+            linkedin_email=roles.email,
+        )
+
+    # ── Accept: UPDATE the row ──────────────────────────────────────────
+    update_result = (
+        supabase.table("clients")
+        .update(
+            {
+                "user_id": roles.user_id,
+                "invitation_status": "accepted",
+                # Token + expires_at intentionally preserved; see
+                # implementation note in the docstring.
+            }
+        )
+        .eq("id", row_id)
+        .execute()
+    )
+    if not update_result.data:
+        logger.error(
+            "Failed to update clients row %s on accept (empty result.data)",
+            row_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to accept invitation.",
+        )
+
+    logger.info(
+        "Accepted invitation: client=%s user=%s mismatch=%s",
+        row_id,
+        roles.user_id,
+        is_mismatch,
+    )
+
+    return AcceptInvitationResponse(
+        client_id=row_id,
+        requires_confirmation=False,
+    )
