@@ -18,12 +18,10 @@ and returns `f"test_msg_{uuid4().hex}"` without hitting the network.
 This keeps pytest + CI offline and deterministic. Real production keys
 start with `re_`, so the trigger is unambiguous.
 
-Body content: commit #2 of ORPHEUS-38 ships with inline subject/html/
-text strings. Commit #3 extracts those to `backend/email/templates.py`
-without changing this module's public interface — `send_invitation_email`
-will import a single `format_invitation_email(...)` and forward the
-result. The split keeps the visual design pass isolated from the
-HTTP-plumbing review.
+Body content lives in `backend/email/templates.py`. This module owns
+the HTTP plumbing only — subject + html + text strings are imported
+via `format_invitation_email`. The split keeps the visual design pass
+isolated from the wire-up plumbing.
 """
 
 from __future__ import annotations
@@ -36,6 +34,7 @@ from typing import Any
 from uuid import uuid4
 
 from backend.config import get_settings
+from backend.email.templates import format_invitation_email
 
 logger = logging.getLogger("orpheus.email.resend")
 
@@ -89,7 +88,7 @@ def send_invitation_email(
     settings = get_settings()
     api_key = settings.resend_api_key
 
-    subject, html_body, text_body = _build_invitation_content(
+    subject, html_body, text_body = format_invitation_email(
         advisor_name=advisor_name,
         invite_url=invite_url,
     )
@@ -221,38 +220,3 @@ def _safe_decode_error_body(exc: urllib.error.HTTPError) -> str:
     return str(parsed)[:200]
 
 
-# --------------------------------------------------------------------------- #
-# Invitation body — to be extracted to backend/email/templates.py in commit #3
-# --------------------------------------------------------------------------- #
-
-def _build_invitation_content(
-    *,
-    advisor_name: str,
-    invite_url: str,
-) -> tuple[str, str, str]:
-    """Return (subject, html_body, text_body) for the invitation email.
-
-    Inline strings for now. Commit #3 of ORPHEUS-38 extracts these to
-    `backend/email/templates.py` and adds a `format_invitation_email`
-    entry point this function will delegate to. The interface stays
-    the same so the routers don't need to know which commit shipped.
-    """
-    subject = f"{advisor_name} invited you to a Strategic Presence Diagnostic"
-
-    html_body = (
-        f"<p>{advisor_name} invited you to complete a Strategic Presence "
-        f"Diagnostic with Orpheus Social.</p>"
-        f"<p>To accept the invitation, sign in with LinkedIn:</p>"
-        f'<p><a href="{invite_url}">{invite_url}</a></p>'
-        f"<p>This link expires in 14 days.</p>"
-    )
-
-    text_body = (
-        f"{advisor_name} invited you to complete a Strategic Presence "
-        f"Diagnostic with Orpheus Social.\n\n"
-        f"To accept the invitation, sign in with LinkedIn:\n"
-        f"{invite_url}\n\n"
-        f"This link expires in 14 days."
-    )
-
-    return subject, html_body, text_body
