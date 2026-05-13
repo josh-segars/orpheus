@@ -175,6 +175,7 @@ Storage shape: flat JSONB map with `q1`/`q2` as canonical-label string arrays, `
 - Client identity in the React `PortalNav` is sourced from the Supabase session (LinkedIn OIDC `name` + `picture`, falling back to initials). The `Jane Doe` placeholder only survives in the HTML prototype.
 - **Intake questionnaire simplified to 9 questions on a single page on 2026-05-11** (ORPHEUS-33). Replaces the 23-question, 7-section flow. Completion derived at read time from answers content; `section_completion` column dropped in migration 010. See `Spec_Simplified_Intake_Questionnaire_2026-05-11.md` for the locked decisions.
 - **Self-serve + advisor invite flow adopted 2026-05-11** (ORPHEUS-36 onward). One `auth.users` row can own up to one `advisors` row and up to one `clients` row simultaneously, created lazily. Beta is invitation-only (no `/signup`, no Stripe). Supersedes the LinkedIn-1:1 self-serve model from `Decision_LinkedIn_Auth_2026-04-21.md` — specifically the migration-007 `on_auth_user_created` trigger and the `clients.id = auth.users.id` PK constraint. See `Decision_Self_Serve_And_Advisor_Invite_2026-05-11.md` for the full architecture.
+- **Invitation flow shipped 2026-05-13** (ORPHEUS-38). Resend transactional email wired up, `/clients/invite` + `/accept-invitation` + `/clients/{id}/resend-invitation` + `/session` live behind appropriate role gates, three new public frontend pages (`/invite/:token`, `/invite/callback`, `/not-invited`), 43 new pytest cases (114 → 157 green). Migration 012 applied to prod; database cleaned of leftover seed data. Live e2e walkthrough deferred to ORPHEUS-44 — gated on ORPHEUS-25 (cloud Supabase LinkedIn OIDC provider configuration).
 
 ---
 
@@ -233,25 +234,37 @@ Backend deployed on Railway, database on Supabase, frontend scaffolded with Vite
 ├── frontend/                          # Vite + React app
 │   ├── .env.local.example             # Template for VITE_SUPABASE_* / VITE_API_BASE_URL / VITE_ADMIN_EMAILS
 │   ├── package.json                   # @supabase/supabase-js, @tanstack/react-query, react-router-dom
+│   ├── vercel.json                    # SPA rewrite — all paths fall through to index.html
 │   └── src/
-│       ├── App.tsx                    # Routes; ProtectedRoute wraps the portal; /login is public
+│       ├── App.tsx                    # Routes; ProtectedRoute checks Supabase session + GET /session roles
 │       ├── main.tsx
 │       ├── lib/
 │       │   ├── supabase.ts            # Singleton browser client (fail-fast on missing VITE_SUPABASE_*)
 │       │   ├── auth.ts                # useSession, signInWithLinkedIn, signOut
-│       │   └── apiClient.ts           # Bearer-token-attaching fetch wrapper
-│       ├── pages/                     # LoginPage, SignalScorePage, ForwardBriefPage, CheatSheetPage, NotFoundPage
-│       ├── components/                # PortalLayout, PortalNav (session-aware), SignalMeter, SubSignalDial
+│       │   ├── apiClient.ts           # Bearer-token-attaching fetch wrapper (GET / POST JSON / POST multipart)
+│       │   └── invitation.ts          # sessionStorage helpers for the pending invitation token
+│       ├── hooks/
+│       │   ├── useAcceptInvitation.ts # React Query mutation against POST /accept-invitation; invalidates ['session'] on success
+│       │   ├── useSessionRoles.ts     # React Query against GET /session; gated on auth, staleTime Infinity
+│       │   └── ...                    # plus useJob / useCreateJob / useGroundworkProgress / useQuestionnaire
+│       ├── pages/                     # LoginPage, InviteLandingPage, InviteCallbackPage, NotInvitedPage,
+│       │                              # SignalScorePage, ForwardBriefPage, CheatSheetPage, GroundworkPage, etc.
+│       ├── components/                # PortalLayout, PortalNav, SignalMeter, SubSignalDial, EmailMismatchConfirmation
 │       ├── types/                     # job.ts + scoring.ts (mirror backend models)
 │       └── mocks/                     # MSW handlers (empty by default; real backend serves /jobs)
 ├── backend/                           # FastAPI app
 │   ├── main.py                        # App entry; CORS allowlist + Settings validation at boot
 │   ├── config.py                      # Pydantic BaseSettings — fail-fast validation of required env
 │   ├── db.py                          # get_service_client (RLS-bypass) + user_scoped_supabase(token)
-│   ├── auth.py                        # get_current_session_roles dependency: JWT verification via cached Supabase JWKS
+│   ├── auth.py                        # get_current_session_roles + get_verified_session JWT dependencies
 │   ├── routers/                       # API route handlers
 │   │   ├── __init__.py
-│   │   └── jobs.py                    # GET /jobs/{id} — depends on get_current_session_roles + user_scoped_supabase
+│   │   ├── jobs.py                    # POST /jobs + GET /jobs/{id}
+│   │   ├── clients.py                 # POST /clients/invite, /accept-invitation, /clients/{id}/resend-invitation
+│   │   └── session.py                 # GET /session (canonical "who am I" probe, 200 even for neither-role)
+│   ├── email/                         # Transactional email (ORPHEUS-38)
+│   │   ├── resend_client.py           # HTTP wrapper around Resend's REST API; sandbox mode on test_ keys
+│   │   └── templates.py               # Invitation email subject + html + text formatter
 │   ├── models/                        # Pydantic data models
 │   │   ├── job.py                     # Job state model
 │   │   ├── scoring.py                 # v2 scoring output models (ScoringStageOutput)
@@ -281,10 +294,17 @@ Backend deployed on Railway, database on Supabase, frontend scaffolded with Vite
 │   │   ├── 010_questionnaire_simplified.sql # HISTORICAL — local-dev path; on the prod-base path use 011 instead
 │   │   ├── 011_questionnaire_align_to_spec.sql  # Reshape questionnaire_responses to ORPHEUS-33 spec on top of 001 (ORPHEUS-35)
 │   │   └── 012_clients_invitation_columns.sql   # invitation_token + invitation_expires_at on public.clients (ORPHEUS-36)
-│   ├── tests/                         # Test suite (pytest)
+│   ├── tests/                         # Test suite (pytest) — 157 total post-ORPHEUS-38
 │   │   ├── test_scoring.py            # 48 tests for scoring engine
 │   │   ├── test_narrative.py          # 8 tests for quality report formatting
-│   │   └── test_auth.py               # 13 tests for JWT verification edge cases
+│   │   ├── test_auth.py               # JWT verification + role permutations + get_verified_session
+│   │   ├── test_config.py             # Boot-fail-fast tests for required env (RESEND_API_KEY, APP_BASE_URL)
+│   │   ├── test_resend_client.py      # Resend HTTP wrapper (4xx / 5xx / network / sandbox)
+│   │   ├── test_email_templates.py    # Invitation email snapshot invariants
+│   │   ├── test_clients_invite.py     # POST /clients/invite happy + 403 + 409 + 502
+│   │   ├── test_accept_invitation.py  # /accept-invitation state machine (mismatch + replay + expired)
+│   │   ├── test_resend_invitation.py  # /clients/{id}/resend-invitation rotates token, 409 on accepted
+│   │   └── test_session.py            # GET /session role-permutation coverage
 │   ├── .env.example                   # Required + optional env vars (mirror Settings class)
 │   └── requirements.txt
 └── .github/
@@ -328,11 +348,14 @@ SUPABASE_URL=
 SUPABASE_SERVICE_KEY=
 SUPABASE_ANON_KEY=
 ANTHROPIC_API_KEY=
+RESEND_API_KEY=                                          # ORPHEUS-38; test_ prefix triggers sandbox mode
+APP_BASE_URL=                                            # ORPHEUS-38; invite-link host, http(s) URL-validated
 
 # Optional with defaults
 ADMIN_EMAILS=                                            # CSV; consumed by ORPHEUS-31 admin stopgap
 FRONTEND_ORIGINS=http://localhost:5173                   # CSV; CORS allowlist
 SUPABASE_JWT_AUDIENCE=authenticated                      # JWT aud claim
+INVITATION_EXPIRY_DAYS=14                                # ORPHEUS-38; soft expiry on issued invitations
 
 # For Supabase CLI env interpolation (local dev only — not read by backend)
 SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID=
@@ -350,11 +373,20 @@ VITE_API_BASE_URL=http://localhost:8000
 
 None of these are committed. Templates with inline comments live at `backend/.env.example` and `frontend/.env.local.example`.
 
+**Deploy-platform mirror.** The same vars need to be set in the deploy dashboards or services won't boot / the frontend bundle won't be able to talk to anyone. Out of repo by necessity, but worth knowing about:
+
+- **Railway** (Settings → Variables, on BOTH the backend service and the worker service): every backend Required var above. `FRONTEND_ORIGINS` must include the production frontend origin (`https://app.orpheussocial.com`) or CORS rejects every request from the deployed UI. Build Command is also currently set manually to `pip install -r backend/requirements.txt` per ORPHEUS-43 — pinning that in source is the follow-up.
+- **Vercel** (Settings → Environment Variables, applied to all environments): every `VITE_*` var above. These are baked into the JS bundle at build time, so missing values surface as a runtime "Missing Supabase configuration" error on the deployed site, not a build failure. After saving, trigger a redeploy so the new bundle picks them up.
+
 ### Backend Conventions
 
 - Use `async/await` throughout — FastAPI and Supabase client are both async
 - All env reads flow through `backend.config.get_settings()` (Pydantic `BaseSettings`). The app fails fast at boot when required vars are missing. Worker process still has its own three `os.environ` reads — consolidating is a small follow-up.
 - API routes live in `/backend/routers/` — one file per resource. Client-facing routes depend on `get_current_session_roles` (in `backend/auth.py`), which JWT-verifies the Bearer token against the cached Supabase JWKS and then runs two independent SELECTs against `public.advisors` and `public.clients` (keyed on `user_id = sub`) to populate a typed `SessionRoles(user_id, email, access_token, advisor_id, client_id)`. A user may hold one role, both, or — for the typed 401 "not invited" case — neither. Route handlers gate themselves on `roles.is_advisor()` / `roles.is_client()` and raise 403 if their required role is missing. `auth.py` supports both RS256 and ES256 signatures and reads JWKS from `/auth/v1/.well-known/jwks.json` (the post-GoTrue-v2 path). Replaces the pre-ORPHEUS-37 `CurrentClient` / `get_current_client` single-role dependency.
+- `get_verified_session` is the variant for the small set of routes that must legitimately serve neither-role callers (ORPHEUS-38): `POST /accept-invitation` (caller is post-OAuth but the clients row isn't linked yet) and `GET /session` (returning `{advisor_id: null, client_id: null}` IS the meaningful response). Same JWT verification path; only the role-presence gate is relaxed. ~99% of authenticated routes still use `get_current_session_roles`.
+- Transactional email lives in `/backend/email/` — `resend_client.py` is a hand-rolled `urllib.request` wrapper around Resend's REST API (no SDK; matches the JWKS-fetch pattern in `auth.py`), `templates.py` owns the invitation subject + html + text content. Sandbox mode on the wrapper triggers when `RESEND_API_KEY` starts with `test_` or is the literal `test` — logs and returns a fake message id without making the HTTP call. Real keys start with `re_` so there's no overlap. The invitation routes catch `EmailSendError` and return 502 with detail directing the advisor to the resend endpoint; the persisted clients row is intentionally not rolled back on send failure.
+- `backend/routers/clients.py` hosts two `APIRouter` instances side by side: `router` (prefix=`/clients`) for advisor-owned routes (`POST /clients/invite`, `POST /clients/{client_id}/resend-invitation`), and `accept_router` (no prefix) for `POST /accept-invitation` — the latter lives outside `/clients` because its caller has no clients row yet. Both are registered in `backend/main.py`.
+- Acceptance preserves `invitation_token` and `invitation_expires_at` on the UPDATE (only `invitation_status` flips to `accepted` and `user_id` is set). This deliberately deviates from the spec's literal "null both" instruction so the "replay by same user → 200 with existing client_id" case works as documented — the SELECT-by-token lookup would otherwise fail. The partial unique index `WHERE invitation_token IS NOT NULL` still enforces uniqueness on active invitations; resend-invitation refuses to overwrite accepted rows.
 - Two Supabase client patterns:
   - `get_service_client()` — service-role, RLS-bypassing. Cached. Used by the worker, admin endpoints, and the JWT-verification dependency itself (which needs to read `public.clients` before any user context is available).
   - `user_scoped_supabase(access_token)` — fresh per-request, JWT attached via `postgrest.auth(token)`. Client-facing routes must use this so the migration-008 RLS policies enforce ownership. Caching this client across requests would cause auth bleed.
@@ -372,9 +404,12 @@ None of these are committed. Templates with inline comments live at `backend/.en
 - Vite + React 18 + TypeScript. React Query for server state. React Router v6 for routing. `@supabase/supabase-js` for auth.
 - `frontend/src/lib/supabase.ts` is the singleton Supabase browser client; throws at module load if `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are missing.
 - `frontend/src/lib/auth.ts` exposes `useSession()`, `signInWithLinkedIn(redirectTo?)`, and `signOut()`. `useSession()` clears the React Query cache on `SIGNED_OUT` to avoid stale data leaking between sessions.
-- Authenticated routes live under a `ProtectedRoute` wrapper in `App.tsx`. `/login` is the only public route in the portal. The `/design/signal-meter` playground is dev-only and bypasses auth and the layout shell.
-- API calls go through `frontend/src/lib/apiClient.ts`, which attaches `Authorization: Bearer <session.access_token>` to every outgoing request automatically.
+- Authenticated routes live under a `ProtectedRoute` wrapper in `App.tsx`. `ProtectedRoute` checks two gates: the Supabase session via `useSession()`, then the backend session roles via `useSessionRoles()` (a React Query hook against `GET /session`). Neither-role responses redirect to `/not-invited`. Public routes (no `ProtectedRoute`) are `/login`, `/invite/:token`, `/invite/callback`, `/not-invited`, and the dev-only `/design/signal-meter` playground.
+- `useSessionRoles` caches with `staleTime: Infinity` and `retry: false` — roles don't change across JWT refreshes, and a 401 from `/session` is meaningful rather than transient. The `['session']` query gets invalidated on accept-invitation success so the post-acceptance role state is observed without a full page reload.
+- The invitation flow's frontend lives across three pages and one shared lib module: `pages/InviteLandingPage.tsx` (public, side-effect-only redirect into LinkedIn OAuth — stashes the token in `sessionStorage` via `lib/invitation.ts`), `pages/InviteCallbackPage.tsx` (public, post-OAuth state machine: loading / mismatch / success / error), and `pages/NotInvitedPage.tsx` (public landing for authenticated-but-not-linked users). The `EmailMismatchConfirmation` component is presentational; the callback page wires sign-out + navigation for the Cancel action.
+- API calls go through `frontend/src/lib/apiClient.ts`, which attaches `Authorization: Bearer <session.access_token>` to every outgoing request automatically. Three flavors: `apiGet`, `apiPostJson`, `apiPostMultipart`. All throw a typed `ApiError(message, status, body)` on non-2xx so callers can extract `body.detail` for user-facing messages.
 - Design tokens come from the shared `orpheus-styles.css` (same file the prototype uses). Per-page styles sit in a sibling `*.css` next to the page component.
+- `frontend/vercel.json` rewrites every non-asset request to `/index.html` so direct nav to `/login`, `/invite/<token>`, etc. is handled by React Router instead of 404-ing on Vercel's static layer. Required because Vercel's Vite framework preset doesn't auto-add this rewrite.
 - MSW handlers are intentionally empty (the real backend serves all client-facing routes). Bring back the demo-job handler in `mocks/handlers.ts` only when iterating on UI offline.
 
 ---
