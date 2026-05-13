@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.config import get_settings
 from backend.routers import clients as clients_router
 from backend.routers import jobs as jobs_router
+from backend.routers import session as session_router
 
 load_dotenv()
 
@@ -35,6 +36,7 @@ app.add_middleware(
 app.include_router(jobs_router.router)
 app.include_router(clients_router.router)
 app.include_router(clients_router.accept_router)
+app.include_router(session_router.router)
 
 
 @app.get("/health")
