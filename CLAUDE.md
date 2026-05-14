@@ -226,7 +226,7 @@ Backend deployed on Railway, database on Supabase, frontend scaffolded with Vite
 /
 ├── CLAUDE.md
 ├── PRODUCT_CONTEXT.md                 # Full scoring specs, schema, decisions
-├── SETUP_phase1_local_auth.md         # Onboarding: local Supabase + dev LinkedIn app
+├── SETUP_phase1_local_auth.md         # Onboarding: local Supabase + dev LinkedIn app + apply migrations 001/011/012
 ├── Decision_LinkedIn_Auth_2026-04-21.md  # Source markdown for ORPHEUS-23
 ├── orpheus-*.html                     # HTML/CSS prototype (visual source of truth)
 ├── orpheus-styles.css                 # Shared design system stylesheet

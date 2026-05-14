@@ -31,13 +31,21 @@
 --
 -- A fresh local-dev setup is:
 --     supabase db reset
---     # then apply 001_base_schema.sql and 011_questionnaire_align_to_spec.sql
+--     # then apply, in order:
+--     #   001_base_schema.sql                  — this file
+--     #   011_questionnaire_align_to_spec.sql  — ORPHEUS-33 questionnaire reshape
+--     #   012_clients_invitation_columns.sql   — ORPHEUS-36 invitation_token columns
 --
 -- Migrations 003-006 are domain-additive (v2 scoring columns, narratives
 -- column rename, quality_report column, claim_next_job RPC) and ARE
 -- already applied in prod — their effects are baked into the schema
 -- below. Re-running them on a DB that has this file applied would be
 -- partially a no-op and partially redundant; safest to skip.
+--
+-- Migration 012 (added 2026-05-13, after this file was captured) layers
+-- the `invitation_token` + `invitation_expires_at` columns onto
+-- public.clients. Idempotent — safe to re-apply, safe in any order
+-- after 001.
 --
 -- See ORPHEUS-35 for the broader story.
 -- =====================================================================

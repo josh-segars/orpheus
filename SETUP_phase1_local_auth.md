@@ -122,16 +122,48 @@ If `supabase start` fails with a message about an unknown key under `[auth.exter
 
 ---
 
-## 5. Open Supabase Studio and sanity-check
+## 5. Apply the prod-aligned migrations
+
+`supabase start` brings up an empty Postgres. To match the production schema (so the backend and worker actually have tables to read and write), apply three migrations in order. Refs **ORPHEUS-35**.
+
+```sh
+# From the repo root. Each command is idempotent — safe to re-run.
+supabase db execute --file backend/migrations/001_base_schema.sql
+supabase db execute --file backend/migrations/011_questionnaire_align_to_spec.sql
+supabase db execute --file backend/migrations/012_clients_invitation_columns.sql
+```
+
+If `supabase db execute --file` isn't available on your CLI version, paste each file's contents into the Studio SQL Editor (http://127.0.0.1:54323 → SQL Editor → New query → paste → Run) one at a time, in order.
+
+**What each does:**
+
+- `001_base_schema.sql` — faithful snapshot of prod's public schema as of 2026-05-11 (advisors, clients, jobs, ingested_data, scores, narratives, reports, plus RLS policies and SECURITY DEFINER helpers). Includes the v2 scoring columns and quality_report column, so migrations 003–006 are already baked in.
+- `011_questionnaire_align_to_spec.sql` — reshapes `questionnaire_responses` to the ORPHEUS-33 9-question spec on top of the base schema. Drops the legacy 23-question `section_completion` column.
+- `012_clients_invitation_columns.sql` — adds `invitation_token` + `invitation_expires_at` to `public.clients` plus the partial UNIQUE index. Needed for the ORPHEUS-38 invitation flow.
+
+**Do NOT apply migrations 007–010.** They target the LinkedIn-1:1 design that was superseded by ORPHEUS-36. The 001 file's header explains why; the migrations themselves are kept as historical record. The same goes for `008_rls_verify.sql` — it's a verification helper, not a migration.
+
+**Sanity check:**
+
+```sh
+supabase db execute --command "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;"
+```
+
+You should see at least: `advisors`, `clients`, `ingested_data`, `jobs`, `narratives`, `questionnaire_responses`, `reports`, `scores`.
+
+---
+
+## 6. Open Supabase Studio and sanity-check
 
 Open **http://127.0.0.1:54323** in your browser.
 
 - Authentication → **Providers** — confirm **LinkedIn (OIDC)** is enabled.
 - Authentication → **URL Configuration** — confirm the site URL is `http://localhost:5173`.
+- Table Editor — confirm the eight tables from Step 5 are present.
 
 ---
 
-## 6. Smoke-test the LinkedIn round trip
+## 7. Smoke-test the LinkedIn round trip
 
 We don't have the LoginPage yet (that ships in **ORPHEUS-28**), so use the Supabase Studio shortcut:
 
@@ -149,7 +181,7 @@ Common failure modes:
 
 ---
 
-## 7. Close the loop on ORPHEUS-24
+## 8. Close the loop on ORPHEUS-24
 
 When the smoke test passes:
 
