@@ -1,0 +1,419 @@
+/* ============================================================
+   Orpheus — /advisor/clients page (ORPHEUS-39)
+
+   Shares the global design tokens from orpheus-styles.css:
+   --deep-slate, --warm-gold, --warm-ivory, --warm-parchment,
+   --warm-text, --warm-stone, --warm-border, --red-clay.
+
+   Single-column layout, max-width 920px (slightly wider than
+   .main-interior's 820 to accommodate the table-like client rows
+   without horizontal scroll on a normal desktop).
+
+   10px border-radius everywhere per the project convention.
+   ============================================================ */
+
+/* ── Page shell ──────────────────────────────────────────────── */
+.advisor-clients-main {
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 40px 20px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  color: var(--warm-text);
+}
+
+/* ── Header (title + self-report button) ─────────────────────── */
+.advisor-clients-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.advisor-clients-header-text {
+  flex: 1 1 480px;
+  min-width: 280px;
+}
+
+.advisor-clients-title {
+  font-family: 'Source Serif 4', serif;
+  font-size: 32px;
+  font-weight: 700;
+  font-variation-settings: 'opsz' 32;
+  letter-spacing: -0.5px;
+  color: var(--deep-slate);
+  margin-bottom: 12px;
+}
+
+.advisor-clients-intro {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--warm-stone);
+  max-width: 600px;
+}
+
+.advisor-clients-self-report-btn {
+  align-self: flex-start;
+  flex-shrink: 0;
+  padding: 12px 22px;
+  background: var(--deep-slate);
+  color: var(--warm-ivory);
+  border: 1px solid var(--deep-slate);
+  border-radius: 10px;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.advisor-clients-self-report-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.advisor-clients-self-report-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Banner (success / error) ────────────────────────────────── */
+.advisor-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--warm-border);
+  background: var(--warm-parchment);
+  color: var(--warm-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.advisor-banner-success {
+  border-color: var(--warm-gold);
+}
+
+.advisor-banner-error {
+  border-color: var(--red-clay);
+  background: #faf0ee;
+}
+
+.advisor-banner-text {
+  flex: 1 1 auto;
+}
+
+.advisor-banner-dismiss {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--warm-stone);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.advisor-banner-dismiss:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* ── Section titles ──────────────────────────────────────────── */
+.advisor-section-title {
+  font-family: 'Source Serif 4', serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--deep-slate);
+  margin-bottom: 16px;
+}
+
+/* ── Invite form ─────────────────────────────────────────────── */
+.advisor-invite-section {
+  padding: 24px;
+  background: var(--warm-parchment);
+  border: 1px solid var(--warm-border);
+  border-radius: 10px;
+}
+
+.advisor-invite-form {
+  display: grid;
+  grid-template-columns: 1.2fr 1.5fr auto;
+  gap: 16px;
+  align-items: end;
+}
+
+@media (max-width: 720px) {
+  .advisor-invite-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+.advisor-invite-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.advisor-invite-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--warm-stone);
+  letter-spacing: 0.2px;
+}
+
+.advisor-invite-input {
+  padding: 10px 14px;
+  background: var(--warm-ivory);
+  border: 1px solid var(--warm-border);
+  border-radius: 10px;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 15px;
+  color: var(--warm-text);
+  transition: border-color 120ms ease;
+}
+
+.advisor-invite-input:focus {
+  outline: none;
+  border-color: var(--warm-gold);
+}
+
+.advisor-invite-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.advisor-invite-submit {
+  height: 42px;
+  padding: 0 22px;
+  background: var(--deep-slate);
+  color: var(--warm-ivory);
+  border: 1px solid var(--deep-slate);
+  border-radius: 10px;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.advisor-invite-submit:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.advisor-invite-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── List ────────────────────────────────────────────────────── */
+.advisor-list-section {
+  /* No outer padding/background — the list rows carry their own
+     borders so the section reads as a list, not a card. */
+}
+
+.advisor-list-status {
+  padding: 24px;
+  text-align: center;
+  background: var(--warm-parchment);
+  border: 1px solid var(--warm-border);
+  border-radius: 10px;
+  color: var(--warm-stone);
+  font-size: 14px;
+}
+
+.advisor-list-status-error {
+  border-color: var(--red-clay);
+  color: var(--red-clay);
+}
+
+/* (Empty-state styles intentionally absent — see ClientsPage.tsx;
+   the list section is hidden entirely when there are zero clients
+   rather than rendering an empty card.) */
+
+.advisor-client-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.advisor-client-row {
+  display: grid;
+  grid-template-columns: 1.6fr 1.4fr auto;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 20px;
+  background: var(--warm-parchment);
+  border: 1px solid var(--warm-border);
+  border-radius: 10px;
+}
+
+@media (max-width: 720px) {
+  .advisor-client-row {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+  }
+}
+
+.advisor-client-identity {
+  min-width: 0;
+}
+
+.advisor-client-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--warm-text);
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.advisor-client-self-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--warm-gold);
+  color: var(--warm-ivory);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.advisor-client-email {
+  font-size: 13px;
+  color: var(--warm-stone);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.advisor-client-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.advisor-client-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 720px) {
+  .advisor-client-actions {
+    justify-content: flex-start;
+  }
+}
+
+/* ── Chips ───────────────────────────────────────────────────── */
+.advisor-chip {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.advisor-chip-pending {
+  background: rgba(196, 144, 42, 0.15);
+  color: var(--warm-gold);
+}
+
+.advisor-chip-accepted {
+  background: rgba(28, 43, 58, 0.1);
+  color: var(--deep-slate);
+}
+
+.advisor-chip-expired {
+  background: rgba(189, 63, 58, 0.12);
+  color: var(--red-clay);
+}
+
+.advisor-chip-job-none {
+  background: rgba(122, 106, 86, 0.12);
+  color: var(--warm-stone);
+}
+
+.advisor-chip-job-pending,
+.advisor-chip-job-running {
+  background: rgba(196, 144, 42, 0.15);
+  color: var(--warm-gold);
+}
+
+.advisor-chip-job-complete {
+  background: rgba(28, 43, 58, 0.1);
+  color: var(--deep-slate);
+}
+
+.advisor-chip-job-failed {
+  background: rgba(189, 63, 58, 0.12);
+  color: var(--red-clay);
+}
+
+/* ── Row action buttons ──────────────────────────────────────── */
+.advisor-row-action {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 16px;
+  border-radius: 10px;
+  background: transparent;
+  border: 1px solid var(--warm-border);
+  color: var(--warm-text);
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.advisor-row-action:hover:not(:disabled) {
+  background: var(--warm-ivory);
+  border-color: var(--warm-gold);
+}
+
+.advisor-row-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.advisor-row-action-primary {
+  background: var(--deep-slate);
+  border-color: var(--deep-slate);
+  color: var(--warm-ivory);
+}
+
+.advisor-row-action-primary:hover {
+  background: var(--deep-slate);
+  border-color: var(--deep-slate);
+  opacity: 0.9;
+}
+
+.advisor-row-error {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: rgba(189, 63, 58, 0.08);
+  border-radius: 10px;
+  color: var(--red-clay);
+  font-size: 13px;
+}
