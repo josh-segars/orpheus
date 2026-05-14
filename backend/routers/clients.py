@@ -1,18 +1,23 @@
-"""Clients API — advisor-managed invitation flow (ORPHEUS-38).
+"""Clients API — advisor-managed invitation flow (ORPHEUS-38, ORPHEUS-39).
 
-This file will grow across commits #4–#6 of the ORPHEUS-38 chain:
+This file grew across the ORPHEUS-38 + ORPHEUS-39 chain:
 
-  Commit #4 (this commit): POST /clients/invite — advisor issues an
+  ORPHEUS-38 commit #4: POST /clients/invite — advisor issues an
     invitation. Creates a pending `clients` row + sends the email.
 
-  Commit #5: POST /accept-invitation — token holder accepts. NOT in
-    this router (different prefix, different auth dependency).
+  ORPHEUS-38 commit #5: POST /accept-invitation — token holder
+    accepts. NOT in this router (different prefix, different auth
+    dependency).
 
-  Commit #6: POST /clients/{id}/resend-invitation — advisor rotates
-    the token and re-sends the email.
+  ORPHEUS-38 commit #6: POST /clients/{id}/resend-invitation —
+    advisor rotates the token and re-sends the email.
+
+  ORPHEUS-39: GET /clients — list this advisor's clients, with each
+    row's most-recent job's id+status. Backs the new
+    /advisor/clients admin page.
 
 The "/clients" prefix means all routes here are
-`POST /clients/<something>`. The accept endpoint is intentionally
+`<METHOD> /clients[/<something>]`. The accept endpoint is intentionally
 outside this prefix because its caller has no clients row yet — the
 acceptance IS the linkage step.
 
@@ -103,8 +108,145 @@ class InviteClientResponse(BaseModel):
     client_id: str
 
 
+class JobSummary(BaseModel):
+    """A single client's most-recent job — id + state — for the list view.
+
+    Compact shape because the admin list doesn't need the full Job
+    payload (no result, no error). The frontend renders a status chip
+    from `status` and links to `/jobs/{id}` on accepted-with-job rows.
+    """
+
+    id: str
+    status: str
+
+
+class ClientListItem(BaseModel):
+    """One row in the advisor's client list response.
+
+    `is_self=True` flags the advisor's self-clients row (where
+    `clients.user_id == advisors.user_id` for this advisor). Lets the
+    UI suppress the "Run my own report" button and render the row
+    with a "You" affordance without an extra round trip.
+
+    `latest_job` is null when this client has never had a job kicked
+    off; otherwise it's the most recent (created_at desc) regardless
+    of state — pending, running, complete, or failed.
+    """
+
+    id: str
+    display_name: str
+    email: str
+    invitation_status: str
+    is_self: bool
+    latest_job: JobSummary | None
+
+
+class ListClientsResponse(BaseModel):
+    """Body of GET /clients."""
+
+    clients: list[ClientListItem]
+
+
 # --------------------------------------------------------------------------- #
-# Endpoint
+# GET /clients — admin list view (ORPHEUS-39)
+# --------------------------------------------------------------------------- #
+
+@router.get("", response_model=ListClientsResponse)
+async def list_clients(
+    roles: Annotated[SessionRoles, Depends(get_current_session_roles)],
+) -> ListClientsResponse:
+    """List every `clients` row owned by the calling advisor.
+
+    Two round trips:
+
+      1. SELECT id, display_name, email, invitation_status, user_id
+         FROM clients WHERE advisor_id = roles.advisor_id
+         ORDER BY created_at DESC.
+
+      2. SELECT id, client_id, status FROM jobs
+         WHERE client_id IN (<step 1 ids>) ORDER BY created_at DESC.
+         Bucket in Python — first hit per client_id wins.
+
+    A two-query approach beats an N+1-per-client lookup at any list
+    size and beats a JOIN at small list sizes (no DISTINCT ON gymnastics
+    against supabase-py's chainable builder). It does pull every job
+    for every client into memory; the worst case for a single advisor
+    is hundreds of rows, well below anything that hurts the dyno.
+
+    Service-role client because the admin endpoint is the system-of-
+    record view; advisors see all their own clients regardless of
+    user RLS context. The handler-side `is_advisor()` guard plus
+    the `advisor_id = roles.advisor_id` filter on the clients query
+    enforces ownership.
+
+    Sort order: newest-first by created_at — matches what an advisor
+    cares about (new invitations, recent activity).
+    """
+    if not roles.is_advisor():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Listing clients requires an advisor profile.",
+        )
+    advisor_id = roles.advisor_id
+    assert advisor_id is not None  # narrowed by is_advisor() guard above
+
+    supabase = get_service_client()
+
+    # ── 1. Pull the clients rows ────────────────────────────────────────
+
+    clients_result = (
+        supabase.table("clients")
+        .select("id, display_name, email, invitation_status, user_id, created_at")
+        .eq("advisor_id", advisor_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    rows = clients_result.data or []
+
+    # ── 2. Pull jobs for those clients (single query, bucket in Python) ─
+
+    latest_by_client: dict[str, dict] = {}
+    if rows:
+        client_ids = [str(r["id"]) for r in rows]
+        jobs_result = (
+            supabase.table("jobs")
+            .select("id, client_id, status, created_at")
+            .in_("client_id", client_ids)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        for job in jobs_result.data or []:
+            cid = str(job["client_id"])
+            # First hit wins — query is ordered desc, so this is most recent.
+            if cid not in latest_by_client:
+                latest_by_client[cid] = job
+
+    # ── 3. Assemble the response ────────────────────────────────────────
+
+    items: list[ClientListItem] = []
+    for row in rows:
+        row_id = str(row["id"])
+        latest = latest_by_client.get(row_id)
+        items.append(
+            ClientListItem(
+                id=row_id,
+                display_name=row["display_name"],
+                email=row["email"],
+                invitation_status=row["invitation_status"],
+                is_self=(row.get("user_id") == roles.user_id),
+                latest_job=(
+                    JobSummary(id=str(latest["id"]), status=latest["status"])
+                    if latest is not None
+                    else None
+                ),
+            )
+        )
+
+    return ListClientsResponse(clients=items)
+
+
+# --------------------------------------------------------------------------- #
+# POST /clients/invite — issue a new invitation (ORPHEUS-38)
 # --------------------------------------------------------------------------- #
 
 @router.post(
