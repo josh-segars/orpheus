@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
+import { useSessionRoles } from '../../hooks/useSessionRoles'
 import { signOut, useSession } from '../../lib/auth'
 
 interface LinkedInUserMetadata {
@@ -17,10 +18,21 @@ interface LinkedInUserMetadata {
  */
 export function PortalNav() {
   const { session } = useSession()
+  const sessionRolesQuery = useSessionRoles()
   const navigate = useNavigate()
+  const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // Role flags drive the new (ORPHEUS-39) middle-of-nav tab toggle.
+  // Both can be true (Andrew, dual-role) or just one (pure advisor,
+  // pure client). The toggle only renders for advisors — clients
+  // never need to switch surfaces.
+  const roles = sessionRolesQuery.data
+  const isAdvisor = Boolean(roles?.advisor_id)
+  const isClient = Boolean(roles?.client_id)
+  const onAdvisorSurface = location.pathname.startsWith('/advisor/')
 
   // Close the dropdown when the user clicks outside it or hits Escape.
   useEffect(() => {
@@ -68,6 +80,52 @@ export function PortalNav() {
         <span className="wordmark-orpheus">Orpheus</span>
         <span className="wordmark-social">Social</span>
       </div>
+      {/*
+        Role-aware middle nav (ORPHEUS-39).
+        - Dual-role users (advisor + client, e.g. Andrew): two-tab
+          toggle between Manage clients and My report. Active tab
+          tracks the current pathname.
+        - Advisor-only users: a single "Manage clients" pill — no
+          toggle, just an active label. There's nowhere else to go
+          and showing a disabled "My report" tab would mislead.
+        - Client-only users: nothing rendered, current behaviour
+          preserved.
+      */}
+      {isAdvisor && isClient && (
+        <div className="nav-role-tabs" role="tablist" aria-label="Portal surface">
+          <Link
+            to="/advisor/clients"
+            role="tab"
+            aria-selected={onAdvisorSurface}
+            className={
+              onAdvisorSurface
+                ? 'nav-role-tab nav-role-tab-active'
+                : 'nav-role-tab'
+            }
+          >
+            Manage clients
+          </Link>
+          <Link
+            to="/"
+            role="tab"
+            aria-selected={!onAdvisorSurface}
+            className={
+              onAdvisorSurface
+                ? 'nav-role-tab'
+                : 'nav-role-tab nav-role-tab-active'
+            }
+          >
+            My report
+          </Link>
+        </div>
+      )}
+      {isAdvisor && !isClient && (
+        <div className="nav-role-tabs">
+          <span className="nav-role-tab nav-role-tab-active">
+            Manage clients
+          </span>
+        </div>
+      )}
       <div className="nav-client" ref={containerRef}>
         <button
           type="button"

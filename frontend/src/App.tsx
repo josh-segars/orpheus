@@ -19,6 +19,7 @@ import { NotInvitedPage } from './pages/NotInvitedPage'
 import { QuestionnairePage } from './pages/QuestionnairePage'
 import { SignalScorePage } from './pages/SignalScorePage'
 import { WelcomePage } from './pages/WelcomePage'
+import { ClientsPage } from './pages/advisor/ClientsPage'
 import { LinkedInStep1Page } from './pages/linkedin/Step1Page'
 import { LinkedInStep2Page } from './pages/linkedin/Step2Page'
 import { SignalMeterPlayground } from './pages/design/SignalMeterPlayground'
@@ -79,6 +80,21 @@ export default function App() {
         <Route path="/jobs/:jobId" element={<SignalScorePage />} />
         <Route path="/jobs/:jobId/forward-brief" element={<ForwardBriefPage />} />
         <Route path="/jobs/:jobId/cheat-sheet" element={<CheatSheetPage />} />
+        {/*
+          Advisor admin surface (ORPHEUS-39). AdvisorRoute redirects
+          non-advisors to / so a client visiting the URL directly
+          doesn't land on a 403-y error page. The /advisor/clients
+          path is the only entry point today; future advisor routes
+          can sit alongside it under the same guard.
+        */}
+        <Route
+          path="/advisor/clients"
+          element={
+            <AdvisorRoute>
+              <ClientsPage />
+            </AdvisorRoute>
+          }
+        />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
@@ -144,15 +160,73 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 }
 
 /**
+ * Per-route gate for advisor-only surfaces (ORPHEUS-39).
+ *
+ * Sits inside `ProtectedRoute` — by the time this renders we already
+ * know the caller has a Supabase session AND at least one business
+ * role. This guard checks specifically for the advisor role; clients
+ * who navigate to /advisor/* directly bounce back to / (where
+ * SmartIndexRedirect will route them to their portal).
+ *
+ * Returns null while `useSessionRoles` is still loading so we don't
+ * flash the advisor UI before checking. ProtectedRoute would have
+ * caught the still-loading case already in 99% of nav paths, but a
+ * brief race window exists where the cache is invalidated (e.g.
+ * after /accept-invitation) and we want a clean no-flash transition.
+ */
+function AdvisorRoute({ children }: { children: ReactNode }) {
+  const { data, isLoading } = useSessionRoles()
+  if (isLoading) {
+    return (
+      <main className="main-interior">
+        <div className="page-status">Loading&hellip;</div>
+      </main>
+    )
+  }
+  if (!data?.advisor_id) {
+    return <Navigate to="/" replace />
+  }
+  return <>{children}</>
+}
+
+/**
  * Decide where to send a freshly-arrived authenticated user.
  *
- *   no jobs + Welcome unseen   → /welcome
- *   no jobs + Welcome seen     → /groundwork
- *   pending or running job     → /jobs/:id/analysis  (AnalysisPage polls)
- *   complete job               → /jobs/:id           (Signal Score)
- *   failed job                 → /groundwork         (let the client retry)
+ *   advisor-only (no client row) → /advisor/clients (ORPHEUS-39)
+ *   no jobs + Welcome unseen     → /welcome
+ *   no jobs + Welcome seen       → /groundwork
+ *   pending or running job       → /jobs/:id/analysis  (AnalysisPage polls)
+ *   complete job                 → /jobs/:id           (Signal Score)
+ *   failed job                   → /groundwork         (let the client retry)
+ *
+ * The advisor-only branch fires before the groundwork-progress hook
+ * is even consulted — that hook queries Supabase under the assumption
+ * the caller owns a clients row, and would return empty/error for an
+ * advisor-only session.
  */
 function SmartIndexRedirect() {
+  const sessionRoles = useSessionRoles()
+
+  // Advisor-only sessions skip the client portal entirely. Dual-role
+  // sessions (Andrew) fall through to the client-portal branch — the
+  // PortalNav tab toggle is what lets them switch surfaces. They
+  // can still navigate to /advisor/clients directly via the nav.
+  if (
+    sessionRoles.data?.advisor_id &&
+    !sessionRoles.data.client_id
+  ) {
+    return <Navigate to="/advisor/clients" replace />
+  }
+
+  return <ClientPortalRedirect />
+}
+
+/**
+ * The client-portal half of SmartIndexRedirect. Extracted so the
+ * `useGroundworkProgress` hook (which assumes the caller has a
+ * clients row) doesn't fire for advisor-only sessions.
+ */
+function ClientPortalRedirect() {
   const { data, isLoading, isError } = useGroundworkProgress()
 
   if (isLoading) {

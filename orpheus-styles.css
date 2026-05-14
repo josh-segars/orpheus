@@ -219,6 +219,44 @@ body {
   outline: none;
 }
 
+/* ── Role tabs (advisor / dual-role middle nav, ORPHEUS-39) ──── */
+.nav-role-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  background: var(--warm-parchment);
+  border: 1px solid var(--warm-border);
+  border-radius: 10px;
+}
+
+.nav-role-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 10px;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--warm-stone);
+  text-decoration: none;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.nav-role-tab:hover {
+  color: var(--warm-text);
+}
+
+.nav-role-tab-active {
+  background: var(--deep-slate);
+  color: var(--warm-ivory);
+}
+
+.nav-role-tab-active:hover {
+  color: var(--warm-ivory);
+}
+
 /* ── Footer ─────────────────────────────────────────────────── */
 .footer {
   background-color: var(--deep-slate);
