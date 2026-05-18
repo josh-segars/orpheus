@@ -31,7 +31,7 @@ from backend.routers import clients as clients_router
 
 ADVISOR_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 ADVISOR_USER_ID = "user-advisor-uuid"
-ADVISOR_EMAIL = "andrew@segarsadvisory.com"
+ADVISOR_EMAIL = "andrew@ess3.ai"
 CLIENT_A_ID = "11111111-1111-1111-1111-111111111111"
 CLIENT_B_ID = "22222222-2222-2222-2222-222222222222"
 CLIENT_SELF_ID = "33333333-3333-3333-3333-333333333333"

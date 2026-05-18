@@ -68,7 +68,7 @@ SUPABASE_URL=                # leave blank for now — Step 4 prints it
 SUPABASE_SERVICE_KEY=        # leave blank for now — Step 4 prints it
 SUPABASE_ANON_KEY=           # leave blank for now — Step 4 prints it
 ANTHROPIC_API_KEY=sk-ant-... # your existing key
-ADMIN_EMAILS=andrew@segarsadvisory.com,josh@segarsfamily.com
+ADMIN_EMAILS=andrew@ess3.ai,josh@ess3.ai,tim@ess3.ai
 FRONTEND_ORIGINS=http://localhost:5173
 SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID=<paste from Step 2>
 SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_SECRET=<paste from Step 2>
@@ -79,7 +79,7 @@ Open `frontend/.env.local` and fill in:
 ```
 VITE_SUPABASE_URL=http://127.0.0.1:54321
 VITE_SUPABASE_ANON_KEY=      # leave blank for now — Step 4 prints it
-VITE_ADMIN_EMAILS=andrew@segarsadvisory.com,josh@segarsfamily.com
+VITE_ADMIN_EMAILS=andrew@ess3.ai,josh@ess3.ai,tim@ess3.ai
 VITE_API_BASE_URL=http://localhost:8000
 ```
 

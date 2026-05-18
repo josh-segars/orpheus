@@ -424,19 +424,20 @@ auth.users 1──1 advisors 1──∞ clients 1──1 questionnaire_responses
 
 | Component | Status | Notes |
 |---|---|---|
-| Database schema | Applied | 8 tables in Supabase. v2 columns applied (003, 004, 005, 006). Two ad-hoc ALTERs need migration files: `narrative_config` on advisors, `published_at DROP NOT NULL` on reports |
-| Pydantic models | Complete | v2 scoring output models (ScoringStageOutput) in `models/scoring.py` |
+| Database schema | Applied | Migration 001 = snapshot of prod public schema (2026-05-11, ORPHEUS-35). On top: 011 (questionnaire spec alignment, ORPHEUS-33), 012 (invitation columns, ORPHEUS-36). Fresh-DB recipe: `supabase db reset && apply 001 + 011 + 012`. Migrations 007–010 are HISTORICAL — don't apply on top of 001. Migrations 003–006 are baked into 001. |
+| Pydantic models | Complete | v2 scoring output models (ScoringStageOutput) in `models/scoring.py`. `SubDimensionScore` does NOT yet carry narrative fields (summary / best_practices / improvements) — open work in ORPHEUS-21. |
 | Ingestion — ZIP parser | Complete | Tested against real data. Handles None keys, datetime formats. Data quality reporting integrated |
 | Ingestion — XLSX parser | Complete | All 5 sheets parsed (DISCOVERY, ENGAGEMENT, TOP POSTS, FOLLOWERS, DEMOGRAPHICS). Tested against real data |
-| API routes | Complete | Auth, advisors, clients, questionnaires, jobs (5 routers, 15 endpoints) |
-| Signup/invitation flow | Complete | Advisor + individual provisioning, client invitation via Supabase Auth |
+| API routes | Complete | 4 routers (`jobs`, `clients`, `advisor`, `session`) registered in `backend/main.py`. All client-facing routes role-gated via `get_current_session_roles` (`SessionRoles.is_advisor()` / `.is_client()`); two routes use `get_verified_session` for the neither-role case (`POST /accept-invitation`, `GET /session`). `GET /jobs/{id}` advisor-visibility gap tracked as ORPHEUS-46. |
+| Signup/invitation flow | Complete | Resend transactional email + custom backend (`POST /clients/invite`, `POST /accept-invitation`, `POST /clients/{id}/resend-invitation`, all under ORPHEUS-38). Advisor admin UI at `/advisor/clients` (ORPHEUS-39) for managing the roster — list, invite, resend, run-my-own-report. Live e2e against cloud Supabase deferred to ORPHEUS-44 (gated on ORPHEUS-25). |
 | Worker / job processor | Complete | Job loop with optimistic locking via RPC, 4-stage pipeline, upsert retry safety, deployed on Railway |
-| Scoring engine | Complete | 4 dimensions, all bands, formula confirmed. `scoring/config.py` + `scoring/engine.py`. Pressure-test: 77.6 ✓ |
+| Scoring engine | Complete | 4 dimensions, all bands, formula confirmed. `scoring/config.py` + `scoring/engine.py`. Pressure-test: 77.6 ✓. Dimension-level band classification (per-dimension thresholds vs reusing composite) is an open product question — ORPHEUS-22. |
 | Forward Brief computation | Complete | Computed in scoring stage. XLSX feeds Reach/Resonance/Authority; ZIP feeds qualitative flags |
-| Claude rubric scoring | Complete | `agents/rubric.py` — Dim 1 (5 rubrics) + Dim 4 (2 rubrics). Inter-rater consistency testing still needed |
-| Narrative generation | Complete | `agents/narrative.py` — receives scored dimensions + forward brief + quality report + questionnaire. 5 sections generated |
-| Railway deployment | Complete | Web service (FastAPI) + worker service (background processor). Shared env vars. Worker requires manual redeploy |
-| Frontend | Not started | Josh's territory; API and pipeline ready for it to build against |
+| Claude rubric scoring | Complete | `agents/rubric.py` — Dim 1 (5 rubrics) + Dim 4 (2 rubrics). Inter-rater consistency testing still needed (PRODUCT_CONTEXT Open Question 4). |
+| Narrative generation | Complete | `agents/narrative.py` — receives scored dimensions + forward brief + quality report + 9-question intake (post-ORPHEUS-34 prompt rewrite). 5 sections generated. Sub-dimension narrative fields not yet generated (ORPHEUS-21). |
+| Railway deployment | Complete | Web service (FastAPI) + worker service (background processor). Shared env vars. Worker requires manual redeploy. Build command currently pinned manually in dashboard (`pip install -r backend/requirements.txt`); source-pin tracked as ORPHEUS-43. |
+| Vercel deployment | Complete | Frontend deployed at the configured Vercel project. `frontend/vercel.json` adds the SPA fallback rewrite Vite's framework preset doesn't auto-add. Root directory is `frontend`. `VITE_*` env vars set in dashboard (Production / Preview / Development). |
+| Frontend | Complete | All portal pages shipped — Welcome, Groundwork, Questionnaire (9-question simplified intake post-ORPHEUS-33), LinkedIn upload Step 1 + Step 2, Analysis-in-Progress, Signal Score, Forward Brief, Cheat Sheet, Login, `/invite/:token`, `/invite/callback`, `/not-invited`, `/advisor/clients` (ORPHEUS-39). React Query + Supabase Auth wiring complete via `frontend/src/lib/`. No frontend test infra yet — tracked as ORPHEUS-47. |
 
 ---
 

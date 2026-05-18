@@ -1,16 +1,113 @@
 # Orpheus Social — Project Context
 
-Orpheus Social is a client portal and diagnostic tool for **Andrew Segars'
-Strategic Digital Presence Advisory** practice. It guides senior executive
-clients through a structured data-gathering phase ("Groundwork"), then
-delivers a **Signal Score** diagnostic and **Forward Brief** action plan.
+Orpheus Social is a client portal and diagnostic tool for improving presence
+and personal narrative on LinkedIn. It is designed to guide advisors with one
+to many clients and self-serve customers through a structured data-gathering
+phase ("Groundwork"), then delivers a **Signal Score** diagnostic and
+**Forward Brief** action plan.
 
 **Current state:** two parallel implementations.
 
 - **HTML/CSS prototype** (14 screens, JS-free) lives flat in the repo root and renders via VS Code Live Server. It is the visual source of truth for the design system.
 - **Production stack** is in active development: FastAPI backend (Railway), Supabase Postgres with Auth + RLS, Vite + React frontend (Vercel). As of 2026-05-06, LinkedIn (OIDC) sign-in works end-to-end against local Supabase; the React shell renders Signal Score, Forward Brief, and Cheat Sheet pages with auth, RLS, and the typed JWT contract in place.
 
-**Active phase:** the prototype's product flow is ported (Welcome, Groundwork, questionnaire, LinkedIn upload, Analysis-in-Progress all live in React). Open work is the simplified intake's downstream effects — narrative-prompt rewrite (ORPHEUS-34) and base-schema migration for full-pipeline local verification (ORPHEUS-35). See the Plane backlog for the open ORPHEUS-n tickets.
+**Active phase:** the prototype's product flow is ported (Welcome, Groundwork, questionnaire, LinkedIn upload, Analysis-in-Progress all live in React). The advisor admin UI (`/advisor/clients`) shipped 2026-05-14 under ORPHEUS-39. Open code work is per-sub-dimension narrative fields (ORPHEUS-21), advisor visibility into client jobs (ORPHEUS-46), and the live e2e walk-through against cloud Supabase (ORPHEUS-44, gated on ORPHEUS-25). See the latest `SESSION_HANDOFF_*.md` and the Plane backlog for the current state.
+
+---
+
+## First-session quickstart
+
+A fresh Claude session can be productive in 5 minutes by:
+
+### 1. Read these three docs in order
+
+1. **This file (CLAUDE.md)** — auto-loaded by the agent; you're reading it.
+2. **`PRODUCT_CONTEXT.md`** — Signal Score framework, scoring formulas, pipeline architecture, decisions, build status. The canonical product spec.
+3. **The latest `SESSION_HANDOFF_*.md`** at the repo root — what shipped most recently, what's in flight, suggested pickup plans for the next ticket.
+
+Then `CONVENTIONS.md` and `CREDENTIALS.md` when you need them (linked from below).
+
+### 2. Confirm tool availability
+
+This project expects these MCP servers to be connected on the team account:
+
+| MCP | What it does | Critical? |
+|---|---|---|
+| **Plane** (`mcp__plane__*`) | Project management — read/update tickets, post comments, create pages. Used every session. | Yes |
+| **Supabase** (`mcp__supabase__*`) | Database operations against the prod project — apply migrations, run queries, list tables. | Yes for schema work; optional for code-only sessions |
+| **Workspace bash** (`mcp__workspace__bash`) | Shell access in an isolated Linux sandbox. Reads the repo from `/sessions/<id>/mnt/orpheus/`. | Yes |
+| **Filesystem tools** (Read/Write/Edit/Glob/Grep) | Direct repo access via the user's filesystem at `/Users/josh/git/orpheus/`. | Yes |
+| **Claude in Chrome** (`mcp__claude-in-chrome__*`) | Browser automation for web apps that have no MCP. Used occasionally. | Optional |
+| **Computer-use** (`mcp__computer-use__*`) | Native desktop control. Rarely needed for this project. | Optional |
+| **Scheduled tasks** (`mcp__scheduled-tasks__*`) | Recurring/deferred work. Not currently used. | Optional |
+
+If a critical MCP is missing, ask the user to connect it before starting work. Don't fall back to web scraping or pixel-hunting when an API-backed MCP is the right tool.
+
+The `anthropic-skills` pack (pdf, docx, xlsx, pptx, schedule, setup-cowork, skill-creator) should be installed for document-creation work. Most sessions don't need it; code-and-prose work doesn't trigger any of them.
+
+### 3. Verify wiring
+
+Quick checklist a fresh session can run:
+
+1. `mcp__plane__get_projects` → should return at least the Orpheus project.
+2. `git remote -v` (via workspace bash) → should show `git@github.com:josh-segars/orpheus.git`.
+3. The user's working directory mount is `/sessions/<id>/mnt/orpheus/`; the same files are reachable via the file tools at `/Users/josh/git/orpheus/`.
+
+If any of those fail, see `CREDENTIALS.md` for the system-by-system inventory.
+
+### 4. Pointers
+
+- **People & decision authority** — see "People & roles" section below.
+- **External systems / credentials** — `CREDENTIALS.md` (Plane, Supabase, Railway, Vercel, Resend, LinkedIn Developer, GitHub, Anthropic).
+- **Naming, commits, Plane workflow** — `CONVENTIONS.md` (file naming patterns, commit message format, ticket states, page categories, handoff workflow).
+- **Local-dev setup** — `SETUP_phase1_local_auth.md` (one-time onboarding: install Supabase CLI, create the dev LinkedIn app, apply migrations 001 + 011 + 012).
+
+### 5. Sandbox quirks worth knowing
+
+- **SSH egress is blocked** from the workspace sandbox. `git push origin main` only works from the user's terminal — Claude must commit locally and hand off the push instruction.
+- **`.git/*.lock` files cannot be unlinked** by the sandbox. Every git commit leaves a phantom lock that needs `mv` (not `rm`) before the next operation. Pattern: `find .git -name "*.lock" -type f | while read f; do mv "$f" "$f.moved.$$" 2>/dev/null; done` before each commit.
+- **PyPI access is blocked.** `pip install` doesn't work in the sandbox. `pytest` cannot be run from sandbox; runs must happen on the user's machine.
+- **The file tools and bash tools see different paths for the same file** — file tools use `/Users/josh/git/orpheus/`, bash uses `/sessions/<id>/mnt/orpheus/`. Same files underneath, different mount roots.
+
+---
+
+## People & roles
+
+**Josh Segars** (`josh@ess3.ai`) — engineering lead, project manager, product manager/designer, AI workflow operator. Owns:
+
+- Codebase decisions (architecture, scaffolding, refactors, libraries).
+- Schema and migration decisions.
+- Ticket grooming and prioritization in Plane.
+- Naming conventions, commit / handoff format.
+- AI session workflow (these docs, the SESSION_HANDOFF pattern, the audit pattern).
+- Frontend port strategy and visual fidelity to the HTML prototype.
+- Build sequencing and deploy mechanics (Railway, Vercel).
+
+When the user message in this session is from `josh@ess3.ai`, it's Josh.
+
+**Andrew Segars** — product lead, advisor practice owner, domain authority. Owns:
+
+- All Signal Score framework decisions (dimensions, weights, bands, sub-dimensions, rubrics).
+- Narrative voice and advisory framing (third-person neutral for advisory, etc.).
+- Final call on anything the advisor practice depends on.
+
+Decisions in `PRODUCT_CONTEXT.md` "Decisions Made" tagged `[Andrew, YYYY-MM-DD]` are Andrew's; `[Josh, YYYY-MM-DD]` are Josh's; joint decisions are tagged `[Andrew + Josh, YYYY-MM-DD]`.
+
+**Tim Segars** (`tim@ess3.ai`) — CEO, operations, finance, legal. Owns:
+
+- All legal decisions (terms of service, privacy policy, contracts, vendor agreements).
+- LinkedIn API terms review, pricing (when Stripe lands).
+- Final call on anything legal, compliance, and financial.
+
+**Decision routing for AI sessions:**
+
+- **Code shape, naming, refactors, library choices** → Josh's call. Claude can propose and ship.
+- **Scoring framework, narrative content, advisor practice** → Andrew's call. Claude drafts, Josh routes, Andrew approves.
+- **Schema and migration mechanics** → Josh's call.
+- **Product UX (what the client sees and when)** → Andrew's call for substantive change; Josh's call for minor polish.
+- **Legal, compliance, financial, vendor / contract decisions** → Tim's call. Claude drafts, Josh routes, Tim approves.
+
+When in doubt, prefer Josh's approval to ship → he'll route to Andrew or Tim if needed.
 
 ---
 
@@ -432,21 +529,7 @@ Plane is the source of truth for tasks and documentation. Do not maintain a dupl
 
 Work items are referenced as `ORPHEUS-[n]` (e.g. `ORPHEUS-12`). Use these identifiers in commit messages and PRs to link work to Plane issues.
 
-**Page naming format:** `Category: Title (YYYY-MM-DD)`
-Example: `Decision: Auth Strategy (2026-03-18)`
-
-**Page categories:**
-- `Decision` — why X was chosen over Y (tech, product, design)
-- `Spec` — feature or component requirements and scope
-- `Architecture` — system design, infrastructure, data models
-- `Meeting` — discussion summaries and action items
-
-**Publishing workflow:**
-1. Claude drafts page content in the conversation
-2. Josh reviews and approves (or requests edits)
-3. Claude publishes to the Orpheus project in Plane
-
-All pages are published to the **Orpheus project** (project-level, not workspace-level).
+Full conventions — file naming patterns, commit message format, Plane ticket states + UUIDs, page categories, page publishing workflow, and the session handoff pattern — live in **`CONVENTIONS.md`**. Keep that file in sync when conventions change; don't duplicate the content here.
 
 ---
 

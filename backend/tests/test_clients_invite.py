@@ -36,7 +36,7 @@ ADVISOR_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 CLIENT_ID = "99999999-8888-7777-6666-555555555555"
 NEW_CLIENT_ID = "11111111-2222-3333-4444-555555555555"
 ADVISOR_USER_ID = "user-advisor-uuid"
-ADVISOR_EMAIL = "andrew@segarsadvisory.com"
+ADVISOR_EMAIL = "andrew@ess3.ai"
 INVITE_EMAIL = "client@example.com"
 
 

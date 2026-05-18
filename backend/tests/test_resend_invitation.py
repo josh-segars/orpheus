@@ -31,7 +31,7 @@ OTHER_ADVISOR_ID = "ffffffff-0000-0000-0000-000000000000"
 CLIENT_ID = "99999999-aaaa-bbbb-cccc-dddddddddddd"
 CLIENT_EMAIL = "client@example.com"
 ADVISOR_USER_ID = "user-advisor-uuid"
-ADVISOR_EMAIL = "andrew@segarsadvisory.com"
+ADVISOR_EMAIL = "andrew@ess3.ai"
 ORIGINAL_TOKEN = "11111111-2222-2222-2222-222222222222"
 
 
