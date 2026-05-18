@@ -339,14 +339,13 @@ function ClientRow({ client }: ClientRowProps) {
 
       <div className="advisor-client-actions">
         {/*
-         * "View report" is shown only for the advisor's own self-report
-         * row right now. The GET /jobs/{id} endpoint requires
-         * is_client(); an advisor-only session viewing a separate
-         * client's job 403s. Advisor visibility into client jobs is its
-         * own follow-up ticket.
+         * "View report" surfaces on any row whose latest job is
+         * complete — for the advisor's own self-clients row, and for
+         * any client they manage. Backed by the advisor-aware
+         * GET /jobs/{id} added in ORPHEUS-46; the handler checks that
+         * the job's client_id is in the advisor's managed roster.
          */}
-        {client.is_self &&
-          client.latest_job &&
+        {client.latest_job &&
           client.latest_job.status === 'complete' && (
             <Link
               to={`/jobs/${client.latest_job.id}`}
