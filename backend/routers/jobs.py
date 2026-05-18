@@ -4,11 +4,16 @@ multipart POST /jobs that the LinkedIn upload flow submits to (ORPHEUS-16).
 Contract mirrors frontend/src/types/job.ts: a `Job` with id, state, timestamps,
 optional `result` (ScoringStageOutput + Narratives), and optional `error`.
 
-The GET path uses `user_scoped_supabase` so RLS (migration 008) enforces
-ownership at the database. The POST path uses the service-role client
+Both paths use the service-role Supabase client. The POST path uses it
 because `ingested_data` only has SELECT RLS for clients — INSERTs are
 server-only — and we want a single client throughout the multi-table write
-so partial failures are easier to reason about.
+so partial failures are easier to reason about. The GET path used to lean
+on `user_scoped_supabase` for RLS-backed ownership checks; ORPHEUS-46
+moved it to service-role + an explicit `allowed_client_ids` check so the
+same handler can serve both clients viewing their own jobs and advisors
+viewing the jobs of clients they manage. The leak-resistance contract is
+preserved by the handler (404 for any case the caller can't see),
+matching the pattern already used by `GET /clients`.
 """
 
 from __future__ import annotations
@@ -20,7 +25,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from backend.auth import SessionRoles, get_current_session_roles
-from backend.db import get_service_client, user_scoped_supabase
+from backend.db import get_service_client
 from backend.ingestion.xlsx_parser import parse_xlsx
 from backend.ingestion.zip_parser import parse_zip
 from backend.models.job import Job
@@ -239,30 +244,73 @@ async def get_job(
     job_id: str,
     roles: SessionRoles = Depends(get_current_session_roles),
 ) -> Job:
-    """Fetch a single job by id. Caller must own it.
+    """Fetch a single job by id. Caller must own it via either role.
 
-    Returns 404 for either "no such job" or "job belongs to someone else" —
-    we don't leak the existence of another client's jobs.
+    Returns 404 for any case the caller can't see — "no such job", "job
+    belongs to a client that isn't yours", or "advisor doesn't manage
+    that client". We don't leak the existence of jobs the caller can't
+    see (matches the leak-resistance contract on `GET /clients`).
 
-    Requires the client role; advisor-only sessions get a 403. (Advisor
-    visibility into client jobs goes through the future /advisor/clients
-    routes, which use the advisor's own RLS policy on jobs.)
+    Role gate accepts either:
+      * is_client() — the original client-viewing-own-report path. Job
+        must belong to `roles.client_id`.
+      * is_advisor() — ORPHEUS-46. Job must belong to a client the
+        advisor manages (`clients.advisor_id == roles.advisor_id`).
+
+    Dual-role callers (an advisor who is also their own client, e.g.
+    Andrew) see the union of both predicates. The advisor's self-clients
+    row appears among their managed clients, so the union is idempotent
+    for the "view own self-report" case.
+
+    Uses the service-role Supabase client and an explicit
+    `allowed_client_ids` filter rather than `user_scoped_supabase`,
+    matching the pattern in `GET /clients`. The handler enforces
+    ownership directly; RLS is not relied upon here.
     """
-    if not roles.is_client():
+    if not (roles.is_client() or roles.is_advisor()):
+        # Unreachable under `get_current_session_roles` (which 401s the
+        # neither-role case) but defends against a future code path
+        # that swaps in `get_verified_session` here.
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Viewing a diagnostic requires a client profile.",
+            detail="Viewing a diagnostic requires a client or advisor profile.",
         )
-    client_id = roles.client_id
-    assert client_id is not None  # narrowed by is_client() guard above
 
-    supabase = user_scoped_supabase(roles.access_token)
+    supabase = get_service_client()
+
+    # Compute the set of client_ids whose jobs this caller is allowed
+    # to see. Service-role lookup because RLS on `clients` keys on
+    # auth.uid() and we want the advisor's roster regardless of the
+    # session token's RLS context.
+    allowed_client_ids: set[str] = set()
+    if roles.is_client():
+        assert roles.client_id is not None  # narrowed by is_client()
+        allowed_client_ids.add(roles.client_id)
+    if roles.is_advisor():
+        advisor_clients = (
+            supabase.table("clients")
+            .select("id")
+            .eq("advisor_id", roles.advisor_id)
+            .execute()
+        )
+        for client_row in advisor_clients.data or []:
+            allowed_client_ids.add(str(client_row["id"]))
+
+    if not allowed_client_ids:
+        # Advisor with zero managed clients (and no client role of
+        # their own). The job, if it exists, definitionally doesn't
+        # belong to them — 404 not 403 to match the leak-resistance
+        # contract.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job {job_id!r} not found.",
+        )
 
     result = (
         supabase.table("jobs")
         .select("*")
         .eq("id", job_id)
-        .eq("client_id", client_id)
+        .in_("client_id", list(allowed_client_ids))
         .limit(1)
         .execute()
     )
