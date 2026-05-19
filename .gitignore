@@ -26,3 +26,7 @@ supabase/.env
 # Supabase Studio per-developer SQL snippet state.
 supabase/snippets/
 LinkedIn_API_Terms_Review_*.docx
+
+# Vite production build output + HMR timestamp files — generated, never commit.
+frontend/dist/
+frontend/vite.config.ts.timestamp-*.mjs
