@@ -133,16 +133,48 @@ All files live flat in the repo root. Assets go in `assets/screenshots/`.
 - Both loaded from Google Fonts in each HTML file's `<head>`
 
 ### Color Tokens (defined in `orpheus-styles.css` `:root`)
+
+Dark mode is canonical as of ORPHEUS-50 (2026-05-29). There is no light variant.
+
+Role-based tokens (preferred for new code):
 ```
---deep-slate:     #1C2B3A   (primary dark, nav bg, buttons)
---warm-gold:      #C4902A   (accent, active states, highlights, watch tone)
---warm-ivory:     #F9F6F0   (page background)
---warm-parchment: #EDE9E1   (card/input backgrounds)
---warm-text:      #271D10   (body text)
---warm-stone:     #7A6A56   (secondary text, placeholders, strength tone)
---warm-border:    #DDD5C8   (borders, dividers)
---red-clay:       #BD3F3A   (gap/issue tone — sub-dimension icons, alerts)
+--bg-page:           #010c16   (page background)
+--bg-surface:        #010c16   (card surface — typically transparent + --border)
+--surface-elevated:  #1C2B3A   (avatars, footer band, role-tab inactive, inputs)
+--text-strong:       #f9f6f0   (headings, wordmark, primary text on dark bg)
+--text-body:         #e8f3f7   (body copy)
+--text-muted:        #91a7af   (secondary text, placeholders, labels)
+--border:            #364048   (card borders, dividers, input borders)
+--accent:            #67ac6c   (eyebrows, Social wordmark, hover accents)
+--accent-strong:     #218f29   (active band pill, success states)
+--accent-tint-soft:  rgba(103, 172, 108, 0.08)
+--accent-tint-hover: rgba(103, 172, 108, 0.16)
+--primary:           #0160d5   (primary buttons, role-tab active)
+--primary-hover:     #1a78ed
+--issue:             #bf2923   (error/issue tone, alerts)
+--shadow-dark:       rgba(0, 0, 0, 0.5)
+
+Audio-spectrum palette — 5-step rating pips on the Signal Score page, low → high:
+--pip-1: #bf2923  (red)
+--pip-2: #e17800  (orange)
+--pip-3: #e7ce41  (yellow)
+--pip-4: #218f29  (green)
+--pip-5: #006cf1  (blue)
 ```
+
+Legacy aliases — preserved so existing `var(--warm-*)` / `var(--deep-slate)` references continue to resolve to their dark equivalents. Most map cleanly; three legacy names (`--deep-slate`, `--warm-ivory` as a text color, and a handful of placeholder-text refs) served multiple semantic roles in light mode and were updated per-rule during the ORPHEUS-50 migration:
+```
+--deep-slate     → var(--surface-elevated)
+--warm-gold      → var(--accent)
+--warm-ivory     → var(--bg-page)
+--warm-parchment → var(--bg-surface)
+--warm-text      → var(--text-body)
+--warm-stone     → var(--text-muted)
+--warm-border    → var(--border)
+--red-clay       → var(--issue)
+```
+
+New code should prefer the role-based tokens. Legacy aliases stay defined indefinitely so the rename never has to ripple through every CSS file.
 
 ### Border Radius
 10px throughout — no exceptions.
