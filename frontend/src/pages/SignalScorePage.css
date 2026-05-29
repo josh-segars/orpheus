@@ -1,46 +1,97 @@
-/* Page-specific styles for the Signal Score screen. */
+/* Signal Score page — ORPHEUS-50 redesign. Dark-mode canonical. */
 
-/* ── Score section (band heading + meter) ─────────────────── */
-/* The client-facing hero. Presents the band label as the headline rather
-   than the numeric score, consistent with the "clients see bands, not
-   numbers" product principle (see PRODUCT_CONTEXT.md). */
-.score-section {
+/* ── Score hero (waveform background) ───────────────────────── */
+/* Full-bleed band that sits behind the nav. The nav stays visible at the
+   top of the page because it lives outside this component; the waveform
+   image is positioned absolutely inside the hero with a vertical fade so
+   the page background takes over below it. */
+.score-hero {
+  position: relative;
+  width: 100%;
+  height: 560px;
+  margin-top: -120px; /* tuck under the nav so the waveform reaches the top */
+  margin-bottom: -180px; /* let the dimensions section overlap the soft tail */
+  pointer-events: none;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  margin-bottom: 60px;
+  align-items: center;
+  justify-content: center;
+  z-index: 0;
 }
 
-.score-section-title {
+.score-hero-waves {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  opacity: 0.95;
+  /* Soft top/bottom fade so the waveform feels embedded in the page bg
+     instead of pasted on top of it. */
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    transparent 0%,
+    #000 25%,
+    #000 70%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    transparent 0%,
+    #000 25%,
+    #000 70%,
+    transparent 100%
+  );
+}
+
+.score-hero-content {
+  position: relative;
+  z-index: 1;
   text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  pointer-events: auto;
+  margin-top: 80px; /* push content below where the nav sits */
 }
 
-.score-section-eyebrow {
+.score-hero-eyebrow {
   font-family: 'Source Sans 3', sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
+  font-size: 16px;
+  font-weight: 400;
   letter-spacing: 1px;
-  color: var(--warm-stone);
+  text-transform: uppercase;
+  color: var(--accent);
+  text-shadow: 0 0 20px rgba(0, 0, 0, 0.4);
+  margin-bottom: 8px;
 }
 
-.score-section-band {
+.score-hero-band {
   font-family: 'Source Serif 4', serif;
-  font-size: 44px;
+  font-size: 56px;
   font-weight: 700;
-  color: var(--warm-text);
+  font-variation-settings: 'opsz' 44;
+  color: var(--text-strong);
+  text-shadow: 0 0 24px var(--bg-page);
+  line-height: 1;
   margin: 0;
-  line-height: 1.1;
 }
 
+/* ── Main interior wrapping the dimensions grid + actions ──── */
+.signal-main {
+  position: relative;
+  z-index: 1;
+}
+
+.signal-section-header {
+  margin-bottom: 4px;
+}
+
+/* ── Dimensions grid ───────────────────────────────────────── */
 .dimensions-grid {
   display: grid;
   grid-template-columns: 1fr;
   gap: 20px;
-  margin-bottom: 60px;
+  margin-bottom: 40px;
 }
 
 .dimension-card {
@@ -48,271 +99,237 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 20px 24px;
-}
-
-/* Upper row — narrative on the left, dial on the right.
-   Dial column is a fixed width so the narrative column reflows freely. */
-.dimension-upper {
-  display: flex;
-  gap: 24px;
-  align-items: flex-start;
-}
-
-.dimension-text {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-width: 0;
+  gap: 12px;
 }
 
-.dimension-gauge {
-  flex: 0 0 auto;
+.dim-header {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding-top: 2px;
-}
-
-.dimension-name {
-  font-family: 'Source Serif 4', serif;
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--warm-text);
-}
-
-.dimension-narrative {
-  font-family: 'Source Sans 3', sans-serif;
-  font-size: 14px;
-  color: var(--warm-stone);
-  line-height: 1.6;
-}
-
-.interpretation-prose {
-  display: flex;
-  flex-direction: column;
+  justify-content: space-between;
   gap: 20px;
+  flex-wrap: wrap;
 }
 
-.interpretation-paragraph {
-  font-family: 'Source Sans 3', sans-serif;
-  font-size: 15px;
-  color: var(--warm-stone);
-  line-height: 1.7;
+.dim-name {
+  font-family: 'Source Serif 4', serif;
+  font-size: 18px;
+  font-weight: 700;
+  font-variation-settings: 'opsz' 18;
+  color: var(--text-strong);
+  line-height: 1.2;
 }
 
-/* Sub-dimension indicators */
-.dimension-indicators {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--warm-border);
-}
-
-.indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Chevron slot — reserved 20px at the start of each row so non-expandable
-   rows align visually with the expandable ones. */
-.indicator-chevron-slot {
-  display: inline-block;
-  width: 20px;
-  flex-shrink: 0;
-}
-
-.indicator-label {
-  font-family: 'Source Sans 3', sans-serif;
-  font-size: 13px;
-  font-weight: 400;
-  color: var(--warm-text);
-  line-height: 1.4;
-  flex: 1; /* push the score/icon to the right */
-}
-
-.indicator-value {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: 'Source Sans 3', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--warm-text);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-/* Trailing tone icon (check_circle / emergency_home / dangerous).
-   Color comes from the tone class on the row.
-   FILL axis set to 1 for the filled glyph variant.
-   Specificity is bumped via the paired selector so this rule beats the
-   base `.material-symbols-outlined` declaration further down the file. */
-.material-symbols-outlined.indicator-tone-icon {
-  font-size: 20px;
-  line-height: 1;
-  flex-shrink: 0;
-  font-variation-settings: 'FILL' 1, 'opsz' 20;
-}
-
-.indicator-strength .indicator-tone-icon { color: var(--warm-stone); }
-.indicator-watch    .indicator-tone-icon { color: var(--warm-gold); }
-.indicator-gap      .indicator-tone-icon { color: var(--red-clay); }
-
-/* ── Material Symbols (used for chevron / expand-all icons) ──────── */
-/* Class defined by Google Fonts is not bundled, so we declare it here. */
-.material-symbols-outlined {
-  font-family: 'Material Symbols Outlined';
-  font-weight: normal;
-  font-style: normal;
-  line-height: 1;
-  letter-spacing: normal;
-  text-transform: none;
-  display: inline-block;
-  white-space: nowrap;
-  word-wrap: normal;
-  direction: ltr;
-  -webkit-font-feature-settings: 'liga';
-  -webkit-font-smoothing: antialiased;
-  font-variation-settings: 'opsz' 20;
-}
-
-/* ── Expandable sub-dimension rows ───────────────────────────────── */
-
-/* The "Expand all / Collapse all" toggle sits above the list. */
-.indicator-list-header {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 2px;
-}
-.indicator-expand-all {
+/* Band pill row — five pills, one highlighted to indicate the dimension's
+   current band. */
+.band-pills {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: none;
-  padding: 4px 6px;
-  margin: -4px -6px;
-  font-family: 'Source Sans 3', sans-serif;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  color: var(--warm-stone);
-  cursor: pointer;
-  border-radius: 4px;
-  transition: color 150ms ease, background-color 150ms ease;
-}
-.indicator-expand-all:hover {
-  color: var(--warm-text);
-  background-color: rgba(255, 255, 255, 0.04);
-}
-.indicator-expand-all .material-symbols-outlined {
-  font-size: 18px;
+  gap: 5px;
 }
 
-/* Expandable row: overrides the base `.indicator` flex so summary + detail
-   can stack vertically. */
-.indicator-expandable {
-  display: block;
-}
-
-/* The clickable summary bar — mirrors the one-liner layout visually but
-   wraps it in a full-width button for keyboard/click affordance. */
-.indicator-summary {
-  width: 100%;
-  display: flex;
+.band-pill {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  background: transparent;
-  border: none;
-  padding: 4px 0;
-  margin: -4px 0;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
-  border-radius: 4px;
-  transition: background-color 150ms ease;
-}
-.indicator-summary:hover {
-  background-color: rgba(255, 255, 255, 0.04);
+  justify-content: center;
+  min-width: 80px;
+  padding: 1px 10px 2px;
+  border-radius: 20px;
+  background-color: var(--surface-elevated);
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
-/* Chevron sits at the start of each expandable row (before the label).
-   Rotates 90° on expand so the arrow points down at the revealed detail. */
-.indicator-chevron {
-  font-size: 20px;
-  color: var(--warm-stone);
-  transition: transform 200ms ease;
-  flex-shrink: 0;
-}
-.indicator-expandable.is-expanded .indicator-chevron {
-  transform: rotate(90deg);
+.band-pill-active {
+  background-color: var(--accent-strong);
+  color: var(--text-strong);
 }
 
-/* Detail panel — the three sections per expanded sub-dimension. Indented
-   to align with the label column (past the chevron slot). */
-.indicator-detail {
-  padding: 10px 0 6px 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+.dim-narrative {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--text-body);
+  line-height: 1.45;
+  margin: 0;
 }
 
-.indicator-section {
+.dim-divider {
+  height: 1px;
+  width: 100%;
+  background-color: var(--border);
+  margin: 2px 0;
+}
+
+/* ── Sub-dimension list ────────────────────────────────────── */
+.sub-dim-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.indicator-section-label {
+.sub-dim {
+  display: flex;
+  flex-direction: column;
+}
+
+.sub-dim-static {
+  padding: 6px 0;
+}
+
+.sub-dim-expandable {
+  border-radius: 6px;
+  transition: background-color 150ms ease;
+}
+
+.sub-dim-trigger {
+  width: 100%;
+  display: block;
+  background: transparent;
+  border: none;
+  padding: 6px 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  border-radius: 6px;
+  transition: background-color 150ms ease;
+}
+
+.sub-dim-trigger:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.sub-dim-row-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 4px;
+}
+
+.sub-dim-name {
   font-family: 'Source Sans 3', sans-serif;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--text-body);
+  line-height: 1.4;
+}
+
+/* 5-pip rating row (red / orange / yellow / green / blue). Position
+   determines color when filled; unfilled positions read as the elevated
+   surface gray. */
+.pip-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.pip {
+  width: 20px;
+  height: 10px;
+  border-radius: 12.5px;
+  background-color: var(--surface-elevated);
+  transition: background-color 200ms ease;
+}
+
+.pip-1.pip-filled { background-color: var(--pip-1); }
+.pip-2.pip-filled { background-color: var(--pip-2); }
+.pip-3.pip-filled { background-color: var(--pip-3); }
+.pip-4.pip-filled { background-color: var(--pip-4); }
+.pip-5.pip-filled { background-color: var(--pip-5); }
+
+/* Expandable detail block — three sections: Summary / Best Practices /
+   Improvements. Indented to line up with the sub-dim label column. */
+.sub-dim-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 10px 24px 14px;
+}
+
+.detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-section-label {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 12px;
+  font-weight: 400;
   letter-spacing: 0.5px;
   text-transform: uppercase;
-  color: var(--warm-stone);
+  color: var(--text-strong);
 }
 
-.indicator-section-prose {
+.detail-section-prose {
   font-family: 'Source Sans 3', sans-serif;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--warm-text);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text-body);
   margin: 0;
 }
 
-.indicator-section-list {
+.detail-section-list {
   margin: 0;
-  padding-left: 18px;
+  padding-left: 22px;
   font-family: 'Source Sans 3', sans-serif;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--warm-text);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text-body);
 }
-.indicator-section-list li {
+
+.detail-section-list li {
   margin-bottom: 4px;
 }
-.indicator-section-list li:last-child {
+
+.detail-section-list li:last-child {
   margin-bottom: 0;
 }
 
-/* Loading and error states */
+/* ── Loading / error states ─────────────────────────────────── */
 .page-status {
   font-family: 'Source Sans 3', sans-serif;
-  color: var(--warm-stone);
+  color: var(--text-muted);
   padding: 40px 0;
   text-align: center;
 }
 
-/* Grouped forward actions — two deliverables share the right side of
-   the action bar while the back link stays on the left. */
+/* Two-deliverable cluster on the right side of the action bar. */
 .actions-group {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* ── Narrow widths ─────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .score-hero {
+    height: 420px;
+    margin-top: -80px;
+    margin-bottom: -120px;
+  }
+  .score-hero-band {
+    font-size: 44px;
+  }
+  .dim-header {
+    align-items: flex-start;
+  }
+  .band-pill {
+    min-width: 60px;
+    font-size: 10px;
+    padding: 1px 6px 2px;
+  }
+  .pip {
+    width: 16px;
+  }
 }

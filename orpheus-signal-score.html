@@ -9,198 +9,226 @@
   <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,500;0,8..60,700;0,8..60,900;1,8..60,700;1,8..60,900&family=Source+Sans+3:ital,wght@0,400;0,600;1,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="orpheus-styles.css">
   <style>
+    /* Override body align-items so the full-bleed hero can stretch edge to
+       edge while the rest of the page stays centered. */
+    body { align-items: stretch; }
+    .nav, .main-interior, .footer { align-self: center; }
+
+    /* ── Score hero (waveform background) ───────────────────── */
     .score-hero {
-      background-color: var(--deep-slate);
-      border-radius: 10px;
-      padding: 48px 40px;
-      text-align: center;
-      margin-bottom: 60px;
-    }
-
-    .score-eyebrow {
-      font-family: 'Source Sans 3', sans-serif;
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--warm-gold);
-      margin-bottom: 24px;
-    }
-
-    .score-number-container {
+      position: relative;
+      width: 100%;
+      height: 560px;
+      margin-top: -120px;
+      margin-bottom: -180px;
+      pointer-events: none;
+      overflow: hidden;
       display: flex;
-      align-items: baseline;
+      flex-direction: column;
+      align-items: center;
       justify-content: center;
+      z-index: 0;
+    }
+
+    .score-hero-waves {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      opacity: 0.95;
+      -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 25%, #000 70%, transparent 100%);
+      mask-image: linear-gradient(180deg, transparent 0%, #000 25%, #000 70%, transparent 100%);
+    }
+
+    .score-hero-content {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      pointer-events: auto;
+      margin-top: 80px;
+    }
+
+    .score-hero-eyebrow {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 16px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--accent);
+      text-shadow: 0 0 20px rgba(0, 0, 0, 0.4);
       margin-bottom: 8px;
     }
 
-    .score-number {
+    .score-hero-band {
       font-family: 'Source Serif 4', serif;
-      font-size: 72px;
-      font-weight: 900;
-      font-style: italic;
-      font-variation-settings: "opsz" 72;
-      color: var(--warm-gold);
+      font-size: 56px;
+      font-weight: 700;
+      color: var(--text-strong);
+      text-shadow: 0 0 24px var(--bg-page);
       line-height: 1;
+      margin: 0;
     }
 
-    .score-max {
-      font-family: 'Source Serif 4', serif;
-      font-size: 28px;
-      font-weight: 500;
-      color: var(--warm-stone);
-      margin-left: 8px;
-      line-height: 1;
+    /* ── Main interior wrapping dimensions + actions ────────── */
+    .signal-main {
+      position: relative;
+      z-index: 1;
     }
 
-    .score-descriptor {
-      font-family: 'Source Sans 3', sans-serif;
-      font-size: 14px;
-      color: rgba(249, 246, 240, 0.7);
-      margin-bottom: 20px;
-    }
-
-    .score-progress-track {
-      width: 100%;
-      height: 4px;
-      background-color: rgba(255, 255, 255, 0.1);
-      border-radius: 2px;
-      overflow: hidden;
-    }
-
-    .score-progress-fill {
-      height: 100%;
-      background-color: var(--warm-gold);
-      border-radius: 2px;
-    }
-
+    /* ── Dimensions grid ────────────────────────────────────── */
     .dimensions-grid {
       display: grid;
       grid-template-columns: 1fr;
       gap: 20px;
-      margin-bottom: 60px;
+      margin-bottom: 40px;
     }
 
     .dimension-card {
-      background-color: var(--warm-parchment);
+      background-color: transparent;
+      border: 1px solid var(--border);
       border-radius: 10px;
       padding: 20px 24px;
-    }
-
-    .dimension-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      margin-bottom: 12px;
-    }
-
-    .dimension-name {
-      font-family: 'Source Serif 4', serif;
-      font-size: 17px;
-      font-weight: 700;
-      color: var(--warm-text);
-    }
-
-    .dimension-score {
-      font-family: 'Source Serif 4', serif;
-      font-size: 16px;
-      font-style: italic;
-      color: var(--warm-gold);
-    }
-
-    .dimension-progress-track {
-      width: 100%;
-      height: 8px;
-      background-color: var(--warm-border);
-      border-radius: 4px;
-      overflow: hidden;
-      margin-bottom: 12px;
-    }
-
-    .dimension-progress-fill {
-      height: 100%;
-      background-color: var(--warm-gold);
-      border-radius: 4px;
-    }
-
-    .dimension-narrative {
-      font-family: 'Source Sans 3', sans-serif;
-      font-size: 14px;
-      color: var(--warm-stone);
-      line-height: 1.6;
-    }
-
-    .interpretation-prose {
       display: flex;
       flex-direction: column;
+      gap: 12px;
+    }
+
+    .dim-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       gap: 20px;
+      flex-wrap: wrap;
     }
 
-    .interpretation-paragraph {
-      font-family: 'Source Sans 3', sans-serif;
-      font-size: 15px;
-      color: var(--warm-stone);
-      line-height: 1.7;
+    .dim-name {
+      font-family: 'Source Serif 4', serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-strong);
+      line-height: 1.2;
     }
 
-    /* ── Sub-metric indicators ─────────────────────────────── */
-    .dimension-indicators {
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-      margin-top: 14px;
-      padding-top: 14px;
-      border-top: 1px solid var(--warm-border);
-    }
-
-    .indicator {
-      display: flex;
-      justify-content: space-between;
+    /* 5-pill band row. One pill highlighted to show the dimension band. */
+    .band-pills {
+      display: inline-flex;
       align-items: center;
-      gap: 16px;
+      gap: 5px;
     }
 
-    .indicator-label {
-      font-family: 'Source Sans 3', sans-serif;
-      font-size: 13px;
-      font-weight: 400;
-      color: var(--warm-stone);
-      line-height: 1.4;
-    }
-
-    .indicator-value {
-      display: flex;
+    .band-pill {
+      display: inline-flex;
       align-items: center;
-      gap: 6px;
+      justify-content: center;
+      min-width: 80px;
+      padding: 1px 10px 2px;
+      border-radius: 20px;
+      background-color: var(--surface-elevated);
       font-family: 'Source Sans 3', sans-serif;
-      font-size: 13px;
-      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+      color: var(--text-muted);
       white-space: nowrap;
     }
 
-    .indicator-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
+    .band-pill-active {
+      background-color: var(--accent-strong);
+      color: var(--text-strong);
+    }
+
+    .dim-narrative {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 16px;
+      color: var(--text-body);
+      line-height: 1.45;
+      margin: 0;
+    }
+
+    .dim-divider {
+      height: 1px;
+      width: 100%;
+      background-color: var(--border);
+      margin: 2px 0;
+    }
+
+    /* ── Sub-dimension rows ─────────────────────────────────── */
+    .sub-dim-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .sub-dim-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 6px 4px;
+    }
+
+    .sub-dim-name {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 16px;
+      color: var(--text-body);
+      line-height: 1.4;
+    }
+
+    .pip-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
       flex-shrink: 0;
     }
 
-    /* Strength — solid warm-gold dot, dark value text */
-    .indicator-strength { color: var(--warm-text); }
-    .indicator-strength .indicator-dot { background-color: var(--warm-gold); }
-
-    /* Gap — hollow dot, muted value text */
-    .indicator-gap { color: var(--warm-stone); }
-    .indicator-gap .indicator-dot {
-      background-color: transparent;
-      border: 1.5px solid var(--warm-stone);
+    .pip {
+      width: 20px;
+      height: 10px;
+      border-radius: 12.5px;
+      background-color: var(--surface-elevated);
     }
 
-    /* Watch / neutral — soft dot, muted value text */
-    .indicator-watch { color: var(--warm-stone); }
-    .indicator-watch .indicator-dot { background-color: var(--warm-border); }
+    .pip-1.pip-filled { background-color: var(--pip-1); }
+    .pip-2.pip-filled { background-color: var(--pip-2); }
+    .pip-3.pip-filled { background-color: var(--pip-3); }
+    .pip-4.pip-filled { background-color: var(--pip-4); }
+    .pip-5.pip-filled { background-color: var(--pip-5); }
 
-    /* Grouped forward actions (two deliverables on the right) */
+    /* Expanded sub-dim detail block (shown statically in this prototype
+       for the first sub-dim under Dim 1 to illustrate the pattern). */
+    .sub-dim-detail {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 10px 24px 14px;
+    }
+
+    .detail-section { display: flex; flex-direction: column; gap: 4px; }
+    .detail-section-label {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-strong);
+    }
+    .detail-section-prose {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      color: var(--text-body);
+      margin: 0;
+    }
+    .detail-section-list {
+      margin: 0;
+      padding-left: 22px;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      color: var(--text-body);
+    }
+    .detail-section-list li { margin-bottom: 4px; }
+
     .actions-group {
       display: flex;
       align-items: center;
@@ -209,198 +237,256 @@
   </style>
 </head>
 <body>
+
   <nav class="nav">
     <div class="wordmark"><span class="wordmark-orpheus">Orpheus</span><span class="wordmark-social">Social</span></div>
     <div class="nav-client"><span class="nav-client-label">Confidential Portal for</span><span class="nav-client-name">Jane Doe</span></div>
   </nav>
 
-  <main class="main-interior">
-    <!-- Score Hero Section -->
-    <div class="score-hero">
-      <div class="score-eyebrow">Your Signal Score</div>
-      <div class="score-number-container">
-        <div class="score-number">64.7</div>
-        <div class="score-max">/100</div>
-      </div>
-      <div class="score-descriptor">Tuning</div>
-      <div class="score-progress-track">
-        <div class="score-progress-fill" style="width: 64.7%;"></div>
-      </div>
+  <!-- Full-bleed waveform hero -->
+  <section class="score-hero">
+    <img src="assets/images/waves.jpg" alt="" class="score-hero-waves" aria-hidden="true">
+    <div class="score-hero-content">
+      <div class="score-hero-eyebrow">Your Composition</div>
+      <h1 class="score-hero-band">Tuning</h1>
     </div>
+  </section>
 
-    <!-- Dimensions Section -->
+  <main class="main-interior signal-main">
+
     <div class="section-header">
       <div class="section-eyebrow">Dimensions</div>
-      <h2 class="section-title">How Your Signal Breaks Down</h2>
+      <h2 class="section-title">Your Signal Composition</h2>
     </div>
 
     <div class="dimensions-grid">
-      <!-- Presence -->
+
+      <!-- Profile Signal Clarity -->
       <div class="dimension-card">
-        <div class="dimension-header">
-          <div class="dimension-name">Presence</div>
-          <div class="dimension-score">7.2 / 10</div>
+        <div class="dim-header">
+          <div class="dim-name">Profile Signal Clarity</div>
+          <div class="band-pills" role="group" aria-label="Dimension band">
+            <span class="band-pill">Dissonant</span>
+            <span class="band-pill">Untuned</span>
+            <span class="band-pill">Tuning</span>
+            <span class="band-pill band-pill-active" aria-current="true">Tuned</span>
+            <span class="band-pill">Resonant</span>
+          </div>
         </div>
-        <div class="dimension-progress-track">
-          <div class="dimension-progress-fill" style="width: 72%;"></div>
+        <p class="dim-narrative">Your profile reads as substantive and credible, the retrieval system has enough specific language to place you in an executive, strategy-oriented embedding space. Experience entries describe scope but lean toward titles rather than outcomes, and the recommendations count is the visible gap.</p>
+        <div class="dim-divider"></div>
+        <div class="sub-dim-list">
+
+          <div class="sub-dim-row">
+            <span class="sub-dim-name">Headline specificity</span>
+            <div class="pip-row" aria-hidden="true">
+              <span class="pip pip-1 pip-filled"></span>
+              <span class="pip pip-2 pip-filled"></span>
+              <span class="pip pip-3 pip-filled"></span>
+              <span class="pip pip-4 pip-filled"></span>
+              <span class="pip pip-5 pip-filled"></span>
+            </div>
+          </div>
+
+          <!-- Expanded detail (illustrative; the React app toggles this) -->
+          <div class="sub-dim-detail">
+            <div class="detail-section">
+              <div class="detail-section-label">Summary</div>
+              <p class="detail-section-prose">Summary text describing what is working and what isn’t for this sub-dimension.</p>
+            </div>
+            <div class="detail-section">
+              <div class="detail-section-label">Best Practices</div>
+              <p class="detail-section-prose">Static text outlining best practices for this sub-dimension.</p>
+            </div>
+            <div class="detail-section">
+              <div class="detail-section-label">Improvements</div>
+              <ul class="detail-section-list"><li>Summary list describing how to improve this sub-dimension.</li></ul>
+            </div>
+          </div>
+
+          <div class="sub-dim-row">
+            <span class="sub-dim-name">About-section substance</span>
+            <div class="pip-row" aria-hidden="true">
+              <span class="pip pip-1 pip-filled"></span>
+              <span class="pip pip-2 pip-filled"></span>
+              <span class="pip pip-3 pip-filled"></span>
+              <span class="pip pip-4 pip-filled"></span>
+              <span class="pip pip-5"></span>
+            </div>
+          </div>
+
+          <div class="sub-dim-row">
+            <span class="sub-dim-name">Experience narrative</span>
+            <div class="pip-row" aria-hidden="true">
+              <span class="pip pip-1 pip-filled"></span>
+              <span class="pip pip-2 pip-filled"></span>
+              <span class="pip pip-3 pip-filled"></span>
+              <span class="pip pip-4"></span>
+              <span class="pip pip-5"></span>
+            </div>
+          </div>
+
+          <div class="sub-dim-row">
+            <span class="sub-dim-name">Skills coherence</span>
+            <div class="pip-row" aria-hidden="true">
+              <span class="pip pip-1 pip-filled"></span>
+              <span class="pip pip-2 pip-filled"></span>
+              <span class="pip pip-3 pip-filled"></span>
+              <span class="pip pip-4 pip-filled"></span>
+              <span class="pip pip-5"></span>
+            </div>
+          </div>
+
+          <div class="sub-dim-row">
+            <span class="sub-dim-name">Recommendations social proof</span>
+            <div class="pip-row" aria-hidden="true">
+              <span class="pip pip-1 pip-filled"></span>
+              <span class="pip pip-2 pip-filled"></span>
+              <span class="pip pip-3"></span>
+              <span class="pip pip-4"></span>
+              <span class="pip pip-5"></span>
+            </div>
+          </div>
+
         </div>
-        <div class="dimension-narrative">Your profile is substantive and well-structured, with room to deepen social proof through recommendations and long-form content.</div>
-        <div class="dimension-indicators">
-          <div class="indicator">
-            <span class="indicator-label">Summary</span>
-            <span class="indicator-value indicator-strength"><span class="indicator-dot"></span>1,840 chars</span>
+      </div>
+
+      <!-- Behavioral Signal Strength -->
+      <div class="dimension-card">
+        <div class="dim-header">
+          <div class="dim-name">Behavioral Signal Strength</div>
+          <div class="band-pills" role="group" aria-label="Dimension band">
+            <span class="band-pill">Dissonant</span>
+            <span class="band-pill">Untuned</span>
+            <span class="band-pill band-pill-active" aria-current="true">Tuning</span>
+            <span class="band-pill">Tuned</span>
+            <span class="band-pill">Resonant</span>
           </div>
-          <div class="indicator">
-            <span class="indicator-label">Skills &amp; Endorsements</span>
-            <span class="indicator-value indicator-watch"><span class="indicator-dot"></span>38 skills · 412 endorsements</span>
+        </div>
+        <p class="dim-narrative">You have posted enough over the past year that the model has data to work with, but publishing is sporadic rather than systematic. An average of 1.4 posts per week is in the functional range, though 29% of weeks had zero posts. Closing the gaps is higher leverage than raising the peak.</p>
+        <div class="dim-divider"></div>
+        <div class="sub-dim-list">
+          <div class="sub-dim-row">
+            <span class="sub-dim-name">Volume</span>
+            <div class="pip-row" aria-hidden="true">
+              <span class="pip pip-1 pip-filled"></span>
+              <span class="pip pip-2 pip-filled"></span>
+              <span class="pip pip-3 pip-filled"></span>
+              <span class="pip pip-4"></span>
+              <span class="pip pip-5"></span>
+            </div>
           </div>
-          <div class="indicator">
-            <span class="indicator-label">Recommendations received</span>
-            <span class="indicator-value indicator-gap"><span class="indicator-dot"></span>2</span>
+          <div class="sub-dim-row">
+            <span class="sub-dim-name">Recency</span>
+            <div class="pip-row" aria-hidden="true">
+              <span class="pip pip-1 pip-filled"></span>
+              <span class="pip pip-2 pip-filled"></span>
+              <span class="pip pip-3 pip-filled"></span>
+              <span class="pip pip-4"></span>
+              <span class="pip pip-5"></span>
+            </div>
           </div>
-          <div class="indicator">
-            <span class="indicator-label">Articles published</span>
-            <span class="indicator-value indicator-gap"><span class="indicator-dot"></span>0</span>
+          <div class="sub-dim-row">
+            <span class="sub-dim-name">Coherence</span>
+            <div class="pip-row" aria-hidden="true">
+              <span class="pip pip-1 pip-filled"></span>
+              <span class="pip pip-2 pip-filled"></span>
+              <span class="pip pip-3 pip-filled"></span>
+              <span class="pip pip-4"></span>
+              <span class="pip pip-5"></span>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Reach -->
+      <!-- Behavioral Signal Quality -->
       <div class="dimension-card">
-        <div class="dimension-header">
-          <div class="dimension-name">Reach</div>
-          <div class="dimension-score">4.8 / 10</div>
+        <div class="dim-header">
+          <div class="dim-name">Behavioral Signal Quality</div>
+          <div class="band-pills" role="group" aria-label="Dimension band">
+            <span class="band-pill">Dissonant</span>
+            <span class="band-pill">Untuned</span>
+            <span class="band-pill band-pill-active" aria-current="true">Tuning</span>
+            <span class="band-pill">Tuned</span>
+            <span class="band-pill">Resonant</span>
+          </div>
         </div>
-        <div class="dimension-progress-track">
-          <div class="dimension-progress-fill" style="width: 48%;"></div>
-        </div>
-        <div class="dimension-narrative">Your audience is smaller than your experience warrants — growing your follower base is the highest-leverage starting point.</div>
-        <div class="dimension-indicators">
-          <div class="indicator">
-            <span class="indicator-label">Total followers</span>
-            <span class="indicator-value indicator-gap"><span class="indicator-dot"></span>1,247</span>
+        <p class="dim-narrative">Your activity mix skews toward the signals the optimization targets actually reward. Comments average 34 words, well above passive-engagement thresholds, and about 42% of your activity is original content rather than pure reshares.</p>
+        <div class="dim-divider"></div>
+        <div class="sub-dim-list">
+          <div class="sub-dim-row">
+            <span class="sub-dim-name">Original content share</span>
+            <div class="pip-row" aria-hidden="true">
+              <span class="pip pip-1 pip-filled"></span>
+              <span class="pip pip-2 pip-filled"></span>
+              <span class="pip pip-3 pip-filled"></span>
+              <span class="pip pip-4"></span>
+              <span class="pip pip-5"></span>
+            </div>
           </div>
-          <div class="indicator">
-            <span class="indicator-label">Connections</span>
-            <span class="indicator-value indicator-watch"><span class="indicator-dot"></span>1,893</span>
+          <div class="sub-dim-row">
+            <span class="sub-dim-name">Comment depth</span>
+            <div class="pip-row" aria-hidden="true">
+              <span class="pip pip-1 pip-filled"></span>
+              <span class="pip pip-2 pip-filled"></span>
+              <span class="pip pip-3 pip-filled"></span>
+              <span class="pip pip-4 pip-filled"></span>
+              <span class="pip pip-5"></span>
+            </div>
           </div>
-          <div class="indicator">
-            <span class="indicator-label">New followers / week</span>
-            <span class="indicator-value indicator-gap"><span class="indicator-dot"></span>4.2 avg</span>
-          </div>
-          <div class="indicator">
-            <span class="indicator-label">Unique members reached</span>
-            <span class="indicator-value indicator-gap"><span class="indicator-dot"></span>18,340</span>
+          <div class="sub-dim-row">
+            <span class="sub-dim-name">Reaction mix</span>
+            <div class="pip-row" aria-hidden="true">
+              <span class="pip pip-1 pip-filled"></span>
+              <span class="pip pip-2 pip-filled"></span>
+              <span class="pip pip-3 pip-filled"></span>
+              <span class="pip pip-4"></span>
+              <span class="pip pip-5"></span>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Resonance -->
+      <!-- Profile-Behavior Alignment -->
       <div class="dimension-card">
-        <div class="dimension-header">
-          <div class="dimension-name">Resonance</div>
-          <div class="dimension-score">6.1 / 10</div>
+        <div class="dim-header">
+          <div class="dim-name">Profile-Behavior Alignment</div>
+          <div class="band-pills" role="group" aria-label="Dimension band">
+            <span class="band-pill">Dissonant</span>
+            <span class="band-pill">Untuned</span>
+            <span class="band-pill">Tuning</span>
+            <span class="band-pill band-pill-active" aria-current="true">Tuned</span>
+            <span class="band-pill">Resonant</span>
+          </div>
         </div>
-        <div class="dimension-progress-track">
-          <div class="dimension-progress-fill" style="width: 61%;"></div>
-        </div>
-        <div class="dimension-narrative">Content engages when you post it, but inconsistent output means the audience isn't building momentum week over week.</div>
-        <div class="dimension-indicators">
-          <div class="indicator">
-            <span class="indicator-label">Engagement rate</span>
-            <span class="indicator-value indicator-watch"><span class="indicator-dot"></span>1.8%</span>
+        <p class="dim-narrative">Content is topically consistent with the identity your profile declares. Voice is steady across posts. A follower arriving from any single post reaches a profile that confirms rather than contradicts what they just read.</p>
+        <div class="dim-divider"></div>
+        <div class="sub-dim-list">
+          <div class="sub-dim-row">
+            <span class="sub-dim-name">Topical consistency</span>
+            <div class="pip-row" aria-hidden="true">
+              <span class="pip pip-1 pip-filled"></span>
+              <span class="pip pip-2 pip-filled"></span>
+              <span class="pip pip-3 pip-filled"></span>
+              <span class="pip pip-4 pip-filled"></span>
+              <span class="pip pip-5"></span>
+            </div>
           </div>
-          <div class="indicator">
-            <span class="indicator-label">Avg engagements / post</span>
-            <span class="indicator-value indicator-gap"><span class="indicator-dot"></span>14</span>
-          </div>
-          <div class="indicator">
-            <span class="indicator-label">Top post impressions</span>
-            <span class="indicator-value indicator-strength"><span class="indicator-dot"></span>7,240</span>
-          </div>
-          <div class="indicator">
-            <span class="indicator-label">Impression trend</span>
-            <span class="indicator-value indicator-strength"><span class="indicator-dot"></span>+22% vs prior period</span>
+          <div class="sub-dim-row">
+            <span class="sub-dim-name">Voice consistency</span>
+            <div class="pip-row" aria-hidden="true">
+              <span class="pip pip-1 pip-filled"></span>
+              <span class="pip pip-2 pip-filled"></span>
+              <span class="pip pip-3 pip-filled"></span>
+              <span class="pip pip-4"></span>
+              <span class="pip pip-5"></span>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Consistency -->
-      <div class="dimension-card">
-        <div class="dimension-header">
-          <div class="dimension-name">Consistency</div>
-          <div class="dimension-score">5.3 / 10</div>
-        </div>
-        <div class="dimension-progress-track">
-          <div class="dimension-progress-fill" style="width: 53%;"></div>
-        </div>
-        <div class="dimension-narrative">Publishing is sporadic rather than systematic, which limits algorithmic visibility regardless of content quality.</div>
-        <div class="dimension-indicators">
-          <div class="indicator">
-            <span class="indicator-label">Posts per week</span>
-            <span class="indicator-value indicator-watch"><span class="indicator-dot"></span>1.4 avg</span>
-          </div>
-          <div class="indicator">
-            <span class="indicator-label">Active weeks</span>
-            <span class="indicator-value indicator-gap"><span class="indicator-dot"></span>71%</span>
-          </div>
-          <div class="indicator">
-            <span class="indicator-label">Longest gap</span>
-            <span class="indicator-value indicator-gap"><span class="indicator-dot"></span>3 weeks</span>
-          </div>
-          <div class="indicator">
-            <span class="indicator-label">Weeks above median</span>
-            <span class="indicator-value indicator-watch"><span class="indicator-dot"></span>48%</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Authority -->
-      <div class="dimension-card">
-        <div class="dimension-header">
-          <div class="dimension-name">Authority</div>
-          <div class="dimension-score">8.4 / 10</div>
-        </div>
-        <div class="dimension-progress-track">
-          <div class="dimension-progress-fill" style="width: 84%;"></div>
-        </div>
-        <div class="dimension-narrative">The right people are watching — your audience composition reflects strong alignment with your intended market.</div>
-        <div class="dimension-indicators">
-          <div class="indicator">
-            <span class="indicator-label">Senior+ audience</span>
-            <span class="indicator-value indicator-strength"><span class="indicator-dot"></span>47%</span>
-          </div>
-          <div class="indicator">
-            <span class="indicator-label">Target industry alignment</span>
-            <span class="indicator-value indicator-strength"><span class="indicator-dot"></span>28%</span>
-          </div>
-          <div class="indicator">
-            <span class="indicator-label">Primary geography</span>
-            <span class="indicator-value indicator-watch"><span class="indicator-dot"></span>19% DC-Baltimore</span>
-          </div>
-          <div class="indicator">
-            <span class="indicator-label">Top follower organizations</span>
-            <span class="indicator-value indicator-strength"><span class="indicator-dot"></span>McKinsey · Deloitte · HBS</span>
-          </div>
-        </div>
-      </div>
     </div>
 
-    <!-- Interpretation Section -->
-    <div class="section-header">
-      <div class="section-eyebrow">Interpretation</div>
-      <h2 class="section-title">Reading Your Score</h2>
-    </div>
-
-    <div class="interpretation-prose">
-      <p class="interpretation-paragraph">A Signal Score above 80 indicates a presence that is actively building authority in the right spaces. Below 60 suggests fundamental gaps that, if left unaddressed, are actively working against your professional goals. Your score of 64.7 places you in the functional range — your presence exists and does some work, but it is not yet operating at the level your experience and credentials warrant.</p>
-
-      <p class="interpretation-paragraph">Your strongest signals are Authority (the right audience is already paying attention) and Presence (your profile provides a credible foundation). These are real advantages. The gap is in activating them — turning a solid foundation and a quality audience into consistent, compounding visibility.</p>
-
-      <p class="interpretation-paragraph">Your Forward Brief translates this diagnostic into a sequenced plan. The recommendations are ordered by leverage: addressing them in sequence will produce the fastest compound improvement to your overall Signal Score.</p>
-    </div>
-
-    <!-- Action bar -->
     <div class="actions">
       <a href="orpheus-groundwork-v1.html" class="btn-secondary">← Return to Groundwork</a>
       <div class="actions-group">
@@ -412,7 +498,7 @@
 
   <footer class="footer">
     <div class="wordmark-sm"><span class="wordmark-sm-orpheus">Orpheus</span><span class="wordmark-sm-social">Social</span></div>
-    <div class="footer-links"><a href="#">Terms of Service</a><a href="#">Confidentiality</a><span>Copyright &copy; 2026 All Rights Reserved.</span></div>
+    <div class="footer-links"><a href="#">Terms of Service</a><a href="#">Privacy Policy</a><span>© 2026 All Rights Reserved</span></div>
   </footer>
 </body>
 </html>
