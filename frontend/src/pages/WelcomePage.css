@@ -41,7 +41,7 @@
   font-weight: 900;
   font-style: italic;
   font-variation-settings: 'opsz' 50;
-  color: var(--deep-slate);
+  color: var(--text-strong);
   line-height: 1;
   white-space: nowrap;
 }
@@ -53,7 +53,8 @@
 }
 
 .welcome-card-dark {
-  background-color: var(--deep-slate);
+  background-color: var(--surface-elevated);
+  border: 1px solid var(--border);
   width: 400px;
   align-self: stretch;
   padding: 40px;
@@ -70,15 +71,15 @@
   font-size: 18px;
   font-weight: 400;
   font-variation-settings: 'opsz' 18;
-  color: var(--warm-ivory);
+  color: var(--text-strong);
   line-height: normal;
 }
 
 .welcome-btn-start {
   display: block;
   width: 100%;
-  background-color: var(--warm-ivory);
-  color: var(--deep-slate);
+  background-color: var(--primary);
+  color: var(--text-strong);
   font-family: 'Source Sans 3', sans-serif;
   font-size: 16px;
   font-weight: 600;
@@ -91,8 +92,8 @@
 }
 
 .welcome-btn-start:hover {
-  background-color: var(--warm-gold);
-  color: white;
+  background-color: var(--primary-hover);
+  color: var(--text-strong);
 }
 
 .welcome-cards-right {
@@ -103,7 +104,8 @@
 }
 
 .welcome-card-step {
-  background-color: var(--warm-parchment);
+  background-color: transparent;
+  border: 1px solid var(--border);
   padding: 20px;
   border-radius: 10px;
   display: flex;

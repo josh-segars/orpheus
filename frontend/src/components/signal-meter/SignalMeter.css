@@ -2,13 +2,13 @@
    All classes prefixed `sm-` to avoid collisions with the global stylesheet. */
 
 .sm-root {
-  --sm-bg: var(--deep-slate);
+  --sm-bg: var(--surface-elevated);
   --sm-tick: rgba(249, 246, 240, 0.35);
   --sm-tick-major: rgba(249, 246, 240, 0.6);
   --sm-tick-boundary: rgba(249, 246, 240, 0.95);
-  --sm-label: var(--warm-ivory);
+  --sm-label: var(--text-strong);
   --sm-label-muted: rgba(249, 246, 240, 0.55);
-  --sm-reticle: var(--warm-gold);
+  --sm-reticle: var(--accent);
 
   /* Horizontal inset for the scale so ticks at score 0 / 100 don't sit
      flush against the meter's rounded edge. The deep-slate background

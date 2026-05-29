@@ -54,9 +54,10 @@
   font-weight: 600;
 }
 
-/* "Next Steps" closer block — parchment panel with an eyebrow. */
+/* "Next Steps" closer block — bordered panel with an eyebrow. */
 .forward-brief-next {
-  background-color: var(--warm-parchment);
+  background-color: transparent;
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 24px 28px;
   margin-bottom: 60px;
