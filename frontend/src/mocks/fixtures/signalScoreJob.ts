@@ -2,8 +2,8 @@ import type { Job } from '../../types/job'
 
 /**
  * Illustrative completed-job fixture in the v2 4-dimension shape.
- * Composite = 58.0 → "Moderate" band (45–64). Sits cleanly inside the band
- * rather than on the Moderate/Strong boundary.
+ * Composite = 58.0 → "Tuning" band (45–64). Sits cleanly inside the band
+ * rather than on the Tuning/Tuned boundary.
  * Sub-dimension scores are plausible but synthetic.
  */
 export const demoJob: Job = {
@@ -17,7 +17,7 @@ export const demoJob: Job = {
     scoring: {
       scored_dimensions: {
         composite: 58.0,
-        band: 'Moderate',
+        band: 'Tuning',
         dimensions: [
           {
             name: 'Profile Signal Clarity',

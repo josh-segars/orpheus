@@ -12,12 +12,16 @@ from enum import Enum
 # --- Enums ---
 
 class SignalBand(str, Enum):
-    """Client-facing signal strength band."""
-    WEAK = "Weak"
-    EMERGING = "Emerging"
-    MODERATE = "Moderate"
-    STRONG = "Strong"
-    EXCEPTIONAL = "Exceptional"
+    """Client-facing signal strength band — tuner metaphor.
+
+    Renamed 2026-05-29 from Weak/Emerging/Moderate/Strong/Exceptional
+    per ORPHEUS-49. Underlying composite-score thresholds are unchanged.
+    """
+    DISSONANT = "Dissonant"
+    UNTUNED = "Untuned"
+    TUNING = "Tuning"
+    TUNED = "Tuned"
+    RESONANT = "Resonant"
 
 
 class ConfidenceLabel(str, Enum):

@@ -79,19 +79,19 @@ Dimensions 1 and 4 use a 1–5 scale (minimum = number of sub-dimensions). Dimen
 
 **Completeness floor (Dimension 1 only):** If any of headline, About, industry, or job history are missing, Dimension 1 contribution is capped at 50% of its maximum (17.5).
 
-**Signal strength bands** (client-facing output):
+**Signal strength bands** (client-facing output — tuner metaphor, renamed 2026-05-29 per ORPHEUS-49):
 
 | Band | Score Range |
 |---|---|
-| Weak | 0–24 |
-| Emerging | 25–44 |
-| Moderate | 45–64 |
-| Strong | 65–79 |
-| Exceptional | 80–100 |
+| Dissonant | 0–24 |
+| Untuned | 25–44 |
+| Tuning | 45–64 |
+| Tuned | 65–79 |
+| Resonant | 80–100 |
 
 Bands are unequal by design — narrower at extremes. Numeric scores visible to advisors only; clients see bands. Band breakpoints are PROVISIONAL — recalibration at 50–100 profiles.
 
-**Pressure-test result (confirmed via live pipeline, 2026-04-13):** Andrew Segars scores 77.6/100 → Strong band. Dim 1: 22.75, Dim 2: 25.50, Dim 3: 20.00, Dim 4: 9.38. Data period: 2025-03-17 to 2026-03-16. Full pipeline (Ingestion → Rubric Scoring → Deterministic Scoring → Narrative Generation) completed end-to-end on Railway + Supabase.
+**Pressure-test result (confirmed via live pipeline, 2026-04-13):** Andrew Segars scores 77.6/100 → Tuned band (was "Strong" pre-rename). Dim 1: 22.75, Dim 2: 25.50, Dim 3: 20.00, Dim 4: 9.38. Data period: 2025-03-17 to 2026-03-16. Full pipeline (Ingestion → Rubric Scoring → Deterministic Scoring → Narrative Generation) completed end-to-end on Railway + Supabase.
 
 ---
 
@@ -191,7 +191,7 @@ Both are computed in the **scoring stage** (single stage, not separate). Claude 
 {
   "scored_dimensions": {
     "composite": 77.6,
-    "band": "Strong",
+    "band": "Tuned",
     "dimensions": [
       {
         "name": "Profile Signal Clarity",
@@ -255,9 +255,9 @@ Both are computed in the **scoring stage** (single stage, not separate). Claude 
 - **4-dimension architecture** — Replaced 6-dimension model. Dimensions grounded in confirmed LinkedIn retrieval and ranking system inputs, not outcomes. Reach, Resonance, Authority move to Forward Brief. [Andrew, 2026-04-08]
 - **One scoring engine, no stream distinction** — Identical engine for advisory and self-serve. No client-type flag or conditional logic. All differences live in report output and delivery layer. [Andrew, 2026-04-08]
 - **Dimension weights: 35/30/20/15** — INFERRED and PROVISIONAL. Adjustable config, not hardcoded. Cold-start finding across three papers grounds the profile-heavy weighting. [Andrew, 2026-04-08]
-- **Signal strength bands** — Client-facing output is band label (Weak/Emerging/Moderate/Strong/Exceptional), not raw number. Numeric scores visible to advisors only. [Andrew + Josh, 2026-04-01]
+- **Signal strength bands** — Client-facing output is band label (Dissonant/Untuned/Tuning/Tuned/Resonant), not raw number. Numeric scores visible to advisors only. [Andrew + Josh, 2026-04-01; labels renamed to tuner metaphor 2026-05-29 / ORPHEUS-49, Josh]
 - **Band breakpoints: 0–24, 25–44, 45–64, 65–79, 80–100** — Unequal by design. PROVISIONAL. [Andrew, 2026-04-08]
-- **Sub-dimension combination formula** — `(sum − min) / (max − min) × weight`. Equal weighting within dimensions. Pressure-tested against real data (77.6 → Strong). [Andrew, 2026-04-08]
+- **Sub-dimension combination formula** — `(sum − min) / (max − min) × weight`. Equal weighting within dimensions. Pressure-tested against real data (77.6 → Tuned, formerly Strong). [Andrew, 2026-04-08]
 - **Completeness floor on Dimension 1** — Missing headline, About, industry, or job history caps Dim 1 at 50%. Structural check, not a scored sub-dimension. [Andrew, 2026-04-08]
 - **Confidence labeling** — Every scoring element labeled CONFIRMED, INFERRED, PROXY, or PROVISIONAL. Labels carry through to client-facing transparency disclosures. [Andrew, 2026-04-08]
 
@@ -358,7 +358,7 @@ auth.users 1──1 advisors 1──∞ clients 1──1 questionnaire_responses
 - `id` (uuid PK), `job_id` (FK → jobs, unique), `zip_data` (JSONB), `xlsx_data` (JSONB), `ingested_at`
 
 **scores** — Dimension scores, Forward Brief data, and composite. One row per job.
-- `id` (uuid PK), `job_id` (FK → jobs, unique), `total_score` (numeric), `band` (string — Weak/Emerging/Moderate/Strong/Exceptional), `dimensions` (JSONB), `forward_brief_data` (JSONB), `scored_at`
+- `id` (uuid PK), `job_id` (FK → jobs, unique), `total_score` (numeric), `band` (string — Dissonant/Untuned/Tuning/Tuned/Resonant), `dimensions` (JSONB), `forward_brief_data` (JSONB), `scored_at`
 
 **narratives** — AI-generated text, one row per section per job. Supports draft→published workflow.
 - `id` (uuid PK), `job_id` (FK → jobs), `section` (string — dimension name or "forward_brief"), `generated_text`, `edited_text` (nullable), `status` (draft / published), `published_at` (nullable), `generated_at`
@@ -401,7 +401,7 @@ auth.users 1──1 advisors 1──∞ clients 1──1 questionnaire_responses
         ]
       }
     ],
-    "bands": {"Weak": [0, 24], "Emerging": [25, 44], "Moderate": [45, 64], "Strong": [65, 79], "Exceptional": [80, 100]}
+    "bands": {"Dissonant": [0, 24], "Untuned": [25, 44], "Tuning": [45, 64], "Tuned": [65, 79], "Resonant": [80, 100]}
   },
   "questionnaire_schema_hash": "abc123",
   "narrative_prompt_version": "2.0"

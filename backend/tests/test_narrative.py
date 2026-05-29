@@ -49,7 +49,7 @@ from backend.models.scoring import (
 # Fixtures — realistic scoring output
 # ============================================================
 
-def _make_scoring_output(composite=77.6, band=SignalBand.STRONG):
+def _make_scoring_output(composite=77.6, band=SignalBand.TUNED):
     """Build a realistic ScoringStageOutput for testing."""
     return ScoringStageOutput(
         scored_dimensions=ScoredDimensions(
@@ -307,7 +307,7 @@ class TestFormatScoredDimensions:
         output = _make_scoring_output()
         text = _format_scored_dimensions(output)
         assert "77.6" in text
-        assert "Strong" in text
+        assert "Tuned" in text
 
     def test_contains_all_dimensions(self):
         output = _make_scoring_output()
@@ -508,17 +508,17 @@ class TestConfigDefaults:
 
 class TestEdgeCases:
 
-    def test_weak_band_output(self):
-        output = _make_scoring_output(composite=15.0, band=SignalBand.WEAK)
+    def test_dissonant_band_output(self):
+        output = _make_scoring_output(composite=15.0, band=SignalBand.DISSONANT)
         text = _format_scored_dimensions(output)
         assert "15.0" in text
-        assert "Weak" in text
+        assert "Dissonant" in text
 
-    def test_exceptional_band_output(self):
-        output = _make_scoring_output(composite=95.0, band=SignalBand.EXCEPTIONAL)
+    def test_resonant_band_output(self):
+        output = _make_scoring_output(composite=95.0, band=SignalBand.RESONANT)
         text = _format_scored_dimensions(output)
         assert "95.0" in text
-        assert "Exceptional" in text
+        assert "Resonant" in text
 
 
 # ============================================================

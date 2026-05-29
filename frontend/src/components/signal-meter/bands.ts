@@ -20,11 +20,11 @@ export interface BandRange {
 // (0/25/45/65/80/100), summing to exactly 100. Each band occupies the
 // range from its preceding boundary to its trailing boundary.
 export const BANDS: BandRange[] = [
-  { band: 'Weak',        min: 0,  max: 24,  width: 25, midpoint: 12.5 },
-  { band: 'Emerging',    min: 25, max: 44,  width: 20, midpoint: 35   },
-  { band: 'Moderate',    min: 45, max: 64,  width: 20, midpoint: 55   },
-  { band: 'Strong',      min: 65, max: 79,  width: 15, midpoint: 72.5 },
-  { band: 'Exceptional', min: 80, max: 100, width: 20, midpoint: 90   },
+  { band: 'Dissonant', min: 0,  max: 24,  width: 25, midpoint: 12.5 },
+  { band: 'Untuned',   min: 25, max: 44,  width: 20, midpoint: 35   },
+  { band: 'Tuning',    min: 45, max: 64,  width: 20, midpoint: 55   },
+  { band: 'Tuned',     min: 65, max: 79,  width: 15, midpoint: 72.5 },
+  { band: 'Resonant',  min: 80, max: 100, width: 20, midpoint: 90   },
 ]
 
 /** Numeric boundaries that get labeled under major ticks. */
@@ -36,12 +36,12 @@ export function bandForScore(score: number): SignalBand {
   for (const b of BANDS) {
     if (clamped >= b.min && clamped <= b.max) return b.band
   }
-  return 'Weak'
+  return 'Dissonant'
 }
 
 /**
  * Classify a dimension's normalized score (0–1) into a band using the same
- * thresholds as the composite. Input 0.72 → 72 → 'Strong'.
+ * thresholds as the composite. Input 0.72 → 72 → 'Tuned'.
  * Dimensions don't have their own band thresholds in the Pydantic models;
  * this is a UI-layer classification for display only.
  */

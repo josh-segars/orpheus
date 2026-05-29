@@ -4,7 +4,7 @@ Run from repo root: python -m pytest backend/tests/test_scoring.py -v
 
 Includes:
 - Unit tests for band lookup, date parsing, individual sub-dimensions
-- Integration test against Andrew Segars' known pressure-test result (77.6 → Strong)
+- Integration test against Andrew Segars' known pressure-test result (77.6 → Tuned)
 - Edge cases: empty data, completeness floor, consistency ceiling
 """
 
@@ -167,25 +167,25 @@ class TestCTADetection:
 # ============================================================
 
 class TestBandAssignment:
-    def test_weak(self):
-        assert assign_band(0) == SignalBand.WEAK
-        assert assign_band(24) == SignalBand.WEAK
+    def test_dissonant(self):
+        assert assign_band(0) == SignalBand.DISSONANT
+        assert assign_band(24) == SignalBand.DISSONANT
 
-    def test_emerging(self):
-        assert assign_band(25) == SignalBand.EMERGING
-        assert assign_band(44) == SignalBand.EMERGING
+    def test_untuned(self):
+        assert assign_band(25) == SignalBand.UNTUNED
+        assert assign_band(44) == SignalBand.UNTUNED
 
-    def test_moderate(self):
-        assert assign_band(45) == SignalBand.MODERATE
-        assert assign_band(64) == SignalBand.MODERATE
+    def test_tuning(self):
+        assert assign_band(45) == SignalBand.TUNING
+        assert assign_band(64) == SignalBand.TUNING
 
-    def test_strong(self):
-        assert assign_band(65) == SignalBand.STRONG
-        assert assign_band(79) == SignalBand.STRONG
+    def test_tuned(self):
+        assert assign_band(65) == SignalBand.TUNED
+        assert assign_band(79) == SignalBand.TUNED
 
-    def test_exceptional(self):
-        assert assign_band(80) == SignalBand.EXCEPTIONAL
-        assert assign_band(100) == SignalBand.EXCEPTIONAL
+    def test_resonant(self):
+        assert assign_band(80) == SignalBand.RESONANT
+        assert assign_band(100) == SignalBand.RESONANT
 
 
 # ============================================================
@@ -421,7 +421,7 @@ class TestComposite:
 
 
 # ============================================================
-# Pressure test: Andrew Segars → 77.6 → Strong
+# Pressure test: Andrew Segars → 77.6 → Tuned
 # ============================================================
 
 class TestAndrewPressureTest:
@@ -432,7 +432,7 @@ class TestAndrewPressureTest:
     - Dim 2: contribution 25.50% → normalized (25.50 / 30) = 0.85
     - Dim 3: contribution 20.00% → normalized (20.00 / 20) = 1.0
     - Dim 4: contribution 9.38%  → normalized (9.38 / 15) = 0.625
-    - Composite: 77.63 → rounds to 77.63, band = Strong
+    - Composite: 77.63 → rounds to 77.63, band = Tuned
 
     We can back-calculate rubric scores:
     Dim 1: normalized 0.65 = (sum - 5) / 20, so sum = 18 → avg 3.6 per rubric
@@ -504,7 +504,7 @@ class TestAndrewPressureTest:
 
         composite = compute_composite([dim1, dim2, dim3, dim4])
         assert composite == 77.63
-        assert assign_band(composite) == SignalBand.STRONG
+        assert assign_band(composite) == SignalBand.TUNED
 
 
 # ============================================================

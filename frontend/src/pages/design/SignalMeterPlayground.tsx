@@ -13,11 +13,11 @@ export function SignalMeterPlayground() {
   const [widths, setWidths] = useState<number[]>([375, 768, 1024, 1440])
 
   const presets: { label: string; score: number }[] = [
-    { label: 'Weak (12)', score: 12 },
-    { label: 'Emerging (34)', score: 34 },
-    { label: 'Moderate (58)', score: 58 },
-    { label: 'Strong (72)', score: 72 },
-    { label: 'Exceptional (90)', score: 90 },
+    { label: 'Dissonant (12)', score: 12 },
+    { label: 'Untuned (34)', score: 34 },
+    { label: 'Tuning (58)', score: 58 },
+    { label: 'Tuned (72)', score: 72 },
+    { label: 'Resonant (90)', score: 90 },
     { label: 'Boundary 25', score: 25 },
     { label: 'Boundary 65', score: 65 },
   ]

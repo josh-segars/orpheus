@@ -490,8 +490,8 @@ def assign_band(composite: float) -> SignalBand:
             return SignalBand(name)
     # Edge case: should not happen if bands cover 0–100
     if composite > 100:
-        return SignalBand.EXCEPTIONAL
-    return SignalBand.WEAK
+        return SignalBand.RESONANT
+    return SignalBand.DISSONANT
 
 
 def compute_composite(dimensions: list[DimensionScore]) -> float:

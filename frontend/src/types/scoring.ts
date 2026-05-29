@@ -5,12 +5,17 @@
  * When the backend starts returning real JSON, this file is the contract.
  */
 
+/**
+ * Client-facing signal strength band — tuner metaphor.
+ * Renamed 2026-05-29 per ORPHEUS-49 (was Weak/Emerging/Moderate/Strong/Exceptional).
+ * Underlying composite-score thresholds are unchanged.
+ */
 export type SignalBand =
-  | 'Weak'
-  | 'Emerging'
-  | 'Moderate'
-  | 'Strong'
-  | 'Exceptional'
+  | 'Dissonant'
+  | 'Untuned'
+  | 'Tuning'
+  | 'Tuned'
+  | 'Resonant'
 
 export type ConfidenceLabel =
   | 'CONFIRMED'

@@ -20,15 +20,17 @@ DIMENSION_WEIGHTS = {
 
 
 # === Signal strength bands ===
-# Client-facing. Unequal by design — narrower at extremes.
+# Client-facing tuner metaphor. Unequal by design — narrower at extremes.
+# Renamed 2026-05-29 from Weak/Emerging/Moderate/Strong/Exceptional
+# per ORPHEUS-49. Underlying thresholds are unchanged.
 # PROVISIONAL — recalibrate at 50–100 profiles.
 
 SIGNAL_BANDS = [
-    ("Weak", 0, 24),
-    ("Emerging", 25, 44),
-    ("Moderate", 45, 64),
-    ("Strong", 65, 79),
-    ("Exceptional", 80, 100),
+    ("Dissonant", 0, 24),
+    ("Untuned", 25, 44),
+    ("Tuning", 45, 64),
+    ("Tuned", 65, 79),
+    ("Resonant", 80, 100),
 ]
 
 
