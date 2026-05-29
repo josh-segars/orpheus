@@ -5,15 +5,65 @@
    ============================================================ */
 
 /* ── Design Tokens ─────────────────────────────────────────── */
+/* Dark mode is canonical (no light variant) as of ORPHEUS-50.
+   Token values reflect their dark-mode equivalents. The legacy
+   `--warm-*` and `--deep-slate` names are preserved as aliases to
+   role-based tokens so existing class rules continue to resolve
+   sensibly. Three legacy names served multiple semantic roles in
+   light mode and required per-rule updates in this migration:
+     • --deep-slate (was both "dark surface" and "primary button bg"
+       and "primary text on light bg") → split into --surface-elevated,
+       --primary, and direct --text-strong references.
+     • --warm-ivory (was both "page bg" and "light text on dark
+       elements") → page-bg role kept via alias; text-on-dark
+       references updated to --text-strong directly.
+     • --warm-gold (was "accent" — same role, new color). Aliased. */
 :root {
-  --deep-slate:    #1C2B3A;
-  --warm-gold:     #C4902A;
-  --warm-ivory:    #F9F6F0;
-  --warm-parchment:#EDE9E1;
-  --warm-text:     #271D10;
-  --warm-stone:    #7A6A56;
-  --warm-border:   #DDD5C8;
-  --red-clay:      #BD3F3A; /* Gap/issue tone — sub-dimension icons, alerts */
+  /* Surfaces */
+  --bg-page:           #010c16;
+  --bg-surface:        #010c16;
+  --surface-elevated:  #1C2B3A;  /* avatars, footer band, role-tab active */
+
+  /* Text */
+  --text-strong:       #f9f6f0;  /* headings, wordmark, text on dark bg */
+  --text-body:         #e8f3f7;  /* body copy on dark bg */
+  --text-muted:        #91a7af;  /* secondary text, placeholders */
+
+  /* Borders + dividers */
+  --border:            #364048;
+
+  /* Accents */
+  --accent:            #67ac6c;  /* eyebrows, Social wordmark, hover accents */
+  --accent-strong:     #218f29;  /* active states needing stronger green */
+  --accent-tint-soft:  rgba(103, 172, 108, 0.08);
+  --accent-tint-hover: rgba(103, 172, 108, 0.16);
+
+  /* Primary action */
+  --primary:           #0160d5;
+  --primary-hover:     #1a78ed;
+
+  /* Issue / error tone */
+  --issue:             #bf2923;
+
+  /* Audio-spectrum palette — 5-step rating pips, low → high */
+  --pip-1:             #bf2923;  /* red */
+  --pip-2:             #e17800;  /* orange */
+  --pip-3:             #e7ce41;  /* yellow */
+  --pip-4:             #218f29;  /* green */
+  --pip-5:             #006cf1;  /* blue */
+
+  /* Shadow on dark — replaces deep-slate-alpha shadow */
+  --shadow-dark:       rgba(0, 0, 0, 0.5);
+
+  /* ── Legacy aliases (compat layer, dark mode is canonical) ── */
+  --deep-slate:        var(--surface-elevated);
+  --warm-gold:         var(--accent);
+  --warm-ivory:        var(--bg-page);
+  --warm-parchment:    var(--bg-surface);
+  --warm-text:         var(--text-body);
+  --warm-stone:        var(--text-muted);
+  --warm-border:       var(--border);
+  --red-clay:          var(--issue);
 }
 
 /* ── Reset ──────────────────────────────────────────────────── */
@@ -62,7 +112,7 @@ body {
   font-weight: 900;
   font-variation-settings: 'opsz' 38;
   letter-spacing: -1.52px;
-  color: var(--deep-slate);
+  color: var(--text-strong);
   line-height: 1;
   white-space: nowrap;
 }
@@ -74,7 +124,7 @@ body {
   font-weight: 400;
   letter-spacing: 6.08px;
   text-transform: uppercase;
-  color: var(--warm-gold);
+  color: var(--accent);
   line-height: 1;
   white-space: nowrap;
 }
@@ -108,8 +158,8 @@ body {
 }
 .nav-client-trigger:hover:not(:disabled),
 .nav-client-trigger:focus-visible {
-  background-color: rgba(196, 144, 42, 0.08);
-  border-color: var(--warm-border);
+  background-color: var(--accent-tint-soft);
+  border-color: var(--border);
   outline: none;
 }
 .nav-client-trigger:disabled {
@@ -129,9 +179,12 @@ body {
   font-family: 'Source Sans 3', sans-serif;
   font-size: 16px;
   font-weight: 400;
-  color: var(--warm-text);
+  color: var(--accent);
   line-height: normal;
   margin-bottom: -10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-size: 12px;
 }
 .nav-client-name {
   font-family: 'Source Serif 4', serif;
@@ -139,7 +192,7 @@ body {
   font-weight: 700;
   font-style: italic;
   font-variation-settings: 'opsz' 24;
-  color: var(--warm-gold);
+  color: var(--text-strong);
   line-height: normal;
 }
 
@@ -150,14 +203,14 @@ body {
   border-radius: 50%; /* exception to the 10px rule — circular avatars are
                          the established convention; visual consistency
                          with LinkedIn-sourced photos depends on it */
-  background-color: var(--deep-slate);
-  color: var(--warm-ivory);
+  background-color: var(--surface-elevated);
+  color: var(--text-strong);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   overflow: hidden;
-  border: 1px solid var(--warm-border);
+  border: 1px solid var(--border);
 }
 .nav-client-avatar img {
   width: 100%;
@@ -170,7 +223,7 @@ body {
   font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: var(--warm-ivory);
+  color: var(--text-strong);
 }
 
 /* Dropdown menu — opens below the trigger. */
@@ -179,11 +232,11 @@ body {
   top: calc(100% + 8px);
   right: 0;
   min-width: 220px;
-  background-color: var(--warm-parchment);
-  border: 1px solid var(--warm-border);
+  background-color: var(--surface-elevated);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 8px;
-  box-shadow: 0 8px 24px rgba(28, 43, 58, 0.12);
+  box-shadow: 0 8px 24px var(--shadow-dark);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -192,9 +245,9 @@ body {
 .nav-client-menu-email {
   font-family: 'Source Sans 3', sans-serif;
   font-size: 12px;
-  color: var(--warm-stone);
+  color: var(--text-muted);
   padding: 6px 10px 4px;
-  border-bottom: 1px solid var(--warm-border);
+  border-bottom: 1px solid var(--border);
   margin-bottom: 4px;
   word-break: break-all;
 }
@@ -203,7 +256,7 @@ body {
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: var(--warm-text);
+  color: var(--text-body);
   background: transparent;
   border: none;
   padding: 8px 10px;
@@ -214,8 +267,8 @@ body {
 }
 .nav-client-menu-item:hover,
 .nav-client-menu-item:focus-visible {
-  background-color: rgba(196, 144, 42, 0.12);
-  color: var(--warm-gold);
+  background-color: var(--accent-tint-hover);
+  color: var(--accent);
   outline: none;
 }
 
@@ -225,8 +278,8 @@ body {
   align-items: center;
   gap: 6px;
   padding: 4px;
-  background: var(--warm-parchment);
-  border: 1px solid var(--warm-border);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
   border-radius: 10px;
 }
 
@@ -239,34 +292,33 @@ body {
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.3px;
-  color: var(--warm-stone);
+  color: var(--text-muted);
   text-decoration: none;
   transition: background 120ms ease, color 120ms ease;
 }
 
 .nav-role-tab:hover {
-  color: var(--warm-text);
+  color: var(--text-strong);
 }
 
 .nav-role-tab-active {
-  background: var(--deep-slate);
-  color: var(--warm-ivory);
+  background: var(--primary);
+  color: var(--text-strong);
 }
 
 .nav-role-tab-active:hover {
-  color: var(--warm-ivory);
+  color: var(--text-strong);
 }
 
 /* ── Footer ─────────────────────────────────────────────────── */
 .footer {
-  background-color: var(--deep-slate);
+  background-color: transparent;
   width: 100%;
   max-width: 1200px;
-  padding: 10px 20px;
+  padding: 28px 60px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-radius: 10px 10px 0 0;
   flex-shrink: 0;
 }
 
@@ -284,7 +336,7 @@ body {
   font-size: 23.78px;
   font-weight: 900;
   letter-spacing: -0.9512px;
-  color: white;
+  color: var(--text-strong);
   line-height: 1;
   white-space: nowrap;
 }
@@ -296,7 +348,7 @@ body {
   font-weight: 400;
   letter-spacing: 3.8038px;
   text-transform: uppercase;
-  color: white;
+  color: var(--accent);
   line-height: 1;
   white-space: nowrap;
 }
@@ -306,15 +358,15 @@ body {
   font-family: 'Source Sans 3', sans-serif;
   font-size: 16px;
   font-weight: 400;
-  color: var(--warm-ivory);
+  color: var(--text-strong);
   white-space: nowrap;
   align-items: center;
 }
 .footer-links a {
-  color: var(--warm-ivory);
+  color: var(--text-strong);
   text-decoration: none;
 }
-.footer-links a:hover { color: var(--warm-gold); }
+.footer-links a:hover { color: var(--accent); }
 
 /* ── Back link (questionnaire + LinkedIn step pages) ────────── */
 .back-link {
@@ -356,14 +408,14 @@ body {
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--warm-stone);
+  color: var(--accent);
 }
 .section-title {
   font-family: 'Source Serif 4', serif;
   font-size: 32px;
   font-weight: 900;
   font-variation-settings: 'opsz' 32;
-  color: var(--deep-slate);
+  color: var(--text-strong);
   line-height: 1.1;
 }
 .section-intro {
@@ -436,8 +488,8 @@ textarea {
   outline: none;
   transition: border-color 0.15s ease;
 }
-textarea:focus { border-color: var(--warm-gold); }
-textarea::placeholder { color: var(--warm-border); }
+textarea:focus { border-color: var(--accent); }
+textarea::placeholder { color: var(--text-muted); }
 
 /* ── Radio group ────────────────────────────────────────────── */
 .radio-group {
@@ -494,8 +546,8 @@ textarea::placeholder { color: var(--warm-border); }
   padding: 2px 4px;
   transition: border-color 0.15s ease;
 }
-.other-input:focus { border-bottom-color: var(--warm-gold); }
-.other-input::placeholder { color: var(--warm-border); }
+.other-input:focus { border-bottom-color: var(--accent); }
+.other-input::placeholder { color: var(--text-muted); }
 
 /* ── Checkbox group ─────────────────────────────────────────── */
 .checkbox-group {
@@ -597,16 +649,16 @@ textarea::placeholder { color: var(--warm-border); }
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--deep-slate);
+  color: var(--text-muted);
   background-color: transparent;
-  border: 1px solid var(--warm-border);
+  border: 1px solid var(--border);
   padding: 12px 28px;
   border-radius: 10px;
   cursor: pointer;
   text-decoration: none;
   transition: border-color 0.15s ease, color 0.15s ease;
 }
-.btn-secondary:hover { border-color: var(--warm-gold); color: var(--warm-gold); }
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
 .btn-primary {
   display: inline-block;
   font-family: 'Source Sans 3', sans-serif;
@@ -614,8 +666,8 @@ textarea::placeholder { color: var(--warm-border); }
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--warm-ivory);
-  background-color: var(--deep-slate);
+  color: var(--text-strong);
+  background-color: var(--primary);
   border: 1px solid transparent;
   padding: 12px 28px;
   border-radius: 10px;
@@ -623,7 +675,7 @@ textarea::placeholder { color: var(--warm-border); }
   text-decoration: none;
   transition: background-color 0.15s ease;
 }
-.btn-primary:hover { background-color: var(--warm-gold); }
+.btn-primary:hover { background-color: var(--primary-hover); }
 
 /* ── Info notice (LinkedIn step pages) ──────────────────────── */
 /* Used for "Plan ahead" and "Finding this page" callouts        */
@@ -753,7 +805,7 @@ textarea::placeholder { color: var(--warm-border); }
   font-size: 12px;
   font-weight: 400;
   font-style: italic;
-  color: var(--warm-border);
+  color: var(--text-muted);
   letter-spacing: 0.04em;
 }
 
@@ -784,23 +836,23 @@ textarea::placeholder { color: var(--warm-border); }
   cursor: pointer;
   transition: border-color 0.15s ease;
 }
-.upload-area:hover { border-color: var(--warm-gold); }
+.upload-area:hover { border-color: var(--accent); }
 .upload-area-dragging {
-  border-color: var(--warm-gold);
-  background-color: #f3edde;
+  border-color: var(--accent);
+  background-color: var(--accent-tint-soft);
 }
 .upload-clear {
   font-family: 'Source Sans 3', sans-serif;
   font-size: 13px;
   font-weight: 600;
-  color: var(--warm-gold);
+  color: var(--accent);
   background: transparent;
   border: none;
   padding: 0;
   cursor: pointer;
   text-decoration: underline;
 }
-.upload-clear:hover { color: var(--deep-slate); }
+.upload-clear:hover { color: var(--text-muted); }
 .upload-icon svg {
   width: 36px;
   height: 36px;
@@ -827,6 +879,6 @@ textarea::placeholder { color: var(--warm-border); }
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--warm-border);
+  color: var(--text-muted);
   margin-top: 4px;
 }
