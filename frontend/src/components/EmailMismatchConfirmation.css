@@ -16,8 +16,8 @@
   gap: 16px;
   margin: 24px 0;
   padding: 20px;
-  background: var(--warm-parchment);
-  border: 1px solid var(--warm-border);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
   border-radius: 10px;
 }
 
@@ -53,10 +53,10 @@
 
 .mismatch-cancel {
   background: transparent;
-  color: var(--deep-slate);
-  border: 1px solid var(--warm-border);
+  color: var(--text-body);
+  border: 1px solid var(--border);
 }
 
 .mismatch-cancel:hover:not(:disabled) {
-  background: var(--warm-parchment);
+  background: var(--accent-tint-soft);
 }

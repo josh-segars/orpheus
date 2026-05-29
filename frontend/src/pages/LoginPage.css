@@ -78,8 +78,8 @@
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--warm-ivory);
-  background-color: var(--deep-slate);
+  color: var(--text-strong);
+  background-color: var(--primary);
   border: 1px solid transparent;
   padding: 14px 24px;
   border-radius: 10px;
@@ -89,7 +89,7 @@
 }
 
 .login-button:hover:not(:disabled) {
-  background-color: var(--warm-gold);
+  background-color: var(--primary-hover);
 }
 
 .login-button:disabled {

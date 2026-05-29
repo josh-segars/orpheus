@@ -1,9 +1,11 @@
 /* ============================================================
-   Orpheus — /advisor/clients page (ORPHEUS-39)
+   Orpheus — /advisor/clients page (ORPHEUS-39, dark redesign ORPHEUS-50)
 
-   Shares the global design tokens from orpheus-styles.css:
-   --deep-slate, --warm-gold, --warm-ivory, --warm-parchment,
-   --warm-text, --warm-stone, --warm-border, --red-clay.
+   Shares the role-based dark-mode tokens from orpheus-styles.css:
+   --bg-page, --surface-elevated, --text-strong, --text-body,
+   --text-muted, --border, --accent, --primary, --issue, etc.
+   Legacy --warm-* / --deep-slate aliases also work — they resolve
+   to the same dark values.
 
    Single-column layout, max-width 920px (slightly wider than
    .main-interior's 820 to accommodate the table-like client rows
@@ -21,7 +23,7 @@
   display: flex;
   flex-direction: column;
   gap: 32px;
-  color: var(--warm-text);
+  color: var(--text-body);
 }
 
 /* ── Header (title + self-report button) ─────────────────────── */
@@ -44,7 +46,7 @@
   font-weight: 700;
   font-variation-settings: 'opsz' 32;
   letter-spacing: -0.5px;
-  color: var(--deep-slate);
+  color: var(--text-strong);
   margin-bottom: 12px;
 }
 
@@ -52,7 +54,7 @@
   font-family: 'Source Sans 3', sans-serif;
   font-size: 15px;
   line-height: 1.6;
-  color: var(--warm-stone);
+  color: var(--text-muted);
   max-width: 600px;
 }
 
@@ -60,20 +62,21 @@
   align-self: flex-start;
   flex-shrink: 0;
   padding: 12px 22px;
-  background: var(--deep-slate);
-  color: var(--warm-ivory);
-  border: 1px solid var(--deep-slate);
+  background: var(--primary);
+  color: var(--text-strong);
+  border: 1px solid var(--primary);
   border-radius: 10px;
   font-family: 'Source Sans 3', sans-serif;
   font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.3px;
   cursor: pointer;
-  transition: opacity 120ms ease;
+  transition: background 120ms ease;
 }
 
 .advisor-clients-self-report-btn:hover:not(:disabled) {
-  opacity: 0.9;
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
 }
 
 .advisor-clients-self-report-btn:disabled {
@@ -89,20 +92,20 @@
   gap: 16px;
   padding: 14px 18px;
   border-radius: 10px;
-  border: 1px solid var(--warm-border);
-  background: var(--warm-parchment);
-  color: var(--warm-text);
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--text-body);
   font-size: 14px;
   line-height: 1.5;
 }
 
 .advisor-banner-success {
-  border-color: var(--warm-gold);
+  border-color: var(--accent);
 }
 
 .advisor-banner-error {
-  border-color: var(--red-clay);
-  background: #faf0ee;
+  border-color: var(--issue);
+  background: rgba(189, 63, 58, 0.08);
 }
 
 .advisor-banner-text {
@@ -116,7 +119,7 @@
   border-radius: 10px;
   background: transparent;
   border: 1px solid transparent;
-  color: var(--warm-stone);
+  color: var(--text-muted);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
@@ -124,7 +127,7 @@
 }
 
 .advisor-banner-dismiss:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 /* ── Section titles ──────────────────────────────────────────── */
@@ -132,15 +135,15 @@
   font-family: 'Source Serif 4', serif;
   font-size: 20px;
   font-weight: 600;
-  color: var(--deep-slate);
+  color: var(--text-strong);
   margin-bottom: 16px;
 }
 
 /* ── Invite form ─────────────────────────────────────────────── */
 .advisor-invite-section {
   padding: 24px;
-  background: var(--warm-parchment);
-  border: 1px solid var(--warm-border);
+  background: transparent;
+  border: 1px solid var(--border);
   border-radius: 10px;
 }
 
@@ -166,24 +169,24 @@
 .advisor-invite-label {
   font-size: 13px;
   font-weight: 600;
-  color: var(--warm-stone);
+  color: var(--text-muted);
   letter-spacing: 0.2px;
 }
 
 .advisor-invite-input {
   padding: 10px 14px;
-  background: var(--warm-ivory);
-  border: 1px solid var(--warm-border);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
   border-radius: 10px;
   font-family: 'Source Sans 3', sans-serif;
   font-size: 15px;
-  color: var(--warm-text);
+  color: var(--text-body);
   transition: border-color 120ms ease;
 }
 
 .advisor-invite-input:focus {
   outline: none;
-  border-color: var(--warm-gold);
+  border-color: var(--accent);
 }
 
 .advisor-invite-input:disabled {
@@ -194,20 +197,21 @@
 .advisor-invite-submit {
   height: 42px;
   padding: 0 22px;
-  background: var(--deep-slate);
-  color: var(--warm-ivory);
-  border: 1px solid var(--deep-slate);
+  background: var(--primary);
+  color: var(--text-strong);
+  border: 1px solid var(--primary);
   border-radius: 10px;
   font-family: 'Source Sans 3', sans-serif;
   font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.3px;
   cursor: pointer;
-  transition: opacity 120ms ease;
+  transition: background 120ms ease, border-color 120ms ease;
 }
 
 .advisor-invite-submit:hover:not(:disabled) {
-  opacity: 0.9;
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
 }
 
 .advisor-invite-submit:disabled {
@@ -224,16 +228,16 @@
 .advisor-list-status {
   padding: 24px;
   text-align: center;
-  background: var(--warm-parchment);
-  border: 1px solid var(--warm-border);
+  background: transparent;
+  border: 1px solid var(--border);
   border-radius: 10px;
-  color: var(--warm-stone);
+  color: var(--text-muted);
   font-size: 14px;
 }
 
 .advisor-list-status-error {
-  border-color: var(--red-clay);
-  color: var(--red-clay);
+  border-color: var(--issue);
+  color: var(--issue);
 }
 
 /* (Empty-state styles intentionally absent — see ClientsPage.tsx;
@@ -255,8 +259,8 @@
   gap: 16px;
   align-items: center;
   padding: 16px 20px;
-  background: var(--warm-parchment);
-  border: 1px solid var(--warm-border);
+  background: transparent;
+  border: 1px solid var(--border);
   border-radius: 10px;
 }
 
@@ -277,7 +281,7 @@
   gap: 8px;
   font-size: 16px;
   font-weight: 600;
-  color: var(--warm-text);
+  color: var(--text-strong);
   margin-bottom: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -286,8 +290,8 @@
 .advisor-client-self-badge {
   display: inline-block;
   padding: 2px 8px;
-  background: var(--warm-gold);
-  color: var(--warm-ivory);
+  background: var(--accent);
+  color: var(--text-strong);
   border-radius: 10px;
   font-size: 11px;
   font-weight: 700;
@@ -297,7 +301,7 @@
 
 .advisor-client-email {
   font-size: 13px;
-  color: var(--warm-stone);
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -332,39 +336,39 @@
 }
 
 .advisor-chip-pending {
-  background: rgba(196, 144, 42, 0.15);
-  color: var(--warm-gold);
+  background: rgba(103, 172, 108, 0.18);
+  color: var(--accent);
 }
 
 .advisor-chip-accepted {
-  background: rgba(28, 43, 58, 0.1);
-  color: var(--deep-slate);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
 }
 
 .advisor-chip-expired {
-  background: rgba(189, 63, 58, 0.12);
-  color: var(--red-clay);
+  background: rgba(189, 63, 58, 0.15);
+  color: var(--issue);
 }
 
 .advisor-chip-job-none {
-  background: rgba(122, 106, 86, 0.12);
-  color: var(--warm-stone);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
 }
 
 .advisor-chip-job-pending,
 .advisor-chip-job-running {
-  background: rgba(196, 144, 42, 0.15);
-  color: var(--warm-gold);
+  background: rgba(103, 172, 108, 0.18);
+  color: var(--accent);
 }
 
 .advisor-chip-job-complete {
-  background: rgba(28, 43, 58, 0.1);
-  color: var(--deep-slate);
+  background: rgba(33, 143, 41, 0.25);
+  color: var(--accent);
 }
 
 .advisor-chip-job-failed {
-  background: rgba(189, 63, 58, 0.12);
-  color: var(--red-clay);
+  background: rgba(189, 63, 58, 0.15);
+  color: var(--issue);
 }
 
 /* ── Row action buttons ──────────────────────────────────────── */
@@ -374,8 +378,8 @@
   padding: 8px 16px;
   border-radius: 10px;
   background: transparent;
-  border: 1px solid var(--warm-border);
-  color: var(--warm-text);
+  border: 1px solid var(--border);
+  color: var(--text-body);
   font-family: 'Source Sans 3', sans-serif;
   font-size: 13px;
   font-weight: 600;
@@ -383,12 +387,14 @@
   text-decoration: none;
   transition:
     background 120ms ease,
-    border-color 120ms ease;
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
 .advisor-row-action:hover:not(:disabled) {
-  background: var(--warm-ivory);
-  border-color: var(--warm-gold);
+  background: var(--accent-tint-soft);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .advisor-row-action:disabled {
@@ -397,23 +403,23 @@
 }
 
 .advisor-row-action-primary {
-  background: var(--deep-slate);
-  border-color: var(--deep-slate);
-  color: var(--warm-ivory);
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--text-strong);
 }
 
 .advisor-row-action-primary:hover {
-  background: var(--deep-slate);
-  border-color: var(--deep-slate);
-  opacity: 0.9;
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+  color: var(--text-strong);
 }
 
 .advisor-row-error {
   grid-column: 1 / -1;
   margin-top: 6px;
   padding: 8px 12px;
-  background: rgba(189, 63, 58, 0.08);
+  background: rgba(189, 63, 58, 0.12);
   border-radius: 10px;
-  color: var(--red-clay);
+  color: var(--issue);
   font-size: 13px;
 }
