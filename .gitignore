@@ -27,6 +27,21 @@ supabase/.env
 supabase/snippets/
 LinkedIn_API_Terms_Review_*.docx
 
+# Compliance drafts — stay untracked pending Tim's review and a
+# separate commit-vs-Drive decision. Adopted 2026-05-29 after a
+# `git add -A` sweep accidentally bundled drafts into a ship commit
+# (recovered via force-push). Add new draft variants here as they appear.
+LinkedIn_BD_DPA_Review_*.md
+Orpheus_Privacy_Policy_DRAFT_*.md
+Orpheus_Privacy_Policy_DRAFT_*.docx
+Orpheus_Terms_of_Service_DRAFT_*.md
+Orpheus_Terms_of_Service_DRAFT_*.docx
+
+# Signal Score brainstorm / reference snapshots — stay untracked.
+# These are working scratchpads that capture current-state references
+# for framework design conversations; the canon lives elsewhere.
+Signal_Score_Dimensions_Reference_*.md
+
 # Vite production build output + HMR timestamp files — generated, never commit.
 frontend/dist/
 frontend/vite.config.ts.timestamp-*.mjs
