@@ -129,42 +129,16 @@ body {
   white-space: nowrap;
 }
 
-/* Client identity block. Wraps the name + avatar + dropdown menu. The
-   container needs position: relative so the menu can absolutely position
-   underneath it. */
+/* Identity cluster (ORPHEUS-52). Horizontal row of:
+   text block (PREPARED FOR eyebrow + subject name) → avatar → logout
+   icon button. The cluster appears on every authenticated route; the
+   text block's contents change based on whether the route carries a
+   :jobId and what the caller's role is (see PortalNav). */
 .nav-client {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  position: relative;
-}
-
-/* The whole right-hand block is a single button so the click target is
-   generous. We strip default button chrome and let inner pieces inherit
-   typography. */
-.nav-client-trigger {
-  display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 14px;
-  background: transparent;
-  border: 1px solid transparent;
-  padding: 4px 6px 4px 12px;
-  margin: -4px -6px -4px -12px; /* keep the visual baseline of the nav */
-  cursor: pointer;
-  border-radius: 10px;
-  font: inherit;
-  color: inherit;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-.nav-client-trigger:hover:not(:disabled),
-.nav-client-trigger:focus-visible {
-  background-color: var(--accent-tint-soft);
-  border-color: var(--border);
-  outline: none;
-}
-.nav-client-trigger:disabled {
-  opacity: 0.6;
-  cursor: progress;
 }
 
 .nav-client-text {
@@ -177,9 +151,12 @@ body {
 
 .nav-client-label {
   font-family: 'Source Sans 3', sans-serif;
-  font-size: 16px;
   font-weight: 400;
-  color: var(--accent);
+  /* Eyebrow uses --text-muted per ORPHEUS-52 design; the prior
+     "Confidential Portal for" label used the accent green, but
+     the new "PREPARED FOR" eyebrow reads as quieter framing,
+     not a brand accent. */
+  color: var(--text-muted);
   line-height: normal;
   margin-bottom: -10px;
   letter-spacing: 0.5px;
@@ -226,50 +203,37 @@ body {
   color: var(--text-strong);
 }
 
-/* Dropdown menu — opens below the trigger. */
-.nav-client-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  min-width: 220px;
-  background-color: var(--surface-elevated);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 8px;
-  box-shadow: 0 8px 24px var(--shadow-dark);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  z-index: 20;
-}
-.nav-client-menu-email {
-  font-family: 'Source Sans 3', sans-serif;
-  font-size: 12px;
-  color: var(--text-muted);
-  padding: 6px 10px 4px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 4px;
-  word-break: break-all;
-}
-.nav-client-menu-item {
-  font-family: 'Source Sans 3', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--text-body);
+/* Logout icon button — 24×24, sits to the right of the avatar in the
+   identity cluster (ORPHEUS-52). Replaces the prior dropdown trigger;
+   sign-out is a one-click action now, not a menu item. */
+.nav-logout-button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: none;
-  padding: 8px 10px;
   border-radius: 6px;
-  text-align: left;
+  color: var(--text-muted);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
-.nav-client-menu-item:hover,
-.nav-client-menu-item:focus-visible {
-  background-color: var(--accent-tint-hover);
-  color: var(--accent);
+.nav-logout-button:hover:not(:disabled),
+.nav-logout-button:focus-visible {
+  color: var(--text-strong);
+  background-color: var(--accent-tint-soft);
   outline: none;
+}
+.nav-logout-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.nav-logout-button svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 /* ── Role tabs (advisor / dual-role middle nav, ORPHEUS-39) ──── */

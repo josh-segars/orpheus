@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
+import { useAdvisorClients } from '../../hooks/useAdvisorClients'
+import { useJob } from '../../hooks/useJob'
 import { useSessionRoles } from '../../hooks/useSessionRoles'
 import { signOut, useSession } from '../../lib/auth'
 
@@ -12,18 +14,37 @@ interface LinkedInUserMetadata {
 }
 
 /**
- * Top-of-portal nav. Reads the session via useSession() and renders the
- * client's LinkedIn picture / display name on the right with a sign-out
- * dropdown. Replaces the previous hardcoded "Jane Doe" placeholder.
+ * Top-of-portal nav. Renders an app-wide identity cluster on the right:
+ *
+ *   PREPARED FOR
+ *   <Report subject's display name>           [avatar] [logout icon]
+ *
+ * Name source (ORPHEUS-52):
+ *
+ *   - Pure client on their own report     → their own LinkedIn `name`.
+ *   - Advisor viewing a client's job      → that client's display_name,
+ *                                            sourced from the advisor's
+ *                                            GET /clients roster.
+ *   - Dual-role advisor on self-report    → their own LinkedIn `name`
+ *                                            (the matched client row has
+ *                                            `is_self: true`).
+ *   - Routes without `:jobId` (Welcome,   → the signed-in user's own
+ *     Groundwork, /advisor/clients, etc.)   name. There is no "report
+ *                                            subject" on those surfaces;
+ *                                            self-attribution is the
+ *                                            sensible default.
+ *
+ * The avatar stays from the prior dropdown implementation but the
+ * dropdown menu itself is gone — sign-out is now a dedicated icon
+ * button to the right of the avatar.
  */
 export function PortalNav() {
   const { session } = useSession()
   const sessionRolesQuery = useSessionRoles()
   const navigate = useNavigate()
   const location = useLocation()
-  const [menuOpen, setMenuOpen] = useState(false)
+  const params = useParams()
   const [signingOut, setSigningOut] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   // Role flags drive the new (ORPHEUS-39) middle-of-nav tab toggle.
   // Both can be true (Andrew, dual-role) or just one (pure advisor,
@@ -34,36 +55,54 @@ export function PortalNav() {
   const isClient = Boolean(roles?.client_id)
   const onAdvisorSurface = location.pathname.startsWith('/advisor/')
 
-  // Close the dropdown when the user clicks outside it or hits Escape.
-  useEffect(() => {
-    if (!menuOpen) return
-    const handleMouseDown = (e: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
-        setMenuOpen(false)
-      }
-    }
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenuOpen(false)
-    }
-    document.addEventListener('mousedown', handleMouseDown)
-    document.addEventListener('keydown', handleKey)
-    return () => {
-      document.removeEventListener('mousedown', handleMouseDown)
-      document.removeEventListener('keydown', handleKey)
-    }
-  }, [menuOpen])
-
+  // Session-user-derived bits — the fallback for every name-source
+  // branch below.
   const meta = (session?.user?.user_metadata ?? {}) as LinkedInUserMetadata
   const email = session?.user?.email ?? ''
-  const displayName = pickDisplayName(meta, email)
+  const sessionDisplayName = pickDisplayName(meta, email)
   const initials = pickInitials(meta, email)
   const picture = meta.picture
 
+  // Look up the job's client_id when the current route carries one.
+  // `useJob` is gated on `jobId` being truthy so this is a no-op on
+  // routes like /welcome or /advisor/clients.
+  const jobId = params.jobId
+  const jobQuery = useJob(jobId)
+  const jobClientId = jobQuery.data?.client_id ?? null
+
+  // Advisor's roster — only fires for advisors (the hook gates on
+  // isAdvisor internally). Used to resolve a job's client_id to a
+  // human display_name, and to detect the dual-role "viewing my own
+  // self-report" case via the matched row's `is_self` flag.
+  const advisorClientsQuery = useAdvisorClients()
+  const matchedAdvisorClient =
+    isAdvisor && jobClientId
+      ? advisorClientsQuery.data?.clients.find((c) => c.id === jobClientId)
+      : undefined
+
+  // Subject name = whose report this is. Decision tree:
+  //
+  //   1. Route has no jobId          → session user.
+  //   2. Caller is not an advisor    → must be their own job (the
+  //                                     /jobs/:id endpoint already
+  //                                     enforces ownership), so session
+  //                                     user.
+  //   3. Caller is an advisor and    → advisor's own name (dual-role
+  //      the matched client is_self    on self-report).
+  //   4. Caller is an advisor and    → client's display_name from the
+  //      the matched client is NOT     advisor roster.
+  //      self
+  //
+  // While the advisor's roster or the job is still loading we fall
+  // through to `sessionDisplayName` as a transient placeholder. The
+  // alternative (rendering nothing) caused a layout shift on first
+  // paint for advisors landing directly on /jobs/:id.
+  let subjectDisplayName = sessionDisplayName
+  if (jobId && isAdvisor && matchedAdvisorClient && !matchedAdvisorClient.is_self) {
+    subjectDisplayName = matchedAdvisorClient.display_name
+  }
+
   const handleSignOut = async () => {
-    setMenuOpen(false)
     setSigningOut(true)
     try {
       await signOut()
@@ -126,47 +165,60 @@ export function PortalNav() {
           </span>
         </div>
       )}
-      <div className="nav-client" ref={containerRef}>
+      <div className="nav-client">
+        <span
+          className="nav-client-text"
+          aria-label={`Prepared for ${subjectDisplayName}`}
+        >
+          <span className="nav-client-label">Prepared for</span>
+          <span className="nav-client-name">{subjectDisplayName}</span>
+        </span>
+        <span className="nav-client-avatar" aria-hidden="true">
+          {picture ? (
+            <img src={picture} alt="" referrerPolicy="no-referrer" />
+          ) : (
+            <span className="nav-client-initials">{initials}</span>
+          )}
+        </span>
         <button
           type="button"
-          className="nav-client-trigger"
-          onClick={() => setMenuOpen((o) => !o)}
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          aria-label={`Account menu for ${displayName}`}
+          className="nav-logout-button"
+          onClick={handleSignOut}
           disabled={signingOut}
+          aria-label="Sign out"
+          title="Sign out"
         >
-          <span className="nav-client-text">
-            <span className="nav-client-label">Confidential Portal for</span>
-            <span className="nav-client-name">{displayName}</span>
-          </span>
-          <span className="nav-client-avatar" aria-hidden="true">
-            {picture ? (
-              <img src={picture} alt="" referrerPolicy="no-referrer" />
-            ) : (
-              <span className="nav-client-initials">{initials}</span>
-            )}
-          </span>
+          <LogoutIcon />
         </button>
-        {menuOpen && (
-          <div className="nav-client-menu" role="menu">
-            {email && (
-              <div className="nav-client-menu-email" aria-hidden="true">
-                {email}
-              </div>
-            )}
-            <button
-              type="button"
-              role="menuitem"
-              className="nav-client-menu-item"
-              onClick={handleSignOut}
-            >
-              Sign out
-            </button>
-          </div>
-        )}
       </div>
     </nav>
+  )
+}
+
+/**
+ * 24×24 logout glyph — door + arrow exiting to the right. Inline SVG
+ * avoids the need to add an icon library (lucide-react etc.) for a
+ * single occurrence; the existing nav SVGs in this app are all inline
+ * for the same reason.
+ */
+function LogoutIcon() {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
   )
 }
 
