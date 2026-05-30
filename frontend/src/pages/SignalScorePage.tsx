@@ -6,7 +6,11 @@ import type {
   SignalBand,
   SubDimensionScore,
 } from '../types/scoring'
-import wavesUrl from '../assets/waves.jpg'
+import wavesDissonant from '../assets/wave-1-dissonant.png'
+import wavesUntuned from '../assets/wave-2-untuned.png'
+import wavesTuning from '../assets/wave-3-tuning.png'
+import wavesTuned from '../assets/wave-4-tuned.png'
+import wavesResonant from '../assets/wave-5-resonant.png'
 import './SignalScorePage.css'
 
 /**
@@ -58,54 +62,64 @@ export function SignalScorePage() {
   }
 
   const { scoring, narratives } = job.result
-  const { band, dimensions } = scoring.scored_dimensions
+  const { composite, band, dimensions } = scoring.scored_dimensions
 
   return (
-    <>
-      {/* Full-bleed waveform hero — composite displays as the band label only;
-          numeric composite stays advisor-only per the "clients see bands"
-          product principle. */}
-      <section className="score-hero">
-        <img src={wavesUrl} alt="" className="score-hero-waves" aria-hidden="true" />
+    <main className="main-interior signal-main">
+      {/* Score hero — contained inside main-interior. Band-keyed waveform
+          is a billboard that overflows the column horizontally and bleeds
+          vertically into the dimensions area below. Composite score
+          number is sr-only; the band label is the only visible composite
+          display per the "clients see bands" product principle. */}
+      <section className="score-hero" aria-labelledby="score-hero-band">
+        <img
+          src={bandToWaveform(band)}
+          alt=""
+          className="score-hero-waves"
+          aria-hidden="true"
+        />
         <div className="score-hero-content">
           <div className="score-hero-eyebrow">Your Composition</div>
-          <h1 className="score-hero-band">{band}</h1>
+          <h1 className="score-hero-band" id="score-hero-band">
+            {band}
+            <span className="sr-only">
+              {' '}&mdash; composite score {Math.round(composite)} of 100
+            </span>
+          </h1>
         </div>
       </section>
 
-      <main className="main-interior signal-main">
-        {/* Dimensions */}
-        <div className="section-header signal-section-header">
-          <div className="section-eyebrow">Dimensions</div>
-          <h2 className="section-title">Your Signal Composition</h2>
-        </div>
+      {/* Dimensions */}
+      <div className="section-header signal-section-header">
+        <div className="section-eyebrow">Dimensions</div>
+        <h2 className="section-title">Your Signal Composition</h2>
+      </div>
 
-        <div className="dimensions-grid">
-          {dimensions.map((dim) => (
-            <DimensionCard
-              key={dim.name}
-              dimension={dim}
-              narrative={narratives.dimension_narratives[dim.name]}
-            />
-          ))}
-        </div>
+      <div className="dimensions-grid">
+        {dimensions.map((dim) => (
+          <DimensionCard
+            key={dim.name}
+            dimension={dim}
+            narrative={narratives.dimension_narratives[dim.name]}
+          />
+        ))}
+      </div>
 
-        {/* Actions */}
-        <div className="actions">
-          <Link to="/" className="btn-secondary">
-            &larr; Return to Groundwork
+      {/* Actions */}
+      <div className="actions">
+        <Link to="/" className="btn-secondary">
+          &larr; Return to Groundwork
+        </Link>
+        <div className="actions-group">
+          <Link to={`/jobs/${job.id}/cheat-sheet`} className="btn-secondary">
+            View Cheat Sheet
           </Link>
-          <div className="actions-group">
-            <Link to={`/jobs/${job.id}/cheat-sheet`} className="btn-secondary">
-              View Cheat Sheet
-            </Link>
-            <Link to={`/jobs/${job.id}/forward-brief`} className="btn-primary">
-              View My Forward Brief &rarr;
-            </Link>
-          </div>
+          <Link to={`/jobs/${job.id}/forward-brief`} className="btn-primary">
+            View My Forward Brief &rarr;
+          </Link>
         </div>
-      </main>
-    </>
+      </div>
+    </main>
   )
 }
 
@@ -135,7 +149,11 @@ function DimensionCard({ dimension, narrative }: DimensionCardProps) {
     <div className="dimension-card">
       <div className="dim-header">
         <div className="dim-name">{dimension.name}</div>
-        <BandPillRow activeBand={dimBand} />
+        <BandPillRow
+          activeBand={dimBand}
+          dimensionName={dimension.name}
+          score={dimension.normalized_score}
+        />
       </div>
       {narrative && <p className="dim-narrative">{narrative}</p>}
       {dimension.sub_dimensions.length > 0 && (
@@ -159,11 +177,19 @@ function DimensionCard({ dimension, narrative }: DimensionCardProps) {
 
 interface BandPillRowProps {
   activeBand: SignalBand
+  dimensionName: string
+  /** Dimension's normalized 0-1 score; surfaced to assistive tech alongside the band label. */
+  score: number
 }
 
-function BandPillRow({ activeBand }: BandPillRowProps) {
+function BandPillRow({ activeBand, dimensionName, score }: BandPillRowProps) {
+  const numericScore = Math.round(score * 100)
   return (
-    <div className="band-pills" role="group" aria-label="Dimension band">
+    <div
+      className="band-pills"
+      role="group"
+      aria-label={`${dimensionName} band: ${activeBand} — score ${numericScore} of 100`}
+    >
       {BAND_ORDER.map((b) => (
         <span
           key={b}
@@ -269,6 +295,28 @@ const BAND_ORDER: readonly SignalBand[] = [
   'Tuned',
   'Resonant',
 ] as const
+
+/**
+ * Band-keyed waveform assets. Five distinct visuals, one per tuner band —
+ * the band IS the hero image, not just a label over a shared backdrop.
+ *
+ * Source files live in the repo-root assets/images/ alongside the HTML
+ * prototype assets; the frontend mirror in src/assets/ exists so Vite's
+ * default fs.allow accepts the import (same workaround that was applied
+ * to waves.jpg in ORPHEUS-50). Replacing a band's visual is a two-step
+ * file swap (repo-root + mirror) with no code change.
+ */
+const WAVES_BY_BAND: Record<SignalBand, string> = {
+  Dissonant: wavesDissonant,
+  Untuned: wavesUntuned,
+  Tuning: wavesTuning,
+  Tuned: wavesTuned,
+  Resonant: wavesResonant,
+}
+
+function bandToWaveform(band: SignalBand): string {
+  return WAVES_BY_BAND[band]
+}
 
 /**
  * Map a dimension's normalized score (0–1) onto the same 5-band scale the

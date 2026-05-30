@@ -1,57 +1,57 @@
-/* Signal Score page — ORPHEUS-50 redesign. Dark-mode canonical. */
+/* Signal Score page — ORPHEUS-51 hero restructure on top of -50. */
 
-/* ── Score hero (waveform background) ───────────────────────── */
-/* Full-bleed band that sits behind the nav. The nav stays visible at the
-   top of the page because it lives outside this component; the waveform
-   image is positioned absolutely inside the hero with a vertical fade so
-   the page background takes over below it. */
+/* ── Score hero (band-keyed waveform billboard) ───────────────── */
+/* Contained inside main-interior as the first section. Waveform image
+   acts as a billboard: positioned absolutely, centered on the viewport
+   so it overflows the 820px column horizontally, and tall enough to
+   bleed vertically into the dimensions section below. Hybrid
+   responsive — pinned to the native 1438px at viewports wide enough to
+   fit it, scales with the viewport below. No CSS mask: the band-specific
+   images carry their own headroom for the eyebrow + band-name text. */
 .score-hero {
   position: relative;
   width: 100%;
-  height: 560px;
-  margin-top: -120px; /* tuck under the nav so the waveform reaches the top */
-  margin-bottom: -180px; /* let the dimensions section overlap the soft tail */
-  pointer-events: none;
-  overflow: hidden;
+  height: 247px;
+  /* Pull the next sibling up so the waveform tail visibly bleeds into
+     the dimensions area (overlap of ~100px once main-interior's flex
+     gap is accounted for). */
+  margin: 0 0 -24px;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   z-index: 0;
 }
 
 .score-hero-waves {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  /* Default: scale with the viewport (responsive below the native width). */
+  width: 100vw;
+  height: 360px;
   object-fit: cover;
-  object-position: center;
-  opacity: 0.95;
-  /* Soft top/bottom fade so the waveform feels embedded in the page bg
-     instead of pasted on top of it. */
-  -webkit-mask-image: linear-gradient(
-    180deg,
-    transparent 0%,
-    #000 25%,
-    #000 70%,
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    180deg,
-    transparent 0%,
-    #000 25%,
-    #000 70%,
-    transparent 100%
-  );
+  object-position: center top;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Hybrid responsive: at viewports wide enough to accommodate the native
+   1438×360 asset, pin to that size. Below 1440px we keep the responsive
+   width:100vw default. */
+@media (min-width: 1440px) {
+  .score-hero-waves {
+    width: 1438px;
+  }
 }
 
 .score-hero-content {
   position: relative;
   z-index: 1;
   text-align: center;
-  pointer-events: auto;
-  margin-top: 80px; /* push content below where the nav sits */
+  padding-top: 24px;
 }
 
 .score-hero-eyebrow {
@@ -61,7 +61,6 @@
   letter-spacing: 1px;
   text-transform: uppercase;
   color: var(--accent);
-  text-shadow: 0 0 20px rgba(0, 0, 0, 0.4);
   margin-bottom: 8px;
 }
 
@@ -71,7 +70,6 @@
   font-weight: 700;
   font-variation-settings: 'opsz' 44;
   color: var(--text-strong);
-  text-shadow: 0 0 24px var(--bg-page);
   line-height: 1;
   margin: 0;
 }
@@ -314,9 +312,11 @@
 /* ── Narrow widths ─────────────────────────────────────────── */
 @media (max-width: 720px) {
   .score-hero {
-    height: 420px;
-    margin-top: -80px;
-    margin-bottom: -120px;
+    height: 200px;
+    margin-bottom: -16px;
+  }
+  .score-hero-waves {
+    height: 280px;
   }
   .score-hero-band {
     font-size: 44px;

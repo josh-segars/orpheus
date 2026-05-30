@@ -882,3 +882,20 @@ textarea::placeholder { color: var(--text-muted); }
   color: var(--text-muted);
   margin-top: 4px;
 }
+
+/* ── Accessibility utilities ─────────────────────────────────── */
+/* Visually hidden but readable by assistive tech. Standard pattern; used
+   wherever a number or detail is meaningful to screen-reader users but
+   suppressed from the visual design (e.g. the composite numeric score
+   under the Signal Score hero, which only renders the band label visually). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
