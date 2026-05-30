@@ -373,6 +373,11 @@ def _build_dimension(
     """Build a DimensionScore from sub-dimension scores.
 
     Formula: (sum - min_possible) / (max_possible - min_possible) × weight × 100
+
+    Per-dimension band (ORPHEUS-22): reuses the composite SIGNAL_BANDS
+    thresholds against normalized_score × 100. The completeness floor only
+    adjusts contribution; band stays tied to the raw dimension measurement,
+    matching the pre-22 client-side derivation.
     """
     n = len(sub_scores)
     total = sum(s.score for s in sub_scores)
@@ -392,6 +397,7 @@ def _build_dimension(
         confidence=confidence,
         normalized_score=round(normalized, 4),
         contribution=round(contribution, 2),
+        band=assign_band(normalized * 100),
         sub_dimensions=sub_scores,
         completeness_floor_applied=completeness_floor_applied,
     )

@@ -52,6 +52,13 @@ export interface DimensionScore {
   confidence: ConfidenceLabel
   normalized_score: number // 0.0–1.0
   contribution: number // normalized_score × weight × 100
+  /**
+   * Per-dimension band classification (ORPHEUS-22). Server-authoritative;
+   * reuses the composite SIGNAL_BANDS thresholds against
+   * `normalized_score × 100`. Pre-ORPHEUS-22 the client derived this
+   * locally; that helper is now retired.
+   */
+  band: SignalBand
   sub_dimensions: SubDimensionScore[]
   completeness_floor_applied: boolean
 }

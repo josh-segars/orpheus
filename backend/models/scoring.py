@@ -66,6 +66,15 @@ class DimensionScore(BaseModel):
     contribution: float = Field(
         ..., description="normalized_score × weight × 100, contribution to composite"
     )
+    band: SignalBand = Field(
+        ...,
+        description=(
+            "Per-dimension band classification. ORPHEUS-22 decision (locked): "
+            "reuses the composite SIGNAL_BANDS thresholds, applied to "
+            "normalized_score × 100. Server-authoritative so client and "
+            "advisor views can't drift."
+        ),
+    )
     sub_dimensions: list[SubDimensionScore]
     completeness_floor_applied: bool = Field(
         False, description="True if Dim 1 completeness floor capped the contribution"

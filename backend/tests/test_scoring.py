@@ -38,6 +38,7 @@ from backend.ingestion.types import (
 )
 from backend.models.scoring import (
     SignalBand, ConfidenceLabel, ScoringMethod, SubDimensionScore,
+    DimensionScore,
 )
 
 
@@ -383,6 +384,126 @@ class TestDimension4:
         })
         # (7 - 2) / (10 - 2) = 0.625, × 0.15 × 100 = 9.375
         assert dim.contribution == 9.38  # rounded
+
+
+# ============================================================
+# Per-dimension band classification (ORPHEUS-22)
+# ============================================================
+
+
+class TestDimensionBand:
+    """`DimensionScore.band` reuses the composite SIGNAL_BANDS thresholds
+    against `normalized_score × 100`. Decision locked under ORPHEUS-22 —
+    same thresholds, not new ones."""
+
+    def _dim(self, sub_scores: list[int]) -> DimensionScore:
+        """Build a dimension with the given sub-dimension scores on a 0-5 scale."""
+        subs = [
+            SubDimensionScore(
+                name=f"sub-{i}",
+                score=s,
+                scale="0-5",
+                method=ScoringMethod.QUANTITATIVE,
+                confidence=ConfidenceLabel.CONFIRMED,
+            )
+            for i, s in enumerate(sub_scores)
+        ]
+        return _build_dimension(
+            name="Test Dim",
+            weight=0.25,
+            confidence=ConfidenceLabel.CONFIRMED,
+            sub_scores=subs,
+            scale_min=0,
+            scale_max=5,
+        )
+
+    def test_band_is_required_on_dimension(self):
+        """Every dimension built via _build_dimension has a band set."""
+        dim = self._dim([3, 3, 3, 3])
+        assert dim.band is not None
+        assert dim.band in SignalBand
+
+    def test_zero_normalized_score_is_dissonant(self):
+        dim = self._dim([0, 0, 0, 0])
+        assert dim.normalized_score == 0.0
+        assert dim.band == SignalBand.DISSONANT
+
+    def test_low_normalized_score_is_untuned(self):
+        # 4 subs × score 2 → sum 8 / max 20 = 0.40 → 40 → Untuned (25-44)
+        dim = self._dim([2, 2, 2, 2])
+        assert dim.normalized_score == 0.4
+        assert dim.band == SignalBand.UNTUNED
+
+    def test_mid_normalized_score_is_tuning(self):
+        # 4 subs × score 3 → sum 12 / max 20 = 0.60 → 60 → Tuning (45-64)
+        dim = self._dim([3, 3, 3, 3])
+        assert dim.normalized_score == 0.6
+        assert dim.band == SignalBand.TUNING
+
+    def test_high_normalized_score_is_tuned(self):
+        # [4, 4, 3, 4] → sum 15 / max 20 = 0.75 → 75 → Tuned (65-79)
+        dim = self._dim([4, 4, 3, 4])
+        assert dim.normalized_score == 0.75
+        assert dim.band == SignalBand.TUNED
+
+    def test_eighty_is_resonant_boundary(self):
+        # [4, 4, 4, 4] → sum 16 / max 20 = 0.80 → 80 → Resonant (80-100, boundary)
+        dim = self._dim([4, 4, 4, 4])
+        assert dim.normalized_score == 0.8
+        assert dim.band == SignalBand.RESONANT
+
+    def test_max_normalized_score_is_resonant(self):
+        dim = self._dim([5, 5, 5, 5])
+        assert dim.normalized_score == 1.0
+        assert dim.band == SignalBand.RESONANT
+
+    def test_band_matches_composite_thresholds_for_each_dimension_in_run_scoring(self):
+        """Bands on the four dimensions in a run_scoring output match what
+        applying assign_band(normalized × 100) would produce — no drift
+        between client expectations and server output."""
+        profile, positions = _make_profile()
+        result = run_scoring(
+            zip_data=ZipData(profile=profile, positions=positions),
+            xlsx_data=None,
+            dim1_rubric_scores={n: 3 for n in [
+                "Headline Clarity", "About Section Coherence",
+                "Experience Description Quality", "Profile Completeness",
+                "Identity Clarity",
+            ]},
+            dim4_rubric_scores={
+                "Topic Consistency": 3,
+                "Profile-Content Coherence": 3,
+            },
+            ref_date=date(2026, 3, 16),
+        )
+        for dim in result.scored_dimensions.dimensions:
+            expected = assign_band(dim.normalized_score * 100)
+            assert dim.band == expected, (
+                f"{dim.name}: normalized={dim.normalized_score} "
+                f"expected band={expected} got={dim.band}"
+            )
+
+    def test_band_serializes_into_jsonb(self):
+        """Per-dimension band must survive Pydantic JSON serialization so it
+        round-trips through the scores.scored_dimensions JSONB column."""
+        import json
+        profile, positions = _make_profile()
+        result = run_scoring(
+            zip_data=ZipData(profile=profile, positions=positions),
+            xlsx_data=None,
+            dim1_rubric_scores={n: 3 for n in [
+                "Headline Clarity", "About Section Coherence",
+                "Experience Description Quality", "Profile Completeness",
+                "Identity Clarity",
+            ]},
+            dim4_rubric_scores={"Topic Consistency": 3, "Profile-Content Coherence": 3},
+            ref_date=date(2026, 3, 16),
+        )
+        parsed = json.loads(result.model_dump_json())
+        valid = [b.value for b in SignalBand]
+        for d in parsed["scored_dimensions"]["dimensions"]:
+            assert "band" in d
+            assert d["band"] in valid
 
 
 # ============================================================

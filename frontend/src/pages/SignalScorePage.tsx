@@ -131,7 +131,11 @@ interface DimensionCardProps {
 }
 
 function DimensionCard({ dimension, narrative }: DimensionCardProps) {
-  const dimBand = dimensionBand(dimension.normalized_score)
+  // Per-dimension band is now server-authoritative (ORPHEUS-22). Previously
+  // derived client-side from normalized_score × 100 via dimensionBand(); that
+  // helper is gone — the backend computes it in scoring/engine.py against
+  // the same composite SIGNAL_BANDS thresholds.
+  const dimBand = dimension.band
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const toggle = (name: string) =>
@@ -316,20 +320,6 @@ const WAVES_BY_BAND: Record<SignalBand, string> = {
 
 function bandToWaveform(band: SignalBand): string {
   return WAVES_BY_BAND[band]
-}
-
-/**
- * Map a dimension's normalized score (0–1) onto the same 5-band scale the
- * composite uses. Thresholds mirror SIGNAL_BANDS in backend/scoring/config.py:
- *   0–24 Dissonant, 25–44 Untuned, 45–64 Tuning, 65–79 Tuned, 80+ Resonant.
- */
-function dimensionBand(normalizedScore: number): SignalBand {
-  const score = normalizedScore * 100
-  if (score >= 80) return 'Resonant'
-  if (score >= 65) return 'Tuned'
-  if (score >= 45) return 'Tuning'
-  if (score >= 25) return 'Untuned'
-  return 'Dissonant'
 }
 
 /**

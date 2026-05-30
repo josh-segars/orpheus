@@ -109,6 +109,23 @@ describe('SignalScorePage', () => {
     expect(groups).toHaveLength(4)
   })
 
+  it('renders the server-provided band per dimension (ORPHEUS-22)', () => {
+    // The client no longer derives the band from normalized_score; it reads
+    // dimension.band from the API payload. Assert the rendered aria-label
+    // for each dimension card uses the fixture's `band` value verbatim,
+    // not a re-derivation from normalized_score.
+    renderSignalScorePage()
+    for (const dim of demoJob.result!.scoring.scored_dimensions.dimensions) {
+      const numeric = Math.round(dim.normalized_score * 100)
+      const expected = new RegExp(
+        `^${dim.name} band: ${dim.band} — score ${numeric} of 100$`,
+      )
+      expect(
+        screen.getByRole('group', { name: expected }),
+      ).toBeInTheDocument()
+    }
+  })
+
   it('exposes the secondary "Return to Groundwork" link and the primary "View My Forward Brief" link', () => {
     renderSignalScorePage()
     expect(

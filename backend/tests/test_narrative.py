@@ -62,6 +62,7 @@ def _make_scoring_output(composite=77.6, band=SignalBand.TUNED):
                     confidence=ConfidenceLabel.CONFIRMED,
                     normalized_score=0.650,
                     contribution=22.75,
+                    band=SignalBand.TUNED,  # 0.650 × 100 = 65 → Tuned
                     sub_dimensions=[
                         SubDimensionScore(name="Headline Clarity", score=4, scale="1-5", method=ScoringMethod.RUBRIC),
                         SubDimensionScore(name="About Section Coherence", score=4, scale="1-5", method=ScoringMethod.RUBRIC),
@@ -77,6 +78,7 @@ def _make_scoring_output(composite=77.6, band=SignalBand.TUNED):
                     confidence=ConfidenceLabel.CONFIRMED,
                     normalized_score=0.850,
                     contribution=25.50,
+                    band=SignalBand.RESONANT,  # 0.850 × 100 = 85 → Resonant
                     sub_dimensions=[
                         SubDimensionScore(name="History Depth", score=5, scale="0-5", method=ScoringMethod.QUANTITATIVE, raw_value=750),
                         SubDimensionScore(name="Recency", score=4, scale="0-5", method=ScoringMethod.QUANTITATIVE_HYBRID, raw_value=120),
@@ -90,6 +92,7 @@ def _make_scoring_output(composite=77.6, band=SignalBand.TUNED):
                     confidence=ConfidenceLabel.CONFIRMED,
                     normalized_score=1.0,
                     contribution=20.0,
+                    band=SignalBand.RESONANT,  # 1.0 × 100 = 100 → Resonant
                     sub_dimensions=[
                         SubDimensionScore(name="Outbound Engagement Presence", score=5, scale="0-5", method=ScoringMethod.QUANTITATIVE, raw_value=1200),
                         SubDimensionScore(name="Engagement Quality Score", score=5, scale="0-5", method=ScoringMethod.QUANTITATIVE, raw_value=480),
@@ -101,6 +104,7 @@ def _make_scoring_output(composite=77.6, band=SignalBand.TUNED):
                     confidence=ConfidenceLabel.INFERRED,
                     normalized_score=0.625,
                     contribution=9.38,
+                    band=SignalBand.TUNING,  # 0.625 × 100 = 62.5 → Tuning
                     sub_dimensions=[
                         SubDimensionScore(name="Topic Consistency", score=4, scale="1-5", method=ScoringMethod.RUBRIC),
                         SubDimensionScore(name="Profile-Content Coherence", score=3, scale="1-5", method=ScoringMethod.RUBRIC),

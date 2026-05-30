@@ -25,6 +25,7 @@ export const demoJob: Job = {
             confidence: 'CONFIRMED',
             normalized_score: 0.72,
             contribution: 25.2,
+            band: 'Tuned', // 0.72 × 100 = 72 → Tuned (65-79)
             completeness_floor_applied: false,
             sub_dimensions: [
               {
@@ -116,6 +117,7 @@ export const demoJob: Job = {
             confidence: 'CONFIRMED',
             normalized_score: 0.55,
             contribution: 16.5,
+            band: 'Tuning', // 0.55 × 100 = 55 → Tuning (45-64)
             completeness_floor_applied: false,
             sub_dimensions: [
               {
@@ -174,6 +176,7 @@ export const demoJob: Job = {
             confidence: 'CONFIRMED',
             normalized_score: 0.61,
             contribution: 12.2,
+            band: 'Tuning', // 0.61 × 100 = 61 → Tuning (45-64)
             completeness_floor_applied: false,
             sub_dimensions: [
               {
@@ -230,6 +233,7 @@ export const demoJob: Job = {
             confidence: 'INFERRED',
             normalized_score: 0.72,
             contribution: 10.8,
+            band: 'Tuned', // 0.72 × 100 = 72 → Tuned (65-79)
             completeness_floor_applied: false,
             sub_dimensions: [
               {
