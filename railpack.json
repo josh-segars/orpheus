@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "python",
+  "steps": {
+    "install": {
+      "commands": [
+        {
+          "cmd": "pip install -r backend/requirements.txt",
+          "customName": "Install backend dependencies"
+        }
+      ]
+    }
+  }
+}
