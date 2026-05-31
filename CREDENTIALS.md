@@ -70,7 +70,7 @@ If any of those fail, see the corresponding section below.
 | **Account login** | `[password manager: <vault> / <item>]` |
 | **Services** | Two services: backend (web), worker (background). Both deploy from `main` branch on GitHub auto-push. |
 | **Env vars (set in dashboard, on BOTH services)** | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `APP_BASE_URL`, `FRONTEND_ORIGINS`, `SUPABASE_JWT_AUDIENCE`. |
-| **Build command (manual)** | `pip install -r backend/requirements.txt` — set per-service in Settings → Build. Source-pin tracked as ORPHEUS-43. |
+| **Build command** | Auto-detected by Railpack from repo-root `requirements.txt` (canonical Python deps file post-ORPHEUS-43, 2026-05-31). No manual override; Settings → Build should be empty on both services. |
 | **Backend public URL** | `https://orpheus-production-5082.up.railway.app` (subject to change if service is recreated) |
 
 ---
