@@ -422,3 +422,51 @@ async def get_verified_session(
     fields set to `None`, rather than raising 401.
     """
     return await _resolve_session(authorization, allow_no_roles=True)
+
+
+async def get_current_admin(
+    authorization: str | None = Header(default=None),
+) -> SessionRoles:
+    """FastAPI dependency for /admin endpoints (ORPHEUS-31).
+
+    Same JWT verification + role lookup as `get_verified_session`
+    (i.e. the neither-role case is allowed — an admin can hit /admin
+    without an `advisors` or `clients` row of their own; the whole
+    point of the surface is god-mode access regardless of role), then
+    layers an env-allowlist check on top: the JWT's `email` claim
+    must appear in `settings.admin_email_set`.
+
+    Stopgap pattern explicitly called out by the ticket: this is the
+    minimal email-allowlist gate until the separate advisor-auth
+    decision lands. It runs alongside the role-based dependencies
+    rather than replacing them — non-admin endpoints continue to
+    depend on `get_current_session_roles` / `get_verified_session`.
+
+    Behavior:
+      * Token / header problems → 401 (inherited from `_resolve_session`).
+      * Email not in `ADMIN_EMAILS` → 403 with a clear "not authorized"
+        detail. Differentiated from a generic 403 so the frontend can
+        surface "your account is not on the admin allowlist" cleanly.
+      * Email in `ADMIN_EMAILS` (case-insensitive) → returns the
+        SessionRoles unchanged. Handlers can still inspect
+        `roles.is_advisor()` / `roles.is_client()` if they want to
+        differentiate admin actions by their secondary role.
+
+    Membership is case-insensitive — `admin_email_set` lowercases
+    every entry on read, and we lowercase the JWT email here too.
+    """
+    roles = await _resolve_session(authorization, allow_no_roles=True)
+    settings = get_settings()
+    if not settings.admin_email_set:
+        # Empty allowlist means no one is admin. Better to 403 with a
+        # clear detail than confuse ops with "your email isn't in []".
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The admin allowlist is empty on this deployment.",
+        )
+    if (roles.email or "").strip().lower() not in settings.admin_email_set:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account is not authorized for /admin.",
+        )
+    return roles

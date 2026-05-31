@@ -75,8 +75,11 @@ class Settings(BaseSettings):
         default="",
         alias="ADMIN_EMAILS",
         description=(
-            "Comma-separated emails authorized for /admin endpoints (consumed by ORPHEUS-31). "
-            "Empty for now — leave blank until the admin router ships."
+            "Comma-separated emails authorized for /admin endpoints "
+            "(ORPHEUS-31). Backend gate; consumed by the "
+            "`get_current_admin` dependency. Frontend mirrors this via "
+            "VITE_ADMIN_EMAILS — keep both lists in sync. Case-"
+            "insensitive comparison."
         ),
     )
 

@@ -7,6 +7,7 @@ import { useGroundworkProgress } from './hooks/useGroundworkProgress'
 import { useSessionRoles } from './hooks/useSessionRoles'
 import { useSession } from './lib/auth'
 import { hasSeenWelcome } from './lib/welcomeFlag'
+import { AdminPage } from './pages/AdminPage'
 import { AnalysisPage } from './pages/AnalysisPage'
 import { CheatSheetPage } from './pages/CheatSheetPage'
 import { ForwardBriefPage } from './pages/ForwardBriefPage'
@@ -19,6 +20,7 @@ import { NotInvitedPage } from './pages/NotInvitedPage'
 import { QuestionnairePage } from './pages/QuestionnairePage'
 import { SignalScorePage } from './pages/SignalScorePage'
 import { WelcomePage } from './pages/WelcomePage'
+import { isAdminEmail } from './hooks/useAdmin'
 import { ClientsPage } from './pages/advisor/ClientsPage'
 import { LinkedInStep1Page } from './pages/linkedin/Step1Page'
 import { LinkedInStep2Page } from './pages/linkedin/Step2Page'
@@ -93,6 +95,20 @@ export default function App() {
             <AdvisorRoute>
               <ClientsPage />
             </AdvisorRoute>
+          }
+        />
+        {/*
+          /admin stopgap (ORPHEUS-31). AdminRoute redirects non-allowlisted
+          users to / so non-admins never see the page chrome. The backend
+          re-enforces the allowlist via the get_current_admin dependency;
+          this guard is a UX gate, not a security boundary.
+        */}
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <AdminPage />
+            </AdminRoute>
           }
         />
         <Route path="*" element={<NotFoundPage />} />
@@ -184,6 +200,36 @@ function AdvisorRoute({ children }: { children: ReactNode }) {
     )
   }
   if (!data?.advisor_id) {
+    return <Navigate to="/" replace />
+  }
+  return <>{children}</>
+}
+
+/**
+ * Per-route gate for the /admin stopgap surface (ORPHEUS-31).
+ *
+ * Sits inside `ProtectedRoute` — by the time this renders we already
+ * know the caller has a Supabase session AND a known business role
+ * (or the neither-role path has bounced them to /not-invited). This
+ * guard layers the email-allowlist check on top: the signed-in
+ * email must appear in `VITE_ADMIN_EMAILS` or we redirect to /.
+ *
+ * Not a security boundary — the backend re-enforces the allowlist
+ * via `get_current_admin`. This guard exists so non-admins who
+ * navigate to /admin directly don't see the page chrome before
+ * the 403 lands.
+ */
+function AdminRoute({ children }: { children: ReactNode }) {
+  const { session, status } = useSession()
+  if (status === 'loading') {
+    return (
+      <main className="main-interior">
+        <div className="page-status">Loading&hellip;</div>
+      </main>
+    )
+  }
+  const email = session?.user?.email ?? null
+  if (!isAdminEmail(email)) {
     return <Navigate to="/" replace />
   }
   return <>{children}</>

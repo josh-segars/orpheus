@@ -96,6 +96,48 @@ export async function apiPostJson<T>(
 }
 
 /**
+ * PATCH a JSON body. Used by the admin surface (ORPHEUS-31) to update
+ * narrative rows; pairs with backend `UpdateAdminNarrativeRequest`-style
+ * partial models where `model_dump(exclude_unset=True)` matters server-side.
+ *
+ * Same error shape as `apiPostJson` — non-2xx throws an `ApiError`
+ * carrying the parsed body so callers can extract `body.detail`.
+ */
+export async function apiPatchJson<T>(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    ...(await authHeaders()),
+  }
+
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(body),
+    signal,
+  })
+  if (!res.ok) {
+    let responseBody: unknown = null
+    try {
+      responseBody = await res.json()
+    } catch {
+      // body wasn't JSON — fine, leave null
+    }
+    throw new ApiError(
+      `PATCH ${path} failed: ${res.status}`,
+      res.status,
+      responseBody,
+    )
+  }
+  return (await res.json()) as T
+}
+
+/**
  * POST a multipart/form-data body. Used by the LinkedIn upload flow
  * (ORPHEUS-16) to submit the ZIP archive + XLSX analytics to /jobs.
  *
