@@ -1,1 +1,20 @@
--r backend/requirements.txt
+fastapi
+uvicorn[standard]
+supabase
+anthropic
+python-dotenv
+pydantic
+pydantic-settings>=2.0.0
+openpyxl
+
+# FastAPI's UploadFile / Form parameters require python-multipart for
+# parsing multipart/form-data bodies (ORPHEUS-16 POST /jobs).
+python-multipart>=0.0.9
+
+# JWT verification for Supabase-issued tokens (ORPHEUS-27).
+PyJWT[crypto]>=2.8.0
+cryptography>=42.0.0
+
+# Test runner (used by backend/tests/*).
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
