@@ -198,6 +198,52 @@ describe('PortalNav identity cluster (ORPHEUS-52)', () => {
     expect(screen.queryByText('Andrew (self)')).not.toBeInTheDocument()
   })
 
+  // ORPHEUS-56: advisor-only users navigating off /advisor/clients (e.g.
+  // to /admin) need a clickable Link, not a decorative span — the
+  // pre-fix markup left them stuck typing the URL by hand.
+  it('renders a clickable Manage clients link for advisor-only users off /advisor/clients', () => {
+    vi.mocked(useSessionRoles).mockReturnValue(rolesAdvisorOnly() as ReturnType<typeof useSessionRoles>)
+    vi.mocked(useJob).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof useJob>)
+    vi.mocked(useAdvisorClients).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof useAdvisorClients>)
+
+    renderAt('/admin')
+
+    const link = screen.getByRole('link', { name: /manage clients/i })
+    expect(link).toBeInTheDocument()
+    expect(link).toHaveAttribute('href', '/advisor/clients')
+  })
+
+  it('hides the Manage clients pill for advisor-only users on /advisor/clients itself', () => {
+    vi.mocked(useSessionRoles).mockReturnValue(rolesAdvisorOnly() as ReturnType<typeof useSessionRoles>)
+    vi.mocked(useJob).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof useJob>)
+    vi.mocked(useAdvisorClients).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof useAdvisorClients>)
+
+    renderAt('/advisor/clients')
+
+    // The Manage clients pill is suppressed on its own page — the user
+    // is already there, no nav target needed.
+    expect(
+      screen.queryByRole('link', { name: /manage clients/i }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/^manage clients$/i)).not.toBeInTheDocument()
+  })
+
   it('invokes signOut when the logout icon button is clicked', async () => {
     vi.mocked(useSessionRoles).mockReturnValue(rolesClientOnly() as ReturnType<typeof useSessionRoles>)
     vi.mocked(useJob).mockReturnValue(jobWithClient('client-self'))

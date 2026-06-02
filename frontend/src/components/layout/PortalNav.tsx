@@ -158,11 +158,17 @@ export function PortalNav() {
           </Link>
         </div>
       )}
-      {isAdvisor && !isClient && (
+      {isAdvisor && !isClient && !onAdvisorSurface && (
+        // Advisor-only users on a non-/advisor route (e.g. /admin) need a
+        // way back to their clients list. The pre-ORPHEUS-56 markup
+        // rendered a non-clickable span here, which left them stuck
+        // typing the URL by hand. Per the ticket's option (b) we hide
+        // the pill entirely on /advisor/clients itself (current-page is
+        // redundant) and render a real Link elsewhere.
         <div className="nav-role-tabs">
-          <span className="nav-role-tab nav-role-tab-active">
+          <Link to="/advisor/clients" className="nav-role-tab">
             Manage clients
-          </span>
+          </Link>
         </div>
       )}
       <div className="nav-client">
