@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
-import { ApiError, apiPostJson } from '../lib/apiClient'
+import { ApiError, apiGet, apiPostJson } from '../lib/apiClient'
+import type { SessionRoles } from './useSessionRoles'
 
 /**
  * Request body for POST /accept-invitation (ORPHEUS-38).
@@ -56,18 +57,45 @@ export function useAcceptInvitation() {
         token,
         confirmed: confirmed ?? false,
       }),
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       // Once acceptance commits server-side, the user has a real
       // clients row that the ProtectedRoute / NotInvitedPage logic
-      // gates on. Invalidate the cached GET /session response so
-      // the next render reads fresh state instead of the
-      // pre-acceptance "neither role" snapshot. Skip the
-      // invalidation in the mismatch case — nothing changed
-      // server-side yet, the row is still pending until the user
-      // confirms with `{confirmed: true}`.
-      if (!data.requires_confirmation) {
-        void queryClient.invalidateQueries({ queryKey: ['session'] })
+      // gates on. Skip the refresh in the mismatch case — nothing
+      // changed server-side yet, the row is still pending until the
+      // user confirms with `{confirmed: true}`.
+      if (data.requires_confirmation) return
+
+      // ORPHEUS-58: AWAIT the session refresh before the mutation
+      // resolves. `invalidateQueries` alone is racy because
+      // `useSessionRoles` is unmounted on the public /invite/callback
+      // route — invalidation marks the cache stale but can't trigger
+      // a refetch with no observer. ProtectedRoute mounts a beat
+      // later (after `<Navigate to="/" />` fires) and, with
+      // `staleTime: Infinity` on `useSessionRoles`, would read the
+      // pre-acceptance neither-role snapshot from the cache and
+      // bounce the user to /not-invited before the refetch lands.
+      //
+      // `fetchQuery` writes fresh data into the cache regardless of
+      // mount state and resolves only when the response is in.
+      // Because onSuccess is awaited, the mutation's `isSuccess`
+      // doesn't flip until the cache is primed, so the InviteCallback
+      // page's `<Navigate to="/" />` only fires once ProtectedRoute
+      // is guaranteed to read the fresh roles.
+      try {
+        await queryClient.fetchQuery<SessionRoles, ApiError>({
+          queryKey: ['session'],
+          queryFn: () => apiGet<SessionRoles>('/session'),
+          staleTime: 0,
+        })
+      } catch {
+        // If the /session call itself fails here, ProtectedRoute
+        // will re-fetch on mount and surface the error through its
+        // own error path. Don't block the mutation success on it.
       }
+      // Keep the invalidation too so any other consumer (e.g. a hook
+      // mounted later in the same render cycle) sees stale-flagged
+      // data and refetches as expected.
+      void queryClient.invalidateQueries({ queryKey: ['session'] })
     },
   })
 }
