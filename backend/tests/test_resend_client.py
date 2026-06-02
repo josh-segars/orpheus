@@ -96,6 +96,16 @@ def test_send_invitation_email_happy_path(monkeypatch):
     assert request.get_method() == "POST"
     assert request.headers["Authorization"] == "Bearer re_real_key_value"
     assert request.headers["Content-type"] == "application/json"
+    # ORPHEUS-55 regression: the default Python-urllib UA was getting
+    # caught by Cloudflare's WAF (code 1010), surfacing as HTTP 403. A
+    # named UA passes the WAF cleanly. Pin both: the header is present
+    # and it isn't the stdlib default.
+    ua_header = request.headers.get("User-agent") or request.headers.get(
+        "User-Agent"
+    )
+    assert ua_header is not None
+    assert "orpheus-social" in ua_header
+    assert "python-urllib" not in ua_header.lower()
 
     body = json.loads(request.data.decode("utf-8"))
     assert body["from"] == resend_client.FROM_ADDRESS

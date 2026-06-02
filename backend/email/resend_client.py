@@ -51,6 +51,16 @@ FROM_ADDRESS = "Orpheus Social <hello@orpheussocial.com>"
 # Same timeout auth.py uses for JWKS — Resend is similarly lightweight.
 HTTP_TIMEOUT_SECONDS = 5
 
+# Identify the client with a real product UA so Cloudflare's WAF doesn't
+# flag the request as bot traffic (ORPHEUS-55). Resend sits behind
+# Cloudflare; the default `Python-urllib/3.x` UA was triggering CF's
+# bot-signature rule, surfacing as HTTP 403 with `error code: 1010` and
+# breaking the live invitation send. A UA that looks like a normal app
+# client passes the WAF cleanly. Format mirrors what the official Resend
+# Python SDK sends (a `resend-python/<version>` token); using our own
+# product name keeps it easy to trace in support tickets / WAF rules.
+USER_AGENT = "orpheus-social/1.0 (+https://orpheussocial.com)"
+
 
 # --------------------------------------------------------------------------- #
 # Public exception
@@ -156,6 +166,8 @@ def _post_to_resend(*, api_key: str, payload: dict[str, Any]) -> str:
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            # See USER_AGENT constant for the CF-WAF 1010 backstory.
+            "User-Agent": USER_AGENT,
         },
     )
 
