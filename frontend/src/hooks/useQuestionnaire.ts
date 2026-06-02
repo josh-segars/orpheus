@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { supabase } from '../lib/supabase'
+import { useSessionRoles } from './useSessionRoles'
 import type {
   QuestionnaireAnswers,
   QuestionnaireResponse,
@@ -54,18 +55,35 @@ interface UpsertArgs {
  * away unrelated answers.
  *
  * The caller passes only the fields that changed; this hook computes the
- * post-merge JSONB shape. We need the client_id (auth.uid()) on insert,
- * which we read from the active session.
+ * post-merge JSONB shape.
+ *
+ * client_id source (ORPHEUS-57): we need `clients.id`, NOT `auth.users.id`.
+ * Those values diverged when ORPHEUS-36's schema split made the clients
+ * table a separate identity linked to auth.users via `clients.user_id`.
+ * The schema FKs `questionnaire_responses.client_id → clients(id)` and the
+ * RLS policy `qr_insert_as_client` checks `client_id = get_client_id()`
+ * (which returns `clients.id`). Writing `auth.users.id` here meant RLS
+ * rejected the upsert silently — PostgREST returned empty data, the UI
+ * saw "answers don't save," no error surfaced anywhere. Reading from
+ * `useSessionRoles()` ensures we use the row id the backend gives us
+ * via GET /session.
  */
 export function useUpsertQuestionnaire() {
   const queryClient = useQueryClient()
+  const sessionRolesQuery = useSessionRoles()
+  const clientId = sessionRolesQuery.data?.client_id ?? null
 
   return useMutation({
     mutationFn: async ({ answers }: UpsertArgs) => {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const userId = sessionData.session?.user.id
-      if (!userId) {
-        throw new Error('Cannot save questionnaire: no active session.')
+      // Defensive guard: an advisor-only user reaching this code path
+      // shouldn't be possible via the UI (the questionnaire route is
+      // gated behind ProtectedRoute + a client portal nav), but if it
+      // ever happens, fail loudly instead of writing a row that RLS
+      // will reject silently.
+      if (!clientId) {
+        throw new Error(
+          'Cannot save questionnaire: no client_id resolved for this session.',
+        )
       }
 
       // Read-modify-write: merge into whatever's currently in the cache.
@@ -83,7 +101,7 @@ export function useUpsertQuestionnaire() {
         .from('questionnaire_responses')
         .upsert(
           {
-            client_id: userId,
+            client_id: clientId,
             answers: mergedAnswers,
           },
           { onConflict: 'client_id' },
