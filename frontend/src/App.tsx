@@ -131,12 +131,21 @@ export default function App() {
  *      error from /session both route to /not-invited, where the user
  *      can sign out and start over.
  *
+ * Admin escape hatch (ORPHEUS-53): admins identified by
+ * `VITE_ADMIN_EMAILS` are allowed through the neither-role branch so
+ * `/admin` is reachable without needing an advisors / clients row of
+ * their own. This mirrors the backend's `get_current_admin` posture
+ * (which explicitly tolerates the neither-role case) — without this
+ * bypass, AdminRoute can never evaluate because ProtectedRoute
+ * pre-empts it. Where the admin lands by default (e.g. on `/`) is
+ * handled in `SmartIndexRedirect`.
+ *
  * The hooks must be called unconditionally (rules of hooks); the
  * `enabled` flag on useSessionRoles gates the network call so it's
  * dormant until we know we're authenticated.
  */
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { status } = useSession()
+  const { session, status } = useSession()
   const sessionRolesQuery = useSessionRoles()
 
   if (status === 'loading') {
@@ -162,13 +171,21 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 
   // On any /session failure mode (error response, no data, or both role
   // fields null) route to /not-invited rather than rendering an empty
-  // portal shell.
+  // portal shell — UNLESS the signed-in email is admin-allowlisted, in
+  // which case we let them through so AdminRoute can take over. The
+  // backend re-enforces the allowlist; this client-side check is a UX
+  // gate only.
   const roles = sessionRolesQuery.data
+  const email = session?.user?.email ?? null
+  const isAdmin = isAdminEmail(email)
   if (
     sessionRolesQuery.isError ||
     !roles ||
     (!roles.advisor_id && !roles.client_id)
   ) {
+    if (isAdmin) {
+      return <>{children}</>
+    }
     return <Navigate to="/not-invited" replace />
   }
 
@@ -238,6 +255,7 @@ function AdminRoute({ children }: { children: ReactNode }) {
 /**
  * Decide where to send a freshly-arrived authenticated user.
  *
+ *   neither-role admin           → /admin             (ORPHEUS-53)
  *   advisor-only (no client row) → /advisor/clients (ORPHEUS-39)
  *   no jobs + Welcome unseen     → /welcome
  *   no jobs + Welcome seen       → /groundwork
@@ -245,22 +263,37 @@ function AdminRoute({ children }: { children: ReactNode }) {
  *   complete job                 → /jobs/:id           (Signal Score)
  *   failed job                   → /groundwork         (let the client retry)
  *
+ * The neither-role admin branch only fires for users ProtectedRoute
+ * has explicitly admitted via the admin email allowlist (ORPHEUS-53).
+ * For any caller with at least one role, normal routing applies — a
+ * dual-role admin lands at the client portal and uses the PortalNav
+ * tab toggle to reach `/advisor/clients` or `/admin`.
+ *
  * The advisor-only branch fires before the groundwork-progress hook
  * is even consulted — that hook queries Supabase under the assumption
  * the caller owns a clients row, and would return empty/error for an
  * advisor-only session.
  */
 function SmartIndexRedirect() {
+  const { session } = useSession()
   const sessionRoles = useSessionRoles()
+
+  const roles = sessionRoles.data
+  const email = session?.user?.email ?? null
+
+  // Neither-role admin (ORPHEUS-53): ProtectedRoute let them through
+  // on the allowlist. Send them to /admin rather than falling into
+  // the client portal, which would query Supabase for a clients row
+  // they don't have.
+  if (roles && !roles.advisor_id && !roles.client_id && isAdminEmail(email)) {
+    return <Navigate to="/admin" replace />
+  }
 
   // Advisor-only sessions skip the client portal entirely. Dual-role
   // sessions (Andrew) fall through to the client-portal branch — the
   // PortalNav tab toggle is what lets them switch surfaces. They
   // can still navigate to /advisor/clients directly via the nav.
-  if (
-    sessionRoles.data?.advisor_id &&
-    !sessionRoles.data.client_id
-  ) {
+  if (roles?.advisor_id && !roles.client_id) {
     return <Navigate to="/advisor/clients" replace />
   }
 
