@@ -381,13 +381,13 @@ async def test_list_admin_clients_returns_all_clients_with_advisor_and_job():
                     data=[
                         {
                             "id": ADVISOR_A_ID,
+                            "user_id": "user-advisor-a-uuid",
                             "practice_name": "Andrew's Practice",
-                            "email": ADMIN_EMAIL,
                         },
                         {
                             "id": ADVISOR_B_ID,
+                            "user_id": "user-advisor-b-uuid",
                             "practice_name": None,
-                            "email": "advisor-b@example.com",
                         },
                     ]
                 )
@@ -395,7 +395,18 @@ async def test_list_admin_clients_returns_all_clients_with_advisor_and_job():
         }
     )
 
-    with _patch_supabase(fake):
+    # Stub the auth.users email lookup — ORPHEUS-59 follow-up. The
+    # handler reads advisor emails from auth.users (not public.advisors)
+    # via admin_router._resolve_advisor_emails; patching the helper
+    # avoids needing a FakeSupabase auth.admin surface.
+    with _patch_supabase(fake), patch.object(
+        admin_router,
+        "_resolve_advisor_emails",
+        return_value={
+            "user-advisor-a-uuid": ADMIN_EMAIL,
+            "user-advisor-b-uuid": "advisor-b@example.com",
+        },
+    ):
         response = await admin_router.list_admin_clients(_admin=_admin_roles())
 
     assert len(response.clients) == 2
@@ -428,6 +439,127 @@ async def test_list_admin_clients_empty_skips_jobs_and_advisors_queries():
 
     assert response.clients == []
     assert fake.tables_queried == ["clients"]
+
+
+# --------------------------------------------------------------------------- #
+# _resolve_advisor_emails — auth.users join used by /admin/clients
+# --------------------------------------------------------------------------- #
+
+
+@dataclass
+class _FakeAuthUser:
+    """Stand-in for supabase-py's User model (the relevant attrs only)."""
+
+    id: str
+    email: str
+
+
+class _FakeAuthAdmin:
+    """Mock for `supabase.auth.admin` — exposes `list_users()`."""
+
+    def __init__(self, users: list[Any] | Any) -> None:
+        self._users = users
+
+    def list_users(self):
+        return self._users
+
+
+class _FakeAuthClient:
+    def __init__(self, admin: _FakeAuthAdmin) -> None:
+        self.admin = admin
+
+
+class _FakeSupabaseWithAuth:
+    """Minimal supabase stand-in carrying just `.auth.admin.list_users()`."""
+
+    def __init__(self, users: list[Any] | Any) -> None:
+        self.auth = _FakeAuthClient(_FakeAuthAdmin(users))
+
+
+def test_resolve_advisor_emails_filters_to_wanted_user_ids():
+    """The helper returns only the user_ids that were passed in.
+
+    list_users() returns every auth user in the project — filtering
+    to the advisor user_ids we actually care about happens client-
+    side so the caller can ignore the rest.
+    """
+    fake = _FakeSupabaseWithAuth(
+        users=[
+            _FakeAuthUser(id="user-advisor-a-uuid", email="andrew@example.com"),
+            _FakeAuthUser(id="user-advisor-b-uuid", email="advisor-b@example.com"),
+            _FakeAuthUser(id="some-other-user-uuid", email="noise@example.com"),
+        ]
+    )
+    advisor_rows = [
+        {"id": ADVISOR_A_ID, "user_id": "user-advisor-a-uuid"},
+        {"id": ADVISOR_B_ID, "user_id": "user-advisor-b-uuid"},
+    ]
+
+    result = admin_router._resolve_advisor_emails(fake, advisor_rows)
+
+    assert result == {
+        "user-advisor-a-uuid": "andrew@example.com",
+        "user-advisor-b-uuid": "advisor-b@example.com",
+    }
+
+
+def test_resolve_advisor_emails_handles_listusersresponse_shape():
+    """supabase-py wraps the user list in ListUsersResponse on some versions.
+
+    The helper handles both: bare list and an object with `.users`.
+    """
+    wrapped = SimpleNamespace(
+        users=[
+            _FakeAuthUser(id="user-advisor-a-uuid", email="andrew@example.com"),
+        ]
+    )
+    fake = _FakeSupabaseWithAuth(users=wrapped)
+    advisor_rows = [{"id": ADVISOR_A_ID, "user_id": "user-advisor-a-uuid"}]
+
+    result = admin_router._resolve_advisor_emails(fake, advisor_rows)
+
+    assert result == {"user-advisor-a-uuid": "andrew@example.com"}
+
+
+def test_resolve_advisor_emails_returns_empty_when_no_user_ids():
+    """No advisor rows / no user_ids → no auth call needed.
+
+    Skipping the auth.admin call when the input is empty keeps the
+    happy path quiet for the (rare) all-clients-have-no-advisor case.
+    """
+
+    class _NoOpAuth:
+        """Will raise if list_users is called."""
+
+        @property
+        def auth(self):
+            raise AssertionError("list_users should not be called")
+
+    advisor_rows: list[dict[str, Any]] = []
+    result = admin_router._resolve_advisor_emails(_NoOpAuth(), advisor_rows)
+    assert result == {}
+
+
+def test_resolve_advisor_emails_degrades_to_empty_on_exception():
+    """Auth admin API failure is not fatal — email is a UI label fallback.
+
+    Practice_name is the primary identifier; missing email just means
+    advisors without a practice_name show their id instead.
+    """
+
+    class _FailingAuthClient:
+        class _Admin:
+            def list_users(self):
+                raise RuntimeError("boom")
+
+        admin = _Admin()
+
+    class _FailingSupabase:
+        auth = _FailingAuthClient()
+
+    advisor_rows = [{"id": ADVISOR_A_ID, "user_id": "user-advisor-a-uuid"}]
+    result = admin_router._resolve_advisor_emails(_FailingSupabase(), advisor_rows)
+    assert result == {}
 
 
 # --------------------------------------------------------------------------- #

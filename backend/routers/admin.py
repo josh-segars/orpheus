@@ -236,12 +236,24 @@ async def list_admin_clients(
     if advisor_ids:
         advisors_result = (
             supabase.table("advisors")
-            .select("id, practice_name, email")
+            .select("id, user_id, practice_name")
             .in_("id", advisor_ids)
             .execute()
         )
         for adv in advisors_result.data or []:
             advisor_by_id[str(adv["id"])] = adv
+
+    # ── 3a. Resolve advisor emails from auth.users ─────────────────────
+    # `public.advisors` doesn't carry email — identity lives on
+    # `auth.users` (set by the LinkedIn OIDC provider on signup). The
+    # admin label-fallback path documented on AdminAdvisorSummary
+    # requires this join. List-all is fine at beta scale (~5-50
+    # advisors); revisit if we ever cross a few hundred. Best-effort:
+    # if the admin API isn't usable for any reason we degrade to
+    # email=None and let practice_name carry the label.
+    advisor_email_by_user_id = _resolve_advisor_emails(
+        supabase, list(advisor_by_id.values())
+    )
 
     # ── 4. Assemble the response ───────────────────────────────────────
 
@@ -252,6 +264,11 @@ async def list_admin_clients(
             str(row["advisor_id"]) if row.get("advisor_id") else None
         )
         adv_row = advisor_by_id.get(advisor_id) if advisor_id else None
+        adv_email: str | None = None
+        if adv_row and adv_row.get("user_id"):
+            adv_email = advisor_email_by_user_id.get(
+                str(adv_row["user_id"])
+            )
         latest = latest_by_client.get(row_id)
         items.append(
             AdminClient(
@@ -267,7 +284,7 @@ async def list_admin_clients(
                     AdminAdvisorSummary(
                         id=str(adv_row["id"]),
                         practice_name=adv_row.get("practice_name"),
-                        email=adv_row.get("email"),
+                        email=adv_email,
                     )
                     if adv_row is not None
                     else None
@@ -544,6 +561,58 @@ def _iso_or_none(value: Any) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _resolve_advisor_emails(
+    supabase, advisor_rows: list[dict[str, Any]]
+) -> dict[str, str]:
+    """Build a `user_id -> email` map for the given advisor rows.
+
+    `public.advisors` doesn't store email — the identity lives on
+    `auth.users`, populated by the LinkedIn OIDC provider on first
+    sign-in. We use the service-role auth admin API to list users and
+    filter to the user_ids we actually need.
+
+    Returns `{}` if no lookup is needed or if the admin API isn't
+    usable (older supabase-py, transient network failure, etc.). The
+    email field on AdminAdvisorSummary is a UI label fallback, not
+    essential data — degrading to None is fine.
+
+    The shape of `supabase.auth.admin.list_users()` varies across
+    supabase-py versions (some return a list directly; some wrap in a
+    `ListUsersResponse` with a `.users` field; either way each user
+    exposes `id` and `email`). We handle both.
+    """
+    wanted_user_ids = {
+        str(adv["user_id"])
+        for adv in advisor_rows
+        if adv.get("user_id")
+    }
+    if not wanted_user_ids:
+        return {}
+
+    try:
+        users_response = supabase.auth.admin.list_users()
+    except Exception:
+        logger.exception("auth.admin.list_users failed; advisor emails will be None")
+        return {}
+
+    users_iter = (
+        users_response
+        if isinstance(users_response, list)
+        else getattr(users_response, "users", None) or []
+    )
+
+    email_by_user_id: dict[str, str] = {}
+    for user in users_iter:
+        uid = getattr(user, "id", None)
+        email = getattr(user, "email", None)
+        if uid is None and isinstance(user, dict):
+            uid = user.get("id")
+            email = user.get("email")
+        if uid and email and str(uid) in wanted_user_ids:
+            email_by_user_id[str(uid)] = email
+    return email_by_user_id
 
 
 def _narrative_from_row(row: dict[str, Any]) -> AdminNarrative:
