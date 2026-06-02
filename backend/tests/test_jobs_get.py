@@ -297,3 +297,280 @@ async def test_client_cannot_view_other_clients_job():
 
     assert exc.value.status_code == 404
     assert fake.tables_queried == ["jobs"]
+
+
+# --------------------------------------------------------------------------- #
+# Complete-job payload assembly — ORPHEUS-59 regression
+# --------------------------------------------------------------------------- #
+#
+# Background: the first cloud e2e (2026-06-02) crashed because
+# `_build_result_payload` was written against a schema that never landed.
+# Three independent mismatches stacked:
+#
+#   * narratives.content → narratives.generated_text (+ edited_text)
+#   * scores.scored_dimensions → scores.dimensions (already-serialized
+#     ScoredDimensions JSONB)
+#   * cheat_sheet section is never produced by the narrative agent;
+#     the handler had been short-circuiting to None on every complete
+#     job because of that
+#
+# These tests pin the wire-shape contract so the next migration touching
+# either table doesn't silently re-break complete-job rendering.
+
+
+def _score_row(*, job_id: str) -> dict[str, Any]:
+    """Minimal scores row in the shape the worker writes today.
+
+    `dimensions` is the JSONB-serialized ScoredDimensions; the handler
+    forwards it verbatim under the `scored_dimensions` wire key.
+    """
+    return {
+        "id": "score-uuid",
+        "job_id": job_id,
+        "total_score": 58.0,
+        "band": "Tuning",
+        "dimensions": {
+            "composite": 58.0,
+            "band": "Tuning",
+            "dimensions": [
+                {
+                    "name": "Profile Signal Clarity",
+                    "weight": 0.35,
+                    "confidence": "CONFIRMED",
+                    "normalized_score": 0.72,
+                    "contribution": 25.2,
+                    "band": "Tuned",
+                    "sub_dimensions": [],
+                    "completeness_floor_applied": False,
+                },
+            ],
+        },
+        "forward_brief_data": {
+            "quantitative": {"follower_count": 1247},
+            "qualitative_flags": {},
+        },
+        "scored_at": "2026-06-02T00:00:00+00:00",
+    }
+
+
+def _narrative_row(
+    *, section: str, generated_text: str, edited_text: str | None = None
+) -> dict[str, Any]:
+    return {
+        "section": section,
+        "generated_text": generated_text,
+        "edited_text": edited_text,
+    }
+
+
+@pytest.mark.asyncio
+async def test_complete_job_assembles_payload():
+    """ORPHEUS-59: a complete job returns a fully-shaped `result` payload.
+
+    Covers the wire contract end to end: `scored_dimensions` populated
+    from `scores.dimensions`, `dimension_narratives` keyed by section
+    name from `generated_text`, `forward_brief` from its row, and
+    `cheat_sheet` serialized as null (the agent doesn't emit it yet).
+    """
+    fake = FakeSupabase(
+        responses=[
+            # jobs query — status=complete fires the payload assembly
+            {
+                "data": [
+                    _job_row(
+                        job_id=JOB_1_ID,
+                        client_id=CLIENT_1_ID,
+                        status_value="complete",
+                    )
+                ]
+            },
+            # scores query
+            {"data": [_score_row(job_id=JOB_1_ID)]},
+            # narratives query — 4 dim sections + forward_brief, no
+            # cheat_sheet (matches the agent's actual output)
+            {
+                "data": [
+                    _narrative_row(
+                        section="Profile Signal Clarity",
+                        generated_text="Profile narrative.",
+                    ),
+                    _narrative_row(
+                        section="Behavioral Signal Strength",
+                        generated_text="Strength narrative.",
+                    ),
+                    _narrative_row(
+                        section="Behavioral Signal Quality",
+                        generated_text="Quality narrative.",
+                    ),
+                    _narrative_row(
+                        section="Profile-Behavior Alignment",
+                        generated_text="Alignment narrative.",
+                    ),
+                    _narrative_row(
+                        section="forward_brief",
+                        generated_text="Forward brief body.",
+                    ),
+                ]
+            },
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_client_roles(CLIENT_1_ID),
+        )
+
+    assert result.state == "complete"
+    assert result.result is not None
+    # Wire-key contract: handler forwards `scores.dimensions` under
+    # `scored_dimensions` for backward compat with the frontend type.
+    scoring = result.result["scoring"]
+    assert scoring["scored_dimensions"]["composite"] == 58.0
+    assert scoring["scored_dimensions"]["band"] == "Tuning"
+    assert scoring["forward_brief_data"]["quantitative"]["follower_count"] == 1247
+    # Narratives: four dimension entries + forward_brief, no cheat_sheet.
+    narr = result.result["narratives"]
+    assert set(narr["dimension_narratives"].keys()) == {
+        "Profile Signal Clarity",
+        "Behavioral Signal Strength",
+        "Behavioral Signal Quality",
+        "Profile-Behavior Alignment",
+    }
+    assert narr["forward_brief"] == "Forward brief body."
+    assert narr["cheat_sheet"] is None
+    assert fake.tables_queried == ["jobs", "scores", "narratives"]
+
+
+@pytest.mark.asyncio
+async def test_complete_job_edited_text_wins_over_generated():
+    """ORPHEUS-31 + ORPHEUS-59: admin edits surface to the client.
+
+    When `narratives.edited_text` is a non-empty string, the handler
+    uses it instead of `generated_text` — admin saves a typo fix or a
+    full rewrite from /admin and the next polling tick sees it.
+    """
+    fake = FakeSupabase(
+        responses=[
+            {
+                "data": [
+                    _job_row(
+                        job_id=JOB_1_ID,
+                        client_id=CLIENT_1_ID,
+                        status_value="complete",
+                    )
+                ]
+            },
+            {"data": [_score_row(job_id=JOB_1_ID)]},
+            {
+                "data": [
+                    _narrative_row(
+                        section="Profile Signal Clarity",
+                        generated_text="Generator output.",
+                        edited_text="Andrew's hand-tuned version.",
+                    ),
+                    _narrative_row(
+                        section="forward_brief",
+                        generated_text="Generated brief.",
+                        edited_text="   ",  # whitespace-only doesn't win
+                    ),
+                ]
+            },
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_client_roles(CLIENT_1_ID),
+        )
+
+    assert result.result is not None
+    narr = result.result["narratives"]
+    # Non-empty edited_text wins.
+    assert (
+        narr["dimension_narratives"]["Profile Signal Clarity"]
+        == "Andrew's hand-tuned version."
+    )
+    # Whitespace-only edited_text falls through to generated_text.
+    assert narr["forward_brief"] == "Generated brief."
+
+
+@pytest.mark.asyncio
+async def test_complete_job_with_missing_scores_returns_no_result():
+    """`scores` row missing → `result` is null on the wire, not 500.
+
+    The job row says status=complete but the scores row hasn't been
+    written yet (or was deleted). The handler short-circuits to None
+    rather than raising — the polling AnalysisPage stays on the
+    in-progress screen until the data arrives.
+    """
+    fake = FakeSupabase(
+        responses=[
+            {
+                "data": [
+                    _job_row(
+                        job_id=JOB_1_ID,
+                        client_id=CLIENT_1_ID,
+                        status_value="complete",
+                    )
+                ]
+            },
+            # scores query returns nothing
+            {"data": []},
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_client_roles(CLIENT_1_ID),
+        )
+
+    assert result.state == "complete"
+    assert result.result is None
+    # Narratives query was not made — scores miss short-circuits early.
+    assert fake.tables_queried == ["jobs", "scores"]
+
+
+@pytest.mark.asyncio
+async def test_complete_job_with_missing_forward_brief_returns_no_result():
+    """Missing forward_brief narrative → `result` is null.
+
+    Dimension narratives without the forward_brief is an incomplete
+    state — the frontend's Forward Brief page would 500 on a null
+    body. Surface null `result` so the polling stays open until the
+    full set lands.
+    """
+    fake = FakeSupabase(
+        responses=[
+            {
+                "data": [
+                    _job_row(
+                        job_id=JOB_1_ID,
+                        client_id=CLIENT_1_ID,
+                        status_value="complete",
+                    )
+                ]
+            },
+            {"data": [_score_row(job_id=JOB_1_ID)]},
+            {
+                "data": [
+                    _narrative_row(
+                        section="Profile Signal Clarity",
+                        generated_text="Profile narrative.",
+                    ),
+                    # no forward_brief row
+                ]
+            },
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_client_roles(CLIENT_1_ID),
+        )
+
+    assert result.state == "complete"
+    assert result.result is None

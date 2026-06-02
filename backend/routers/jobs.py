@@ -387,7 +387,22 @@ async def _read_upload(
 def _build_result_payload(supabase, job_id: str) -> dict | None:
     """Join scoring + narratives rows into the JobResultPayload dict.
 
-    Returns None if either half is missing (i.e. job not yet complete).
+    Returns None when the worker hasn't finished writing either half —
+    no scores row, or no narratives at all, or the forward_brief
+    narrative is missing. ORPHEUS-59 reconciled three mismatches
+    between this reader and what the worker actually persists:
+
+      * `narratives.content` was renamed to `generated_text` (plus
+        `edited_text` for the admin-edit override path; ORPHEUS-31).
+        We read both and prefer a non-empty `edited_text` so admin
+        edits surface to the client without a worker re-run.
+      * `scores.scored_dimensions` is `scores.dimensions` on the
+        wire — the worker writes the serialized ScoredDimensions
+        JSONB directly into that column.
+      * `cheat_sheet` is currently never produced by the narrative
+        agent — we serialize null and let the CheatSheetPage render
+        its not-ready-yet surface. ORPHEUS-60 tracks adding
+        cheat_sheet generation to bring it back online.
     """
     scores = (
         supabase.table("scores")
@@ -401,7 +416,7 @@ def _build_result_payload(supabase, job_id: str) -> dict | None:
 
     narratives_rows = (
         supabase.table("narratives")
-        .select("section,content")
+        .select("section,generated_text,edited_text")
         .eq("job_id", job_id)
         .execute()
     )
@@ -411,31 +426,44 @@ def _build_result_payload(supabase, job_id: str) -> dict | None:
     score_row = scores.data[0]
     dimension_narratives: dict[str, str] = {}
     forward_brief: str | None = None
-    cheat_sheet: dict | None = None
 
     for n in narratives_rows.data:
         section = n["section"]
-        content = n["content"]
-        if section == "forward_brief":
-            forward_brief = content if isinstance(content, str) else None
-        elif section == "cheat_sheet":
-            cheat_sheet = content if isinstance(content, dict) else None
+        # `edited_text` wins when the admin has saved a non-empty
+        # override; otherwise fall through to the generator's output.
+        edited = n.get("edited_text")
+        generated = n.get("generated_text")
+        if isinstance(edited, str) and edited.strip():
+            text = edited
+        elif isinstance(generated, str):
+            text = generated
         else:
-            dimension_narratives[section] = (
-                content if isinstance(content, str) else ""
-            )
+            text = ""
 
-    if forward_brief is None or cheat_sheet is None:
+        if section == "forward_brief":
+            forward_brief = text
+        elif section == "cheat_sheet":
+            # The narrative agent doesn't currently emit a
+            # cheat_sheet section (ORPHEUS-60). If a future agent
+            # does, the row would land here — but it would be plain
+            # text, not the CheatSheetContent the frontend expects.
+            # Treat it the same as missing: serialize null and let
+            # the frontend's empty state handle it.
+            continue
+        else:
+            dimension_narratives[section] = text
+
+    if forward_brief is None:
         return None
 
     return {
         "scoring": {
-            "scored_dimensions": score_row.get("scored_dimensions"),
+            "scored_dimensions": score_row.get("dimensions"),
             "forward_brief_data": score_row.get("forward_brief_data"),
         },
         "narratives": {
             "dimension_narratives": dimension_narratives,
             "forward_brief": forward_brief,
-            "cheat_sheet": cheat_sheet,
+            "cheat_sheet": None,
         },
     }

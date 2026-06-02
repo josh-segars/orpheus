@@ -167,6 +167,12 @@ export interface Narratives {
   dimension_narratives: Record<string, string>
   /** Markdown-formatted Forward Brief (400–600 words). */
   forward_brief: string
-  /** Structured cheat sheet — printable one-page reference derived from the Forward Brief. */
-  cheat_sheet: CheatSheetContent
+  /**
+   * Structured cheat sheet — printable one-page reference derived from
+   * the Forward Brief. Currently null on the wire (ORPHEUS-59); the
+   * narrative agent doesn't emit it yet. ORPHEUS-60 tracks restoring
+   * generation. CheatSheetPage renders a not-ready-yet surface while
+   * this is null.
+   */
+  cheat_sheet: CheatSheetContent | null
 }

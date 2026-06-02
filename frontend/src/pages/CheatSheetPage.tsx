@@ -50,6 +50,33 @@ export function CheatSheetPage() {
   const clientName = job.client_id ? formatClientName(job.client_id) : null
   const { cheat_sheet } = job.result.narratives
 
+  // Cheat sheet is currently null on the wire (ORPHEUS-59 dropped the
+  // requirement; ORPHEUS-60 will restore agent-side generation). Render
+  // a not-ready-yet surface so the route doesn't 500 in the meantime —
+  // Signal Score + Forward Brief still work without it.
+  if (!cheat_sheet) {
+    return (
+      <main className="main-interior">
+        <div className="section-header">
+          <div className="section-eyebrow">Cheat Sheet</div>
+          <h2 className="section-title">Your Cheat Sheet isn’t ready yet</h2>
+          <p className="section-intro">
+            Your Signal Score and Forward Brief are available. The
+            printable one-page summary follows in a future update.
+          </p>
+        </div>
+        <div className="actions cheat-actions">
+          <Link to={`/jobs/${job.id}`} className="btn-secondary">
+            &larr; Return to Signal Score
+          </Link>
+          <Link to={`/jobs/${job.id}/forward-brief`} className="btn-primary">
+            View Forward Brief &rarr;
+          </Link>
+        </div>
+      </main>
+    )
+  }
+
   return (
     <main className="main-interior">
       {/* Screen-only helper row (hidden on print) */}
