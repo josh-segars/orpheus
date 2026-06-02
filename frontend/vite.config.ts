@@ -23,5 +23,14 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
     css: false,
+    // Stub the `import.meta.env` reads that fail-fast at module load
+    // (apiClient.ts under ORPHEUS-54, supabase.ts pre-existing). Tests
+    // mock the higher-level data hooks, but a stray import that drags
+    // these modules in would otherwise crash before the test body runs.
+    env: {
+      VITE_API_BASE_URL: 'http://localhost:8000',
+      VITE_SUPABASE_URL: 'http://127.0.0.1:54321',
+      VITE_SUPABASE_ANON_KEY: 'test-anon-key',
+    },
   },
 })

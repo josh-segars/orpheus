@@ -13,7 +13,37 @@
 
 import { supabase } from './supabase'
 
-const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+/**
+ * Resolve `VITE_API_BASE_URL` at module-eval time. Fails fast (matches
+ * the `supabase.ts` posture for `VITE_SUPABASE_*`) if the env var is
+ * missing or, post-ORPHEUS-54, if it's set to a scheme-less host. A
+ * value like `orpheus-production-5082.up.railway.app` (no
+ * `https://`) is interpreted by the browser as a relative path off
+ * the current origin, so requests like `apiGet('/session')` land on
+ * the SPA index.html with 304s and `useSessionRoles` reads HTML
+ * instead of JSON. Catching this at boot beats debugging a
+ * `/not-invited` bounce in prod.
+ */
+const baseUrl = (() => {
+  const raw = import.meta.env.VITE_API_BASE_URL as string | undefined
+  if (!raw || !raw.trim()) {
+    throw new Error(
+      'Missing API base URL. Set VITE_API_BASE_URL in your frontend env ' +
+        '(e.g. http://localhost:8000 for local, https://<your-host> for ' +
+        'deployed). See frontend/.env.local.example.',
+    )
+  }
+  const trimmed = raw.trim()
+  if (!/^https?:\/\//i.test(trimmed)) {
+    throw new Error(
+      `Invalid VITE_API_BASE_URL: ${JSON.stringify(trimmed)}. It must ` +
+        'include a scheme (http:// or https://). A scheme-less host is ' +
+        'treated as a relative path by the browser, which silently routes ' +
+        'API calls into the SPA index.html.',
+    )
+  }
+  return trimmed.replace(/\/$/, '')
+})()
 
 export class ApiError extends Error {
   constructor(
