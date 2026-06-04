@@ -207,13 +207,15 @@ In addition to the four dimension narratives and the Forward Brief, you produce 
 Each sub-dimension narrative has up to three slots. The slot structure is **conditional on score** — slots are present or absent based on the score itself, not calibrated by tone. Do not include placeholder content for an omitted slot.
 
 **Summary** (always present, every sub-dimension, every score):
-40–70 words. A data-grounded observation specific to this person on this sub-dimension. For rubric sub-dimensions (Dim 1, Dim 4), reference the specific profile content or content pattern that drove the score. For quantitative sub-dimensions (Dim 2, Dim 3), the raw metric value is surfaced in the input — name it explicitly in the Summary (e.g., "Active in 11 of the last 52 weeks").
+40–70 words. A data-grounded observation specific to this person on this sub-dimension. For rubric sub-dimensions (Dim 1, Dim 4), reference the specific profile content or content pattern that drove the score. For quantitative sub-dimensions (Dim 2, Dim 3), the raw metric value is surfaced in the input — name it explicitly in the Summary (e.g., "Active in 11 of the last 52 weeks", or "No original posts recorded during the evaluation period").
 
-**Best Practices** (only at scores 1, 2, or 3):
+**Best Practices** (only at scores 0, 1, 2, or 3):
 25–45 words. A generic standard for this sub-dimension. What good looks like, evergreen, not personalized. The same Best Practices content for the same sub-dimension across reports is acceptable — this is reference content the client can return to. **Omit entirely at scores 4 and 5.** Do not include a "no changes needed" placeholder.
 
-**Improvements** (only at scores 1, 2, 3, or 4):
-3–5 specific bullets at score 1; 2–4 at scores 2–3; 1–2 at score 4. Each bullet 15–25 words, written as a concrete action the client could take. Score-aware count — do not pad to hit a minimum, and do not omit useful actions to hit a maximum. **Omit entirely at score 5.** Do not include a "minor polish" stretch bullet.
+**Improvements** (only at scores 0, 1, 2, 3, or 4):
+3–5 specific bullets at scores 0 or 1; 2–4 at scores 2–3; 1–2 at score 4. Each bullet 15–25 words, written as a concrete action the client could take. Score-aware count — do not pad to hit a minimum, and do not omit useful actions to hit a maximum. **Omit entirely at score 5.** Do not include a "minor polish" stretch bullet.
+
+A score of 0 indicates absent or negligible measurable activity for this sub-dimension. Treat score 0 the same as score 1 for slot structure (full payload of Summary + Best Practices + Improvements). Calibrate the Summary's language to name the absence honestly — "no original posts recorded during the window," not "low posting cadence" — and frame Improvements as starting moves rather than refinements.
 
 Voice / directness / mechanics rules above apply uniformly to dimension narratives and sub-dimension slots. Do not switch register between layers.
 
@@ -282,7 +284,7 @@ Return a JSON object with exactly this structure:
 
 Each dimension narrative should be 150–300 words. The forward_brief should be 400–600 words and may use Markdown headers (## Reach, ## Resonance, ## Authority, ## Priorities, ## Quick Wins) to separate subsections.
 
-The sub_dimensions array must contain exactly 13 entries — one per sub-dimension across all four dimensions. The (dimension, sub_dimension) pair on each entry must exactly match the input sub-dimension names (case- and punctuation-exact). `summary` is required on every entry. `best_practices` is required on entries whose score is 1, 2, or 3 — omit the key entirely on entries whose score is 4 or 5 (do not include it with empty string or null). `improvements` is required on entries whose score is 1, 2, 3, or 4 — omit the key entirely on entries whose score is 5."""
+The sub_dimensions array must contain exactly 13 entries — one per sub-dimension across all four dimensions. The (dimension, sub_dimension) pair on each entry must exactly match the input sub-dimension names (case- and punctuation-exact). `summary` is required on every entry. `best_practices` is required on entries whose score is 0, 1, 2, or 3 — omit the key entirely on entries whose score is 4 or 5 (do not include it with empty string or null). `improvements` is required on entries whose score is 0, 1, 2, 3, or 4 — omit the key entirely on entries whose score is 5."""
 
 
 # ============================================================
@@ -796,17 +798,22 @@ def _parse_sub_dimension_payload(
             slot["improvements"] = cleaned
 
         # Conditional-slot enforcement: cross-reference against the score.
+        # Score 0 (ORPHEUS-63): treated identically to score 1 — full slot
+        # payload (Summary + Best Practices + Improvements). The prompt is
+        # responsible for calibrating Summary language to acknowledge the
+        # absence of measurable activity vs. score 1's "below the standard"
+        # framing; the parser only enforces slot presence.
         if key in score_lookup:
             score = score_lookup[key]
-            if score in (1, 2, 3) and "best_practices" not in slot:
+            if score in (0, 1, 2, 3) and "best_practices" not in slot:
                 raise ValueError(
                     f"Sub-dimension {dim_name}/{sub_name} score {score}: "
-                    "'best_practices' is required at scores 1–3."
+                    "'best_practices' is required at scores 0–3."
                 )
-            if score in (1, 2, 3, 4) and "improvements" not in slot:
+            if score in (0, 1, 2, 3, 4) and "improvements" not in slot:
                 raise ValueError(
                     f"Sub-dimension {dim_name}/{sub_name} score {score}: "
-                    "'improvements' is required at scores 1–4."
+                    "'improvements' is required at scores 0–4."
                 )
             # Tolerate (and drop) over-emitted slots at score 5. Claude
             # sometimes can't resist adding a "minor polish" bullet

@@ -692,8 +692,9 @@ def _sub_dim_entry(
 ) -> dict:
     """Build one sub-dim entry per the wire shape.
 
-    Default slot population matches the conditional curve: BP at score
-    1–3, Improvements at 1–4. Callers can override for negative tests.
+    Default slot population matches the conditional curve as updated by
+    ORPHEUS-63 (score 0 = full payload, mirroring score 1): BP at scores
+    0–3, Improvements at 0–4. Callers can override for negative tests.
     """
     entry: dict = {
         "dimension": dimension,
@@ -701,11 +702,11 @@ def _sub_dim_entry(
     }
     if summary is not None:
         entry["summary"] = summary
-    if best_practices is None and score in (1, 2, 3):
+    if best_practices is None and score in (0, 1, 2, 3):
         entry["best_practices"] = "Generic standard for this sub-dimension."
     elif best_practices is not None:
         entry["best_practices"] = best_practices
-    if improvements is None and score in (1, 2, 3, 4):
+    if improvements is None and score in (0, 1, 2, 3, 4):
         entry["improvements"] = [
             "Specific action one for this sub-dim.",
             "Specific action two.",
@@ -809,7 +810,7 @@ class TestParseSubDimensions:
         for entry in payload:
             if entry["sub_dimension"] == "Experience Description Quality":
                 del entry["best_practices"]
-        with pytest.raises(ValueError, match="'best_practices' is required at scores 1.3"):
+        with pytest.raises(ValueError, match="'best_practices' is required at scores 0.3"):
             _parse_narrative_response(_full_response_with_sub_dims(payload), output)
 
     def test_score_3_missing_improvements_raises(self):
@@ -818,7 +819,7 @@ class TestParseSubDimensions:
         for entry in payload:
             if entry["sub_dimension"] == "Profile Completeness":
                 del entry["improvements"]
-        with pytest.raises(ValueError, match="'improvements' is required at scores 1.4"):
+        with pytest.raises(ValueError, match="'improvements' is required at scores 0.4"):
             _parse_narrative_response(_full_response_with_sub_dims(payload), output)
 
     def test_score_4_missing_improvements_raises(self):
@@ -827,7 +828,7 @@ class TestParseSubDimensions:
         for entry in payload:
             if entry["sub_dimension"] == "Headline Clarity":  # score 4
                 del entry["improvements"]
-        with pytest.raises(ValueError, match="'improvements' is required at scores 1.4"):
+        with pytest.raises(ValueError, match="'improvements' is required at scores 0.4"):
             _parse_narrative_response(_full_response_with_sub_dims(payload), output)
 
     def test_score_4_with_stray_best_practices_is_dropped(self):
@@ -974,6 +975,131 @@ class TestFormatScoredDimensionsRawValue:
             l.strip().startswith("raw value: 750")
             for l in text.splitlines()
         )
+
+
+# ============================================================
+# Test: Score-0 slot treatment (ORPHEUS-63)
+# ============================================================
+#
+# Score 0 is treated identically to score 1 for slot structure: full
+# payload of Summary + Best Practices + Improvements. The Summary's
+# language is calibrated by the prompt to acknowledge absence honestly
+# rather than position the client "below the standard"; the parser
+# only enforces slot presence, which is what these tests cover.
+
+
+def _scoring_output_with_zero_score(target_sub_name: str) -> ScoringStageOutput:
+    """Build a scoring output with one sub-dim mutated to score 0.
+
+    The base fixture has no score-0 entries (its lowest is 3); for
+    score-0 testing we mutate a specific sub-dim in-place. Behavioral
+    sub-dims (Dim 2, Dim 3) are the realistic candidates since Dim 1 +
+    Dim 4 are rubric-driven and unlikely to ever hit 0.
+    """
+    output = _make_scoring_output()
+    for dim in output.scored_dimensions.dimensions:
+        for sub in dim.sub_dimensions:
+            if sub.name == target_sub_name:
+                sub.score = 0
+                return output
+    raise AssertionError(f"sub_dim {target_sub_name!r} not in fixture")
+
+
+def _payload_with_zero_score(target_sub_name: str) -> list[dict]:
+    """Build the matching sub_dim payload with the same target at score 0."""
+    out: list[dict] = []
+    for dim_name, sub_name, default_score in _FIXTURE_SCORES:
+        score = 0 if sub_name == target_sub_name else default_score
+        out.append(_sub_dim_entry(dim_name, sub_name, score))
+    return out
+
+
+class TestParseSubDimensionsScoreZero:
+    """ORPHEUS-63 (locked 2026-06-04): score 0 follows the score-1 slot
+    posture — Summary + Best Practices + Improvements all required.
+    """
+
+    def test_score_zero_with_full_payload_succeeds(self):
+        output = _scoring_output_with_zero_score("Posting Presence")
+        payload = _payload_with_zero_score("Posting Presence")
+        result = _parse_narrative_response(
+            _full_response_with_sub_dims(payload), output
+        )
+        entry = result.sub_dimensions[
+            ("Behavioral Signal Strength", "Posting Presence")
+        ]
+        assert "summary" in entry
+        assert "best_practices" in entry
+        assert "improvements" in entry
+        # Improvements is the same list shape as score-1; bullet count
+        # spec (3–5) is enforced by the prompt, not the parser. We
+        # don't assert on count here for the same reason we don't at
+        # score 1.
+
+    def test_score_zero_missing_best_practices_raises(self):
+        output = _scoring_output_with_zero_score("Posting Presence")
+        payload = _payload_with_zero_score("Posting Presence")
+        for entry in payload:
+            if entry["sub_dimension"] == "Posting Presence":
+                del entry["best_practices"]
+        with pytest.raises(
+            ValueError, match="'best_practices' is required at scores 0.3"
+        ):
+            _parse_narrative_response(
+                _full_response_with_sub_dims(payload), output
+            )
+
+    def test_score_zero_missing_improvements_raises(self):
+        output = _scoring_output_with_zero_score("Posting Presence")
+        payload = _payload_with_zero_score("Posting Presence")
+        for entry in payload:
+            if entry["sub_dimension"] == "Posting Presence":
+                del entry["improvements"]
+        with pytest.raises(
+            ValueError, match="'improvements' is required at scores 0.4"
+        ):
+            _parse_narrative_response(
+                _full_response_with_sub_dims(payload), output
+            )
+
+    def test_multiple_score_zero_entries_all_validate(self):
+        """The 6-zero case from the ORPHEUS-62 live test — Josh's profile
+        had 6 quantitative sub-dims at 0. Each should validate the same
+        way, no per-dim short-circuit logic.
+        """
+        output = _make_scoring_output()
+        # Mutate all 6 quantitative sub-dims (Dim 2 + Dim 3) to score 0.
+        for dim in output.scored_dimensions.dimensions:
+            if dim.name in (
+                "Behavioral Signal Strength",
+                "Behavioral Signal Quality",
+            ):
+                for sub in dim.sub_dimensions:
+                    sub.score = 0
+        zero_sub_names = {
+            "History Depth",
+            "Recency",
+            "Continuity",
+            "Posting Presence",
+            "Outbound Engagement Presence",
+            "Engagement Quality Score",
+        }
+        payload: list[dict] = []
+        for dim_name, sub_name, default_score in _FIXTURE_SCORES:
+            score = 0 if sub_name in zero_sub_names else default_score
+            payload.append(_sub_dim_entry(dim_name, sub_name, score))
+        result = _parse_narrative_response(
+            _full_response_with_sub_dims(payload), output
+        )
+        # All 6 zero-score entries should carry the full payload.
+        for key, entry in result.sub_dimensions.items():
+            if key[1] in zero_sub_names:
+                assert "best_practices" in entry, (
+                    f"score-0 {key} missing best_practices"
+                )
+                assert "improvements" in entry, (
+                    f"score-0 {key} missing improvements"
+                )
 
 
 if __name__ == "__main__":

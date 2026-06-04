@@ -49,9 +49,15 @@ class SubDimensionScore(BaseModel):
     curve baked into the slot structure itself rather than calibrated by tone:
 
       * summary       — always present (every sub-dim, every score)
-      * best_practices — only at scores 1–3 (where the client needs the
+      * best_practices — only at scores 0–3 (where the client needs the
                          standard articulated)
-      * improvements   — only at scores 1–4 (drop entirely at score 5)
+      * improvements   — only at scores 0–4 (drop entirely at score 5)
+
+    Score 0 (ORPHEUS-63 decision, 2026-06-04): treated the same as score 1
+    for slot structure. Quantitative sub-dims that come back at 0 carry the
+    full payload of Summary + Best Practices + Improvements; the Summary's
+    language is calibrated to acknowledge the absence of measurable activity
+    rather than position the client "below the standard."
 
     Display name swap for client-facing rendering happens on the frontend
     via a SUB_DIM_DISPLAY_NAMES map; the internal name on this model is the
@@ -77,16 +83,16 @@ class SubDimensionScore(BaseModel):
         None,
         description=(
             "Generic standard for this sub-dimension (~25–45 words). "
-            "Populated only at scores 1–3 — at 4–5 the standard is "
+            "Populated only at scores 0–3 — at 4–5 the standard is "
             "implicit and the slot stays empty."
         ),
     )
     improvements: Optional[list[str]] = Field(
         None,
         description=(
-            "Specific, score-aware action bullets (3–5 at score 1, 1–2 "
-            "at score 4). Populated only at scores 1–4 — at score 5 the "
-            "slot stays empty."
+            "Specific, score-aware action bullets (3–5 at scores 0 or 1, "
+            "1–2 at score 4). Populated only at scores 0–4 — at score 5 "
+            "the slot stays empty."
         ),
     )
 
