@@ -42,7 +42,21 @@ class ScoringMethod(str, Enum):
 # --- Sub-dimension scores ---
 
 class SubDimensionScore(BaseModel):
-    """Score for a single sub-dimension."""
+    """Score for a single sub-dimension.
+
+    Narrative fields (summary / best_practices / improvements) are populated
+    by the narrative generation stage (ORPHEUS-21). They follow a conditional
+    curve baked into the slot structure itself rather than calibrated by tone:
+
+      * summary       — always present (every sub-dim, every score)
+      * best_practices — only at scores 1–3 (where the client needs the
+                         standard articulated)
+      * improvements   — only at scores 1–4 (drop entirely at score 5)
+
+    Display name swap for client-facing rendering happens on the frontend
+    via a SUB_DIM_DISPLAY_NAMES map; the internal name on this model is the
+    canonical identifier used in scoring, rubrics, and config.
+    """
     name: str
     score: float = Field(..., description="Raw score on the sub-dimension scale")
     scale: str = Field(..., description="Scale range, e.g. '1-5' or '0-5'")
@@ -50,6 +64,30 @@ class SubDimensionScore(BaseModel):
     confidence: ConfidenceLabel = ConfidenceLabel.CONFIRMED
     raw_value: Optional[float] = Field(
         None, description="Underlying metric value before band mapping (quantitative only)"
+    )
+    summary: Optional[str] = Field(
+        None,
+        description=(
+            "Data-grounded observation specific to this person on this "
+            "sub-dimension. ~40–70 words. Always present when narratives "
+            "are generated."
+        ),
+    )
+    best_practices: Optional[str] = Field(
+        None,
+        description=(
+            "Generic standard for this sub-dimension (~25–45 words). "
+            "Populated only at scores 1–3 — at 4–5 the standard is "
+            "implicit and the slot stays empty."
+        ),
+    )
+    improvements: Optional[list[str]] = Field(
+        None,
+        description=(
+            "Specific, score-aware action bullets (3–5 at score 1, 1–2 "
+            "at score 4). Populated only at scores 1–4 — at score 5 the "
+            "slot stays empty."
+        ),
     )
 
 

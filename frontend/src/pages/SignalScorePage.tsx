@@ -219,7 +219,7 @@ function SubDimRow({ sub, expanded, onToggle }: SubDimRowProps) {
 
   const row = (
     <div className="sub-dim-row-content">
-      <span className="sub-dim-name">{sub.name}</span>
+      <span className="sub-dim-name">{subDimDisplayName(sub.name)}</span>
       <PipRow filled={filledPips} />
     </div>
   )
@@ -299,6 +299,30 @@ const BAND_ORDER: readonly SignalBand[] = [
   'Tuned',
   'Resonant',
 ] as const
+
+/**
+ * Client-facing display names for a handful of sub-dimensions whose internal
+ * (rubric / scoring engine / config) names read as engineering-y. The internal
+ * names stay canonical everywhere upstream — backend models, narrative agent
+ * input, narrative agent output, tests — and this map only swaps the visible
+ * label at the leaf-row render. ORPHEUS-21 decision (Andrew + Josh, 2026-06-03):
+ * rename selectively rather than rewriting the source-of-truth identifiers.
+ *
+ * The eight sub-dims not listed here (Headline Clarity, About Section
+ * Coherence, Profile Completeness, Identity Clarity, Recency, Continuity,
+ * Posting Presence, Topic Consistency) render with their internal names as-is.
+ */
+const SUB_DIM_DISPLAY_NAMES: Record<string, string> = {
+  'Experience Description Quality': 'Experience Narrative',
+  'History Depth': 'Engagement History',
+  'Outbound Engagement Presence': 'Engagement Volume',
+  'Engagement Quality Score': 'Substantive Engagement',
+  'Profile-Content Coherence': 'Profile-Content Match',
+}
+
+function subDimDisplayName(internalName: string): string {
+  return SUB_DIM_DISPLAY_NAMES[internalName] ?? internalName
+}
 
 /**
  * Band-keyed waveform assets. Five distinct visuals, one per tuner band —

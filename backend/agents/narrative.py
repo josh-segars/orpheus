@@ -23,10 +23,29 @@ Decisions (current assumptions, accepted):
 """
 
 import json
+from typing import NamedTuple
+
 from anthropic import Anthropic
 
 from backend.models.scoring import ScoringStageOutput
 from backend.models.quality import DataQualityReport, IssueSeverity
+
+
+class NarrativeResult(NamedTuple):
+    """Structured return from the narrative agent.
+
+    Two payloads in one Claude call:
+      * sections — the 5 top-level narratives (4 dimensions + forward_brief),
+        keyed by section identifier. Same shape `generate_narratives` has
+        returned since the v2 pipeline shipped.
+      * sub_dimensions — per-sub-dim narrative slots, keyed by
+        `(dimension_name, sub_dim_name)` for direct merge into
+        ScoringStageOutput.scored_dimensions before persisting (ORPHEUS-21).
+        Inner dict has 'summary' (always), 'best_practices' (scores 1–3),
+        'improvements' (scores 1–4, list[str]).
+    """
+    sections: dict[str, str]
+    sub_dimensions: dict[tuple[str, str], dict]
 
 
 # ============================================================
@@ -181,6 +200,25 @@ For quantitative sub-dimensions (Dimensions 2 and 3, scale 0–5):
 **Score 4:** Strong activity level. Affirm the pattern.
 **Score 5:** Exceptional volume. Brief acknowledgment.
 
+## Sub-dimension narratives
+
+In addition to the four dimension narratives and the Forward Brief, you produce per-sub-dimension narrative payloads for **every** sub-dimension in every dimension. There are 13 total: five in Profile Signal Clarity, four in Behavioral Signal Strength, two in Behavioral Signal Quality, two in Profile-Behavior Alignment.
+
+Each sub-dimension narrative has up to three slots. The slot structure is **conditional on score** — slots are present or absent based on the score itself, not calibrated by tone. Do not include placeholder content for an omitted slot.
+
+**Summary** (always present, every sub-dimension, every score):
+40–70 words. A data-grounded observation specific to this person on this sub-dimension. For rubric sub-dimensions (Dim 1, Dim 4), reference the specific profile content or content pattern that drove the score. For quantitative sub-dimensions (Dim 2, Dim 3), the raw metric value is surfaced in the input — name it explicitly in the Summary (e.g., "Active in 11 of the last 52 weeks").
+
+**Best Practices** (only at scores 1, 2, or 3):
+25–45 words. A generic standard for this sub-dimension. What good looks like, evergreen, not personalized. The same Best Practices content for the same sub-dimension across reports is acceptable — this is reference content the client can return to. **Omit entirely at scores 4 and 5.** Do not include a "no changes needed" placeholder.
+
+**Improvements** (only at scores 1, 2, 3, or 4):
+3–5 specific bullets at score 1; 2–4 at scores 2–3; 1–2 at score 4. Each bullet 15–25 words, written as a concrete action the client could take. Score-aware count — do not pad to hit a minimum, and do not omit useful actions to hit a maximum. **Omit entirely at score 5.** Do not include a "minor polish" stretch bullet.
+
+Voice / directness / mechanics rules above apply uniformly to dimension narratives and sub-dimension slots. Do not switch register between layers.
+
+The internal sub-dimension names (Headline Clarity, History Depth, Outbound Engagement Presence, etc.) are the canonical identifiers. Some are renamed at display time on the client surface — write against the internal names; the rename does not affect content.
+
 ## Using the intake questionnaire
 
 The questionnaire is a 9-question intake the client completes before the diagnostic. Use it to shape voice, framing, and emphasis — not to drive scoring (scores are final before you see them).
@@ -229,10 +267,22 @@ Return a JSON object with exactly this structure:
       "section": "forward_brief",
       "narrative": "..."
     }}
+  ],
+  "sub_dimensions": [
+    {{
+      "dimension": "Profile Signal Clarity",
+      "sub_dimension": "Headline Clarity",
+      "summary": "...",
+      "best_practices": "...",
+      "improvements": ["...", "..."]
+    }},
+    ...
   ]
 }}
 
-Each dimension narrative should be 150–300 words. The forward_brief should be 400–600 words and may use Markdown headers (## Reach, ## Resonance, ## Authority, ## Priorities, ## Quick Wins) to separate subsections."""
+Each dimension narrative should be 150–300 words. The forward_brief should be 400–600 words and may use Markdown headers (## Reach, ## Resonance, ## Authority, ## Priorities, ## Quick Wins) to separate subsections.
+
+The sub_dimensions array must contain exactly 13 entries — one per sub-dimension across all four dimensions. The (dimension, sub_dimension) pair on each entry must exactly match the input sub-dimension names (case- and punctuation-exact). `summary` is required on every entry. `best_practices` is required on entries whose score is 1, 2, or 3 — omit the key entirely on entries whose score is 4 or 5 (do not include it with empty string or null). `improvements` is required on entries whose score is 1, 2, 3, or 4 — omit the key entirely on entries whose score is 5."""
 
 
 # ============================================================
@@ -257,8 +307,20 @@ def _format_scored_dimensions(scoring_output: ScoringStageOutput) -> str:
 
         for sub in dim.sub_dimensions:
             method_label = sub.method.value
-            raw_note = f" (raw value: {sub.raw_value})" if sub.raw_value is not None else ""
-            parts.append(f"  {sub.name}: {sub.score:.0f} / {sub.scale} [{method_label}]{raw_note}")
+            parts.append(
+                f"  {sub.name}: {sub.score:.0f} / {sub.scale} [{method_label}]"
+            )
+            # Surface raw_value on its own line — when present, this is the
+            # quantitative grounding the sub-dim Summary should reference
+            # directly. Inline parens (the pre-ORPHEUS-21 format) were easy
+            # for Claude to skip past; a labeled line keeps it visible.
+            if sub.raw_value is not None:
+                # Pretty-format integers without trailing .0; keep floats with
+                # one decimal so a 1.5 posts/wk reads as "1.5" not "1.50".
+                if sub.raw_value == int(sub.raw_value):
+                    parts.append(f"      raw value: {int(sub.raw_value)}")
+                else:
+                    parts.append(f"      raw value: {sub.raw_value:.1f}")
 
         parts.append("")
 
@@ -592,10 +654,29 @@ EXPECTED_SECTIONS = {
 }
 
 
-def _parse_narrative_response(raw_text: str) -> dict[str, str]:
-    """Parse Claude's JSON response into a section → narrative mapping.
+def _parse_narrative_response(
+    raw_text: str,
+    scoring_output: ScoringStageOutput | None = None,
+) -> NarrativeResult:
+    """Parse Claude's JSON response into a NarrativeResult.
 
-    Returns dict with exactly 5 keys matching EXPECTED_SECTIONS.
+    Validates two payloads:
+      * 5 top-level sections matching EXPECTED_SECTIONS (4 dim narratives
+        + forward_brief). Empty narratives raise.
+      * 13 sub-dimension entries (when scoring_output is provided), each
+        keyed by (dimension, sub_dimension). Conditional slot validation
+        is cross-referenced against the score:
+          - summary required on every entry
+          - best_practices required iff score in {1, 2, 3}
+          - improvements required iff score in {1, 2, 3, 4}
+        Stray entries that don't match a real sub-dim raise; missing
+        required slots raise; unexpected slots on a score-5 entry are
+        tolerated but logged-and-dropped (Claude occasionally over-emits).
+
+    When scoring_output is None, sub-dimension validation is best-effort:
+    we still parse the array but skip the score-keyed conditional checks
+    and the 13-entry-exact requirement. That mode exists so the existing
+    response-parsing test suite can hold pre-ORPHEUS-21 fixtures green.
     """
     text = raw_text.strip()
 
@@ -610,7 +691,7 @@ def _parse_narrative_response(raw_text: str) -> dict[str, str]:
     if "sections" not in data:
         raise ValueError("Response missing 'sections' key")
 
-    result = {}
+    sections: dict[str, str] = {}
     for entry in data["sections"]:
         section = entry.get("section", "")
         narrative = entry.get("narrative", "")
@@ -620,11 +701,138 @@ def _parse_narrative_response(raw_text: str) -> dict[str, str]:
         if not narrative or not narrative.strip():
             raise ValueError(f"Empty narrative for section: '{section}'")
 
-        result[section] = narrative.strip()
+        sections[section] = narrative.strip()
 
-    missing = EXPECTED_SECTIONS - set(result.keys())
+    missing = EXPECTED_SECTIONS - set(sections.keys())
     if missing:
         raise ValueError(f"Missing sections: {missing}")
+
+    sub_dimensions = _parse_sub_dimension_payload(
+        data.get("sub_dimensions") or [], scoring_output
+    )
+
+    return NarrativeResult(sections=sections, sub_dimensions=sub_dimensions)
+
+
+def _parse_sub_dimension_payload(
+    entries: list[dict],
+    scoring_output: ScoringStageOutput | None,
+) -> dict[tuple[str, str], dict]:
+    """Validate and structure the sub_dimensions array from Claude's response.
+
+    Returns a dict keyed by (dim_name, sub_dim_name) → slot dict with
+    keys 'summary' (always), 'best_practices' (optional), 'improvements'
+    (optional). Conditional-slot rules are enforced against the score
+    when scoring_output is provided; otherwise this is a best-effort
+    parse for legacy callers that don't pass scoring context.
+    """
+    # Build the score lookup so we can validate the conditional curve.
+    score_lookup: dict[tuple[str, str], int] = {}
+    expected_pairs: set[tuple[str, str]] = set()
+    if scoring_output is not None:
+        for dim in scoring_output.scored_dimensions.dimensions:
+            for sub in dim.sub_dimensions:
+                key = (dim.name, sub.name)
+                expected_pairs.add(key)
+                score_lookup[key] = int(round(sub.score))
+
+    result: dict[tuple[str, str], dict] = {}
+    seen: set[tuple[str, str]] = set()
+
+    for entry in entries:
+        dim_name = entry.get("dimension", "")
+        sub_name = entry.get("sub_dimension", "")
+        key = (dim_name, sub_name)
+
+        if scoring_output is not None and key not in expected_pairs:
+            raise ValueError(
+                f"Unexpected sub-dimension entry: dimension={dim_name!r}, "
+                f"sub_dimension={sub_name!r}"
+            )
+
+        if key in seen:
+            raise ValueError(
+                f"Duplicate sub-dimension entry: dimension={dim_name!r}, "
+                f"sub_dimension={sub_name!r}"
+            )
+        seen.add(key)
+
+        summary = entry.get("summary")
+        if not isinstance(summary, str) or not summary.strip():
+            raise ValueError(
+                f"Sub-dimension {dim_name}/{sub_name}: 'summary' is required "
+                "on every entry."
+            )
+
+        slot: dict = {"summary": summary.strip()}
+
+        has_bp = "best_practices" in entry and entry["best_practices"] is not None
+        has_imp = "improvements" in entry and entry["improvements"] is not None
+
+        if has_bp:
+            bp = entry["best_practices"]
+            if not isinstance(bp, str) or not bp.strip():
+                raise ValueError(
+                    f"Sub-dimension {dim_name}/{sub_name}: "
+                    "'best_practices' present but empty."
+                )
+            slot["best_practices"] = bp.strip()
+
+        if has_imp:
+            imp = entry["improvements"]
+            if not isinstance(imp, list) or not imp:
+                raise ValueError(
+                    f"Sub-dimension {dim_name}/{sub_name}: "
+                    "'improvements' present but empty or not a list."
+                )
+            cleaned: list[str] = []
+            for bullet in imp:
+                if not isinstance(bullet, str) or not bullet.strip():
+                    raise ValueError(
+                        f"Sub-dimension {dim_name}/{sub_name}: "
+                        "improvements list contains an empty entry."
+                    )
+                cleaned.append(bullet.strip())
+            slot["improvements"] = cleaned
+
+        # Conditional-slot enforcement: cross-reference against the score.
+        if key in score_lookup:
+            score = score_lookup[key]
+            if score in (1, 2, 3) and "best_practices" not in slot:
+                raise ValueError(
+                    f"Sub-dimension {dim_name}/{sub_name} score {score}: "
+                    "'best_practices' is required at scores 1–3."
+                )
+            if score in (1, 2, 3, 4) and "improvements" not in slot:
+                raise ValueError(
+                    f"Sub-dimension {dim_name}/{sub_name} score {score}: "
+                    "'improvements' is required at scores 1–4."
+                )
+            # Tolerate (and drop) over-emitted slots at score 5. Claude
+            # sometimes can't resist adding a "minor polish" bullet
+            # even when instructed to omit; better to silently drop it
+            # than to fail the whole response.
+            if score == 5:
+                slot.pop("best_practices", None)
+                slot.pop("improvements", None)
+            # Drop best_practices on score-4 entries the same way.
+            if score == 4:
+                slot.pop("best_practices", None)
+
+        result[key] = slot
+
+    # When we have scoring context, require complete coverage — every
+    # expected (dim, sub_dim) pair must have an entry. Pre-ORPHEUS-21
+    # callers (scoring_output=None) skip this so the response-parsing
+    # tests can hold green on the 5-section-only shape.
+    if scoring_output is not None:
+        missing_pairs = expected_pairs - seen
+        if missing_pairs:
+            preview = ", ".join(f"{d}/{s}" for d, s in sorted(missing_pairs)[:5])
+            raise ValueError(
+                f"Missing {len(missing_pairs)} sub-dimension entries "
+                f"(e.g., {preview})"
+            )
 
     return result
 
@@ -641,13 +849,20 @@ async def generate_narratives(
     quality_report: DataQualityReport | None = None,
     model: str = "claude-sonnet-4-20250514",
     max_retries: int = 2,
-) -> dict[str, str]:
+) -> NarrativeResult:
     """Generate all narrative sections for a Signal Score report.
+
+    Single Claude call emits both top-level sections (4 dimension narratives
+    + forward_brief) and per-sub-dim narrative payloads (13 entries, one per
+    sub-dimension across the four dimensions). ORPHEUS-21 introduced the
+    sub-dim layer; the existing five-section return is unchanged in content.
 
     Args:
         client: Anthropic API client.
         scoring_output: Complete output from the scoring engine
-            (scored_dimensions + forward_brief_data).
+            (scored_dimensions + forward_brief_data). Required so the parser
+            can cross-reference Claude's sub-dim entries against the actual
+            score-list and enforce the conditional slot curve.
         questionnaire: Client's questionnaire responses as a dict.
         narrative_config: Optional advisor-level configuration overrides.
             Keys: voice, recommendation_style, system_mechanics,
@@ -659,10 +874,9 @@ async def generate_narratives(
         max_retries: Number of retries on parse failure.
 
     Returns:
-        Dict mapping section identifiers to narrative text.
-        Keys: "Profile Signal Clarity", "Behavioral Signal Strength",
-        "Behavioral Signal Quality", "Profile-Behavior Alignment",
-        "forward_brief".
+        NarrativeResult — `sections` (5 entries, same keys as pre-ORPHEUS-21)
+        and `sub_dimensions` (13 entries, keyed by (dim_name, sub_dim_name)
+        with conditional slot contents).
     """
     system_prompt = _build_system_prompt(narrative_config)
 
@@ -681,7 +895,12 @@ async def generate_narratives(
     for attempt in range(1 + max_retries):
         response = client.messages.create(
             model=model,
-            max_tokens=4096,
+            # Bumped from 4096 to 8192 in ORPHEUS-21. 4 dim narratives
+            # (~225w each) + forward_brief (~500w) + 13 sub-dim payloads
+            # (avg ~120w each) lands around 3000 words / ~4000 tokens —
+            # right at the old ceiling, with no margin for JSON overhead
+            # or retries. 8192 gives comfortable headroom.
+            max_tokens=8192,
             system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
         )
@@ -689,7 +908,7 @@ async def generate_narratives(
         raw_text = response.content[0].text
 
         try:
-            return _parse_narrative_response(raw_text)
+            return _parse_narrative_response(raw_text, scoring_output)
         except (json.JSONDecodeError, ValueError, KeyError) as e:
             last_error = e
             if attempt < max_retries:

@@ -28,7 +28,7 @@ from backend.ingestion.xlsx_parser import parse_xlsx
 from backend.scoring.engine import run_scoring
 from backend.scoring.config import build_config_snapshot
 from backend.agents.rubric import score_rubrics
-from backend.agents.narrative import generate_narratives
+from backend.agents.narrative import generate_narratives, NarrativeResult
 from backend.models.scoring import ScoringStageOutput
 from backend.models.quality import DataQualityReport
 
@@ -240,16 +240,22 @@ async def stage_narrative_generation(
     job_id: str,
     supabase,
     is_advisory: bool = True,
-) -> dict[str, str]:
-    """Stage 4: Claude generates dimension narratives and Forward Brief.
+) -> NarrativeResult:
+    """Stage 4: Claude generates dimension narratives + Forward Brief + per-sub-dim slots.
 
-    Saves each section as a row in the narratives table.
+    The five top-level sections (4 dim narratives + forward_brief) are saved
+    as rows in the `narratives` table — that's the admin-editable surface.
+    The 13 per-sub-dim narrative payloads are returned in the NarrativeResult
+    so the caller can merge them into `scored_dimensions` and persist via
+    the `scores` row update — they ride the `dimensions` JSONB rather than
+    getting their own table rows because they aren't admin-editable in v1.
+
     Advisory clients get status='draft'; self-serve get status='published'.
     Quality report is passed so Claude can acknowledge data limitations.
     """
     logger.info(f"[{job_id}] Stage 4: Narrative generation")
 
-    sections = await generate_narratives(
+    narrative_result = await generate_narratives(
         client=anthropic_client,
         scoring_output=scoring_output,
         questionnaire=questionnaire,
@@ -263,7 +269,7 @@ async def stage_narrative_generation(
     # Clear any narratives from a previous attempt before inserting
     supabase.table("narratives").delete().eq("job_id", job_id).execute()
 
-    for section_name, narrative_text in sections.items():
+    for section_name, narrative_text in narrative_result.sections.items():
         row = {
             "job_id": job_id,
             "section": section_name,
@@ -277,9 +283,37 @@ async def stage_narrative_generation(
         supabase.table("narratives").insert(row).execute()
 
     logger.info(
-        f"[{job_id}] Generated {len(sections)} narrative sections (status={status})"
+        f"[{job_id}] Generated {len(narrative_result.sections)} narrative sections "
+        f"+ {len(narrative_result.sub_dimensions)} sub-dim payloads "
+        f"(status={status})"
     )
-    return sections
+    return narrative_result
+
+
+def _merge_sub_dim_narratives(
+    scoring_output: ScoringStageOutput,
+    sub_dim_narratives: dict[tuple[str, str], dict],
+) -> None:
+    """Apply Stage 4's sub-dim narrative output to the scoring model in place.
+
+    Walks `scoring_output.scored_dimensions.dimensions[].sub_dimensions[]`
+    and sets `summary`, `best_practices`, `improvements` from the matching
+    `(dim_name, sub_dim_name)` entry. Missing entries are tolerated — the
+    parser's coverage check already enforced 13 entries when the response
+    was validated, so a missing key here is only possible if the caller
+    deliberately bypassed that check.
+
+    Mutates in place rather than returning a new model so the caller can
+    `model_dump_json()` the same `scoring_output` reference after merging.
+    """
+    for dim in scoring_output.scored_dimensions.dimensions:
+        for sub in dim.sub_dimensions:
+            entry = sub_dim_narratives.get((dim.name, sub.name))
+            if not entry:
+                continue
+            sub.summary = entry.get("summary")
+            sub.best_practices = entry.get("best_practices")
+            sub.improvements = entry.get("improvements")
 
 
 # ============================================================
@@ -340,10 +374,20 @@ async def run_pipeline(supabase, anthropic_client: Anthropic, job: dict):
     )
 
     # Stage 4: Narrative generation (Claude)
-    await stage_narrative_generation(
+    narrative_result = await stage_narrative_generation(
         anthropic_client, scoring_output, questionnaire,
         narrative_config, quality_report, job_id, supabase, is_advisory
     )
+
+    # Stage 4b: Merge sub-dim narratives into scored_dimensions and re-persist
+    # the `scores.dimensions` JSONB so the GET /jobs/{id} payload picks them
+    # up via the existing wire path (ORPHEUS-21). Sub-dim narratives are
+    # intentionally not stored in the `narratives` table — that surface is
+    # for admin-editable text; sub-dim slots are agent-generated only.
+    _merge_sub_dim_narratives(scoring_output, narrative_result.sub_dimensions)
+    supabase.table("scores").update({
+        "dimensions": json.loads(scoring_output.scored_dimensions.model_dump_json()),
+    }).eq("job_id", job_id).execute()
 
     # Mark job complete
     await update_job_status(supabase, job_id, "complete")

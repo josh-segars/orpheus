@@ -14,6 +14,7 @@ from backend.agents.narrative import (
     MECHANICS_INSTRUCTIONS,
     FOCUS_INSTRUCTIONS,
     EXPECTED_SECTIONS,
+    NarrativeResult,
     _build_system_prompt,
     _parse_narrative_response,
     _format_scored_dimensions,
@@ -165,16 +166,25 @@ def _make_valid_response():
 # ============================================================
 
 class TestParseResponse:
+    """ORPHEUS-21 changed the return type from dict[str, str] to a
+    NarrativeResult NamedTuple — existing assertions navigate through
+    `.sections` now, but the section-only validation behavior on the
+    no-scoring-output path is unchanged.
+    """
 
     def test_valid_response(self):
         result = _parse_narrative_response(_make_valid_response())
-        assert set(result.keys()) == EXPECTED_SECTIONS
-        assert all(isinstance(v, str) and len(v) > 0 for v in result.values())
+        assert isinstance(result, NarrativeResult)
+        assert set(result.sections.keys()) == EXPECTED_SECTIONS
+        assert all(isinstance(v, str) and len(v) > 0 for v in result.sections.values())
+        # No scoring_output passed → sub_dimensions parsed best-effort; the
+        # legacy fixture doesn't include the array, so result is empty here.
+        assert result.sub_dimensions == {}
 
     def test_with_code_fences(self):
         raw = "```json\n" + _make_valid_response() + "\n```"
         result = _parse_narrative_response(raw)
-        assert set(result.keys()) == EXPECTED_SECTIONS
+        assert set(result.sections.keys()) == EXPECTED_SECTIONS
 
     def test_missing_section_raises(self):
         data = {
@@ -642,6 +652,328 @@ class TestFormatQualityReport:
         )
         result = _format_quality_report(report)
         assert "Rows affected" not in result
+
+
+# ============================================================
+# Test: Sub-dimension parsing (ORPHEUS-21)
+# ============================================================
+#
+# The 13 expected sub-dims in _make_scoring_output() carry this score
+# distribution:
+#
+#   Profile Signal Clarity        Headline Clarity              4
+#                                 About Section Coherence       4
+#                                 Experience Description Quality 3
+#                                 Profile Completeness          3
+#                                 Identity Clarity              4
+#   Behavioral Signal Strength    History Depth                 5
+#                                 Recency                       4
+#                                 Continuity                    4
+#                                 Posting Presence              4
+#   Behavioral Signal Quality     Outbound Engagement Presence  5
+#                                 Engagement Quality Score      5
+#   Profile-Behavior Alignment    Topic Consistency             4
+#                                 Profile-Content Coherence     3
+#
+# Score-aware slot expectations:
+#   score 3 → summary + best_practices + improvements  (3 entries)
+#   score 4 → summary + improvements                   (7 entries)
+#   score 5 → summary only                             (3 entries)
+
+
+def _sub_dim_entry(
+    dimension: str,
+    sub_dimension: str,
+    score: int,
+    *,
+    summary: str | None = "Substantive summary text. " * 4,
+    best_practices: str | None = None,
+    improvements: list[str] | None = None,
+) -> dict:
+    """Build one sub-dim entry per the wire shape.
+
+    Default slot population matches the conditional curve: BP at score
+    1–3, Improvements at 1–4. Callers can override for negative tests.
+    """
+    entry: dict = {
+        "dimension": dimension,
+        "sub_dimension": sub_dimension,
+    }
+    if summary is not None:
+        entry["summary"] = summary
+    if best_practices is None and score in (1, 2, 3):
+        entry["best_practices"] = "Generic standard for this sub-dimension."
+    elif best_practices is not None:
+        entry["best_practices"] = best_practices
+    if improvements is None and score in (1, 2, 3, 4):
+        entry["improvements"] = [
+            "Specific action one for this sub-dim.",
+            "Specific action two.",
+        ]
+    elif improvements is not None:
+        entry["improvements"] = improvements
+    return entry
+
+
+# Score lookup mirroring _make_scoring_output() so test fixtures can
+# generate matching entries without hardcoding 13 calls.
+_FIXTURE_SCORES: list[tuple[str, str, int]] = [
+    ("Profile Signal Clarity", "Headline Clarity", 4),
+    ("Profile Signal Clarity", "About Section Coherence", 4),
+    ("Profile Signal Clarity", "Experience Description Quality", 3),
+    ("Profile Signal Clarity", "Profile Completeness", 3),
+    ("Profile Signal Clarity", "Identity Clarity", 4),
+    ("Behavioral Signal Strength", "History Depth", 5),
+    ("Behavioral Signal Strength", "Recency", 4),
+    ("Behavioral Signal Strength", "Continuity", 4),
+    ("Behavioral Signal Strength", "Posting Presence", 4),
+    ("Behavioral Signal Quality", "Outbound Engagement Presence", 5),
+    ("Behavioral Signal Quality", "Engagement Quality Score", 5),
+    ("Profile-Behavior Alignment", "Topic Consistency", 4),
+    ("Profile-Behavior Alignment", "Profile-Content Coherence", 3),
+]
+
+
+def _valid_sub_dim_payload() -> list[dict]:
+    return [
+        _sub_dim_entry(dim, sub, score) for dim, sub, score in _FIXTURE_SCORES
+    ]
+
+
+def _full_response_with_sub_dims(sub_dim_payload: list[dict] | None = None) -> str:
+    """Build a complete 5-section + sub-dim response JSON."""
+    if sub_dim_payload is None:
+        sub_dim_payload = _valid_sub_dim_payload()
+    return json.dumps({
+        "sections": [
+            {"section": "Profile Signal Clarity", "narrative": "Profile narrative. " * 10},
+            {"section": "Behavioral Signal Strength", "narrative": "Strength narrative. " * 10},
+            {"section": "Behavioral Signal Quality", "narrative": "Quality narrative. " * 8},
+            {"section": "Profile-Behavior Alignment", "narrative": "Alignment narrative. " * 8},
+            {"section": "forward_brief", "narrative": "## Reach\nForward brief. " * 20},
+        ],
+        "sub_dimensions": sub_dim_payload,
+    })
+
+
+class TestParseSubDimensions:
+    """Validates the ORPHEUS-21 sub-dim parser cross-references slots
+    against actual scores and enforces the conditional curve.
+    """
+
+    def test_valid_13_entry_response_succeeds(self):
+        output = _make_scoring_output()
+        result = _parse_narrative_response(_full_response_with_sub_dims(), output)
+        assert len(result.sub_dimensions) == 13
+        # Score-3 entry: BP + improvements both present.
+        score3_entry = result.sub_dimensions[
+            ("Profile Signal Clarity", "Experience Description Quality")
+        ]
+        assert "summary" in score3_entry
+        assert "best_practices" in score3_entry
+        assert "improvements" in score3_entry
+        # Score-4 entry: improvements present, BP dropped per curve.
+        score4_entry = result.sub_dimensions[
+            ("Profile Signal Clarity", "Headline Clarity")
+        ]
+        assert "summary" in score4_entry
+        assert "best_practices" not in score4_entry
+        assert "improvements" in score4_entry
+        # Score-5 entry: summary only.
+        score5_entry = result.sub_dimensions[
+            ("Behavioral Signal Strength", "History Depth")
+        ]
+        assert "summary" in score5_entry
+        assert "best_practices" not in score5_entry
+        assert "improvements" not in score5_entry
+
+    def test_missing_summary_raises(self):
+        output = _make_scoring_output()
+        payload = _valid_sub_dim_payload()
+        # Strip summary off the first entry
+        del payload[0]["summary"]
+        with pytest.raises(ValueError, match="'summary' is required"):
+            _parse_narrative_response(_full_response_with_sub_dims(payload), output)
+
+    def test_empty_summary_raises(self):
+        output = _make_scoring_output()
+        payload = _valid_sub_dim_payload()
+        payload[0]["summary"] = "   "
+        with pytest.raises(ValueError, match="'summary' is required"):
+            _parse_narrative_response(_full_response_with_sub_dims(payload), output)
+
+    def test_score_3_missing_best_practices_raises(self):
+        output = _make_scoring_output()
+        payload = _valid_sub_dim_payload()
+        # Experience Description Quality is score 3; strip its BP slot.
+        for entry in payload:
+            if entry["sub_dimension"] == "Experience Description Quality":
+                del entry["best_practices"]
+        with pytest.raises(ValueError, match="'best_practices' is required at scores 1.3"):
+            _parse_narrative_response(_full_response_with_sub_dims(payload), output)
+
+    def test_score_3_missing_improvements_raises(self):
+        output = _make_scoring_output()
+        payload = _valid_sub_dim_payload()
+        for entry in payload:
+            if entry["sub_dimension"] == "Profile Completeness":
+                del entry["improvements"]
+        with pytest.raises(ValueError, match="'improvements' is required at scores 1.4"):
+            _parse_narrative_response(_full_response_with_sub_dims(payload), output)
+
+    def test_score_4_missing_improvements_raises(self):
+        output = _make_scoring_output()
+        payload = _valid_sub_dim_payload()
+        for entry in payload:
+            if entry["sub_dimension"] == "Headline Clarity":  # score 4
+                del entry["improvements"]
+        with pytest.raises(ValueError, match="'improvements' is required at scores 1.4"):
+            _parse_narrative_response(_full_response_with_sub_dims(payload), output)
+
+    def test_score_4_with_stray_best_practices_is_dropped(self):
+        """Claude sometimes can't resist over-emitting. At score 4 the parser
+        tolerates and drops the unwanted best_practices rather than failing."""
+        output = _make_scoring_output()
+        payload = _valid_sub_dim_payload()
+        for entry in payload:
+            if entry["sub_dimension"] == "Headline Clarity":  # score 4
+                entry["best_practices"] = "Stray BP that should not be here."
+        result = _parse_narrative_response(_full_response_with_sub_dims(payload), output)
+        score4_entry = result.sub_dimensions[
+            ("Profile Signal Clarity", "Headline Clarity")
+        ]
+        assert "best_practices" not in score4_entry  # silently dropped
+        assert "improvements" in score4_entry  # legitimate slot retained
+
+    def test_score_5_with_stray_slots_are_dropped(self):
+        output = _make_scoring_output()
+        payload = _valid_sub_dim_payload()
+        for entry in payload:
+            if entry["sub_dimension"] == "History Depth":  # score 5
+                entry["best_practices"] = "Should not be here."
+                entry["improvements"] = ["Should not be here either."]
+        result = _parse_narrative_response(_full_response_with_sub_dims(payload), output)
+        score5_entry = result.sub_dimensions[
+            ("Behavioral Signal Strength", "History Depth")
+        ]
+        assert "summary" in score5_entry
+        assert "best_practices" not in score5_entry
+        assert "improvements" not in score5_entry
+
+    def test_score_5_summary_only_is_valid(self):
+        output = _make_scoring_output()
+        result = _parse_narrative_response(_full_response_with_sub_dims(), output)
+        # All three score-5 entries in the fixture should land summary-only.
+        for sub_name in (
+            "History Depth",
+            "Outbound Engagement Presence",
+            "Engagement Quality Score",
+        ):
+            entry = None
+            for key in result.sub_dimensions:
+                if key[1] == sub_name:
+                    entry = result.sub_dimensions[key]
+                    break
+            assert entry is not None, f"missing {sub_name}"
+            assert "summary" in entry
+            assert "best_practices" not in entry
+            assert "improvements" not in entry
+
+    def test_duplicate_entry_raises(self):
+        output = _make_scoring_output()
+        payload = _valid_sub_dim_payload()
+        # Inject a duplicate of the first entry
+        payload.append(dict(payload[0]))
+        with pytest.raises(ValueError, match="Duplicate sub-dimension"):
+            _parse_narrative_response(_full_response_with_sub_dims(payload), output)
+
+    def test_unexpected_pair_raises(self):
+        output = _make_scoring_output()
+        payload = _valid_sub_dim_payload()
+        # Replace one entry with a (dim, sub_dim) pair that doesn't exist
+        payload[0] = _sub_dim_entry(
+            "Profile Signal Clarity", "Made Up Sub-Dim", 3
+        )
+        with pytest.raises(ValueError, match="Unexpected sub-dimension"):
+            _parse_narrative_response(_full_response_with_sub_dims(payload), output)
+
+    def test_missing_entry_raises_with_count(self):
+        output = _make_scoring_output()
+        payload = _valid_sub_dim_payload()
+        # Drop two entries
+        payload = payload[:-2]
+        with pytest.raises(ValueError, match="Missing 2 sub-dimension entries"):
+            _parse_narrative_response(_full_response_with_sub_dims(payload), output)
+
+    def test_empty_improvements_list_raises(self):
+        output = _make_scoring_output()
+        payload = _valid_sub_dim_payload()
+        for entry in payload:
+            if entry["sub_dimension"] == "Profile Completeness":
+                entry["improvements"] = []
+        with pytest.raises(ValueError, match="empty or not a list"):
+            _parse_narrative_response(_full_response_with_sub_dims(payload), output)
+
+    def test_improvements_bullet_blank_raises(self):
+        output = _make_scoring_output()
+        payload = _valid_sub_dim_payload()
+        for entry in payload:
+            if entry["sub_dimension"] == "Profile Completeness":
+                entry["improvements"] = ["Real bullet.", "   "]
+        with pytest.raises(ValueError, match="empty entry"):
+            _parse_narrative_response(_full_response_with_sub_dims(payload), output)
+
+    def test_no_scoring_output_skips_coverage_check(self):
+        """Legacy callers that don't pass scoring_output get best-effort
+        parsing — the 13-entry coverage check is skipped so partial
+        responses don't fail the parser."""
+        partial = _valid_sub_dim_payload()[:3]  # only 3 of 13
+        result = _parse_narrative_response(_full_response_with_sub_dims(partial))
+        # Sub-dims parsed but coverage not enforced.
+        assert len(result.sub_dimensions) == 3
+
+
+# ============================================================
+# Test: _format_scored_dimensions raw_value rendering (ORPHEUS-21)
+# ============================================================
+
+
+class TestFormatScoredDimensionsRawValue:
+    """Pinning the layout change that surfaces raw_value on its own
+    line — pre-ORPHEUS-21 it was an inline " (raw value: X)" suffix.
+    Sub-dim Summaries are expected to reference the raw value, so it
+    needs to be visible to Claude, not buried in parens.
+    """
+
+    def test_integer_raw_value_formatted_without_trailing_zero(self):
+        output = _make_scoring_output()
+        text = _format_scored_dimensions(output)
+        # History Depth raw_value = 750 (integer). Should render as "750"
+        # not "750.0".
+        assert "raw value: 750" in text
+        assert "raw value: 750.0" not in text
+
+    def test_float_raw_value_renders_with_one_decimal(self):
+        output = _make_scoring_output()
+        text = _format_scored_dimensions(output)
+        # Posting Presence raw_value = 1.5 → should render as "1.5".
+        assert "raw value: 1.5" in text
+
+    def test_raw_value_on_own_line_indented(self):
+        """The new format puts raw value on its own line so Claude can
+        ground sub-dim Summaries on the metric. The previous inline
+        " (raw value: X)" form was easy to skip past."""
+        output = _make_scoring_output()
+        text = _format_scored_dimensions(output)
+        # Lookup line should NOT contain raw_value inline.
+        history_lines = [l for l in text.splitlines() if l.strip().startswith("History Depth:")]
+        assert len(history_lines) == 1
+        assert "raw value" not in history_lines[0]
+        # And a separate indented line should carry the value.
+        assert any(
+            l.strip().startswith("raw value: 750")
+            for l in text.splitlines()
+        )
 
 
 if __name__ == "__main__":
