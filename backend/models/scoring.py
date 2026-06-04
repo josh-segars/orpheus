@@ -75,14 +75,14 @@ class SubDimensionScore(BaseModel):
         None,
         description=(
             "Data-grounded observation specific to this person on this "
-            "sub-dimension. ~40–70 words. Always present when narratives "
+            "sub-dimension. ~25–45 words. Always present when narratives "
             "are generated."
         ),
     )
     best_practices: Optional[str] = Field(
         None,
         description=(
-            "Generic standard for this sub-dimension (~25–45 words). "
+            "Generic standard for this sub-dimension (~18–35 words). "
             "Populated only at scores 0–3 — at 4–5 the standard is "
             "implicit and the slot stays empty."
         ),

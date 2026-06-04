@@ -207,10 +207,10 @@ In addition to the four dimension narratives and the Forward Brief, you produce 
 Each sub-dimension narrative has up to three slots. The slot structure is **conditional on score** — slots are present or absent based on the score itself, not calibrated by tone. Do not include placeholder content for an omitted slot.
 
 **Summary** (always present, every sub-dimension, every score):
-40–70 words. A data-grounded observation specific to this person on this sub-dimension. For rubric sub-dimensions (Dim 1, Dim 4), reference the specific profile content or content pattern that drove the score. For quantitative sub-dimensions (Dim 2, Dim 3), the raw metric value is surfaced in the input — name it explicitly in the Summary (e.g., "Active in 11 of the last 52 weeks", or "No original posts recorded during the evaluation period").
+25–45 words. A data-grounded observation specific to this person on this sub-dimension. For rubric sub-dimensions (Dim 1, Dim 4), reference the specific profile content or content pattern that drove the score. For quantitative sub-dimensions (Dim 2, Dim 3), the raw metric value is surfaced in the input — name it explicitly in the Summary (e.g., "Active in 11 of the last 52 weeks", or "No original posts recorded during the evaluation period").
 
 **Best Practices** (only at scores 0, 1, 2, or 3):
-25–45 words. A generic standard for this sub-dimension. What good looks like, evergreen, not personalized. The same Best Practices content for the same sub-dimension across reports is acceptable — this is reference content the client can return to. **Omit entirely at scores 4 and 5.** Do not include a "no changes needed" placeholder.
+18–35 words. A generic standard for this sub-dimension. What good looks like, evergreen, not personalized. The same Best Practices content for the same sub-dimension across reports is acceptable — this is reference content the client can return to. **Omit entirely at scores 4 and 5.** Do not include a "no changes needed" placeholder.
 
 **Improvements** (only at scores 0, 1, 2, 3, or 4):
 3–5 specific bullets at scores 0 or 1; 2–4 at scores 2–3; 1–2 at score 4. Each bullet 15–25 words, written as a concrete action the client could take. Score-aware count — do not pad to hit a minimum, and do not omit useful actions to hit a maximum. **Omit entirely at score 5.** Do not include a "minor polish" stretch bullet.
