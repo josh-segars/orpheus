@@ -22,6 +22,7 @@ gate, not the payload assembly which has been stable for months.
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
@@ -574,3 +575,197 @@ async def test_complete_job_with_missing_forward_brief_returns_no_result():
 
     assert result.state == "complete"
     assert result.result is None
+
+
+# --------------------------------------------------------------------------- #
+# Cheat sheet deserialization — ORPHEUS-60
+# --------------------------------------------------------------------------- #
+#
+# Background: ORPHEUS-60 added structured cheat_sheet generation to the
+# narrative agent. The worker persists the structured payload as a
+# `section='cheat_sheet'` narratives row with `generated_text` holding the
+# JSON-encoded CheatSheetContent. `_build_result_payload` deserializes on
+# read so the wire payload carries a real object under
+# `narratives.cheat_sheet` instead of always serializing null.
+#
+# Legacy jobs predating ORPHEUS-60 have no cheat_sheet narratives row;
+# `narratives.cheat_sheet` stays null on their wire and CheatSheetPage's
+# null-state branch renders the not-ready surface as a graceful fallback.
+
+
+_SAMPLE_CHEAT_SHEET = {
+    "priorities": [
+        {"title": f"Priority {i + 1}", "action": f"Action step {i + 1}."}
+        for i in range(5)
+    ],
+    "rhythm": [
+        {"cadence": "Every Day", "items": ["Daily one.", "Daily two."]},
+        {"cadence": "Every Week", "items": ["Weekly one."]},
+        {"cadence": "Every Month", "items": ["Monthly one."]},
+    ],
+    "milestones": [
+        {"value": "10", "label": "Posts"},
+        {"value": "3", "label": "Recs"},
+        {"value": "12", "label": "Weeks"},
+    ],
+}
+
+
+@pytest.mark.asyncio
+async def test_complete_job_cheat_sheet_section_deserializes():
+    """ORPHEUS-60: section='cheat_sheet' row's generated_text is JSON-
+    encoded; handler deserializes and surfaces the dict under
+    `narratives.cheat_sheet`."""
+    fake = FakeSupabase(
+        responses=[
+            {
+                "data": [
+                    _job_row(
+                        job_id=JOB_1_ID,
+                        client_id=CLIENT_1_ID,
+                        status_value="complete",
+                    )
+                ]
+            },
+            {"data": [_score_row(job_id=JOB_1_ID)]},
+            {
+                "data": [
+                    _narrative_row(
+                        section="Profile Signal Clarity",
+                        generated_text="Profile narrative.",
+                    ),
+                    _narrative_row(
+                        section="Behavioral Signal Strength",
+                        generated_text="Strength narrative.",
+                    ),
+                    _narrative_row(
+                        section="Behavioral Signal Quality",
+                        generated_text="Quality narrative.",
+                    ),
+                    _narrative_row(
+                        section="Profile-Behavior Alignment",
+                        generated_text="Alignment narrative.",
+                    ),
+                    _narrative_row(
+                        section="forward_brief",
+                        generated_text="Forward brief body.",
+                    ),
+                    _narrative_row(
+                        section="cheat_sheet",
+                        generated_text=json.dumps(_SAMPLE_CHEAT_SHEET),
+                    ),
+                ]
+            },
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_client_roles(CLIENT_1_ID),
+        )
+
+    assert result.result is not None
+    narr = result.result["narratives"]
+    # Cheat sheet hydrated to a structured dict, NOT a JSON string.
+    assert narr["cheat_sheet"] is not None
+    assert len(narr["cheat_sheet"]["priorities"]) == 5
+    assert narr["cheat_sheet"]["priorities"][0]["title"] == "Priority 1"
+    assert [
+        r["cadence"] for r in narr["cheat_sheet"]["rhythm"]
+    ] == ["Every Day", "Every Week", "Every Month"]
+    # cheat_sheet row didn't leak into the dimension_narratives map.
+    assert "cheat_sheet" not in narr["dimension_narratives"]
+
+
+@pytest.mark.asyncio
+async def test_complete_job_malformed_cheat_sheet_falls_back_to_null():
+    """ORPHEUS-60: a cheat_sheet row whose generated_text isn't valid JSON
+    serializes null rather than 500ing the whole job. CheatSheetPage's
+    not-ready surface handles the null path the same as legacy jobs."""
+    fake = FakeSupabase(
+        responses=[
+            {
+                "data": [
+                    _job_row(
+                        job_id=JOB_1_ID,
+                        client_id=CLIENT_1_ID,
+                        status_value="complete",
+                    )
+                ]
+            },
+            {"data": [_score_row(job_id=JOB_1_ID)]},
+            {
+                "data": [
+                    _narrative_row(
+                        section="forward_brief",
+                        generated_text="Forward brief body.",
+                    ),
+                    _narrative_row(
+                        section="cheat_sheet",
+                        generated_text="not-valid-json{",
+                    ),
+                ]
+            },
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_client_roles(CLIENT_1_ID),
+        )
+
+    assert result.result is not None
+    narr = result.result["narratives"]
+    assert narr["cheat_sheet"] is None
+
+
+@pytest.mark.asyncio
+async def test_complete_job_cheat_sheet_edited_text_currently_falls_back():
+    """ORPHEUS-60 follow-up note: admin edits via /admin write plain text
+    into `edited_text`. The handler's edited-text-wins rule applies to
+    cheat_sheet too, but plain text isn't valid JSON for the
+    CheatSheetContent schema, so the handler falls back to None and
+    logs a warning. Future work could add a structured cheat_sheet
+    editor; this test pins current behavior so the fallback isn't a
+    surprise."""
+    fake = FakeSupabase(
+        responses=[
+            {
+                "data": [
+                    _job_row(
+                        job_id=JOB_1_ID,
+                        client_id=CLIENT_1_ID,
+                        status_value="complete",
+                    )
+                ]
+            },
+            {"data": [_score_row(job_id=JOB_1_ID)]},
+            {
+                "data": [
+                    _narrative_row(
+                        section="forward_brief",
+                        generated_text="Forward brief body.",
+                    ),
+                    _narrative_row(
+                        section="cheat_sheet",
+                        generated_text=json.dumps(_SAMPLE_CHEAT_SHEET),
+                        edited_text="Admin's plain-text edit, not JSON.",
+                    ),
+                ]
+            },
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_client_roles(CLIENT_1_ID),
+        )
+
+    # Edited text wins, but it isn't valid JSON → handler falls back to None.
+    # The generated_text (which IS valid JSON) is not used in this case
+    # because edited_text takes precedence per the admin-overlay rule.
+    assert result.result is not None
+    assert result.result["narratives"]["cheat_sheet"] is None

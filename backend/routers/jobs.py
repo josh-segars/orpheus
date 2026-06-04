@@ -18,6 +18,7 @@ matching the pattern already used by `GET /clients`.
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 from typing import Annotated
@@ -399,10 +400,13 @@ def _build_result_payload(supabase, job_id: str) -> dict | None:
       * `scores.scored_dimensions` is `scores.dimensions` on the
         wire — the worker writes the serialized ScoredDimensions
         JSONB directly into that column.
-      * `cheat_sheet` is currently never produced by the narrative
-        agent — we serialize null and let the CheatSheetPage render
-        its not-ready-yet surface. ORPHEUS-60 tracks adding
-        cheat_sheet generation to bring it back online.
+      * `cheat_sheet` was added to the agent's output in ORPHEUS-60
+        (this handler change shipped alongside). When the worker
+        persists a `section='cheat_sheet'` row, its `generated_text`
+        is the JSON-encoded `CheatSheetContent`; we deserialize on
+        read. Legacy jobs that predate ORPHEUS-60 have no such row
+        and the wire serializes `cheat_sheet: null` — CheatSheetPage's
+        existing null-state branch renders the not-ready surface.
     """
     scores = (
         supabase.table("scores")
@@ -426,6 +430,7 @@ def _build_result_payload(supabase, job_id: str) -> dict | None:
     score_row = scores.data[0]
     dimension_narratives: dict[str, str] = {}
     forward_brief: str | None = None
+    cheat_sheet: dict | None = None
 
     for n in narratives_rows.data:
         section = n["section"]
@@ -443,13 +448,25 @@ def _build_result_payload(supabase, job_id: str) -> dict | None:
         if section == "forward_brief":
             forward_brief = text
         elif section == "cheat_sheet":
-            # The narrative agent doesn't currently emit a
-            # cheat_sheet section (ORPHEUS-60). If a future agent
-            # does, the row would land here — but it would be plain
-            # text, not the CheatSheetContent the frontend expects.
-            # Treat it the same as missing: serialize null and let
-            # the frontend's empty state handle it.
-            continue
+            # ORPHEUS-60: deserialize the JSON-encoded CheatSheetContent
+            # back into a dict for the wire. Malformed JSON falls back to
+            # None rather than 500ing the whole job — the frontend's
+            # null-state surface is the graceful path here. Admin edits
+            # of cheat_sheet via /admin (which would land plain text in
+            # `edited_text`) currently fail this parse and degrade to
+            # the legacy null path; structured editing is a future
+            # follow-up if it becomes a need.
+            try:
+                parsed = json.loads(text) if text else None
+            except (ValueError, TypeError):
+                logger.warning(
+                    "Job %s cheat_sheet row failed JSON parse; "
+                    "serializing null on the wire.",
+                    job_id,
+                )
+                parsed = None
+            if isinstance(parsed, dict):
+                cheat_sheet = parsed
         else:
             dimension_narratives[section] = text
 
@@ -464,6 +481,6 @@ def _build_result_payload(supabase, job_id: str) -> dict | None:
         "narratives": {
             "dimension_narratives": dimension_narratives,
             "forward_brief": forward_brief,
-            "cheat_sheet": None,
+            "cheat_sheet": cheat_sheet,
         },
     }

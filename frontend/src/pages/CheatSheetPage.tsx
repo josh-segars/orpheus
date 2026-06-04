@@ -50,10 +50,11 @@ export function CheatSheetPage() {
   const clientName = job.client_id ? formatClientName(job.client_id) : null
   const { cheat_sheet } = job.result.narratives
 
-  // Cheat sheet is currently null on the wire (ORPHEUS-59 dropped the
-  // requirement; ORPHEUS-60 will restore agent-side generation). Render
-  // a not-ready-yet surface so the route doesn't 500 in the meantime —
-  // Signal Score + Forward Brief still work without it.
+  // Cheat sheet is populated for every job generated after ORPHEUS-60
+  // (2026-06-04). Pre-ORPHEUS-60 complete jobs have no cheat_sheet
+  // narratives row and serialize null on the wire — those land here
+  // and we render the not-ready surface as a graceful fallback so the
+  // route doesn't 500 on legacy data. New jobs always carry content.
   if (!cheat_sheet) {
     return (
       <main className="main-interior">

@@ -34,18 +34,25 @@ from backend.models.quality import DataQualityReport, IssueSeverity
 class NarrativeResult(NamedTuple):
     """Structured return from the narrative agent.
 
-    Two payloads in one Claude call:
+    Three payloads in one Claude call:
       * sections — the 5 top-level narratives (4 dimensions + forward_brief),
         keyed by section identifier. Same shape `generate_narratives` has
         returned since the v2 pipeline shipped.
       * sub_dimensions — per-sub-dim narrative slots, keyed by
         `(dimension_name, sub_dim_name)` for direct merge into
         ScoringStageOutput.scored_dimensions before persisting (ORPHEUS-21).
-        Inner dict has 'summary' (always), 'best_practices' (scores 1–3),
-        'improvements' (scores 1–4, list[str]).
+        Inner dict has 'summary' (always), 'best_practices' (scores 0–3),
+        'improvements' (scores 0–4, list[str]). Score 0 takes the same
+        full-payload posture as score 1 per ORPHEUS-63.
+      * cheat_sheet — structured one-page reference card derived from the
+        Forward Brief (ORPHEUS-60). Dict with priorities (5) / rhythm (3) /
+        milestones (3–4). `None` when Claude omits the section entirely
+        (best-effort parse posture; the worker treats `None` as "skip the
+        narratives row" rather than failing the whole job).
     """
     sections: dict[str, str]
     sub_dimensions: dict[tuple[str, str], dict]
+    cheat_sheet: dict | None
 
 
 # ============================================================
@@ -221,6 +228,22 @@ Voice / directness / mechanics rules above apply uniformly to dimension narrativ
 
 The internal sub-dimension names (Headline Clarity, History Depth, Outbound Engagement Presence, etc.) are the canonical identifiers. Some are renamed at display time on the client surface — write against the internal names; the rename does not affect content.
 
+## Cheat Sheet
+
+In addition to the dimension narratives, Forward Brief, and sub-dimension slots above, you produce a structured **cheat sheet** — a printable one-page reference card derived from the Forward Brief. Client receives both: the Forward Brief is long-form prose; the Cheat Sheet is the same conclusions restructured for at-a-glance review. They are complementary, not redundant.
+
+The cheat sheet has three sections:
+
+**Priorities** — exactly 5 entries, ordered by leverage (highest-impact first). Each is a short imperative title (3–6 words, e.g., "Close the Consistency Gap") plus a 1-to-2-sentence action describing the specific move the client should make. If the action carries a measurable target, append a final sentence wrapping the target in `**bold**` markers (e.g., `**Target: 2 new recommendations in 30 days.**`). Plain text — no other markdown formatting in the action string.
+
+The 5 priorities should align with the Forward Brief's Priorities + Quick Wins subsections — they are the same observations rephrased for the cheat sheet's compressed form, not an independent synthesis. If the Forward Brief surfaces fewer than 5 distinct moves, derive the remaining priorities from the highest-leverage dimension narratives.
+
+**Rhythm** — exactly 3 cadence sections in order: "Every Day", "Every Week", "Every Month". Each carries 2–4 checklist items as short imperative sentences (under 12 words each). Items are concrete behaviors the client could do at that cadence, derived from the Quick Wins and ongoing-practice implications of the Forward Brief.
+
+**Milestones** — 3–4 entries representing 90-day quantitative targets. Each is a `value` (short, e.g., "12", "36+", "2") + `label` (e.g., "Weeks without a gap", "Posts published", "New recommendations"). Pick milestones that map to the highest-leverage priorities and the metrics surfaced in Reach / Resonance / Authority where possible.
+
+Voice / directness / mechanics rules apply uniformly to the cheat sheet — match the register of the dimension narratives. The cheat sheet is the only structured output beyond JSON keys, but its strings still read as natural prose.
+
 ## Using the intake questionnaire
 
 The questionnaire is a 9-question intake the client completes before the diagnostic. Use it to shape voice, framing, and emphasis — not to drive scoring (scores are final before you see them).
@@ -279,12 +302,33 @@ Return a JSON object with exactly this structure:
       "improvements": ["...", "..."]
     }},
     ...
-  ]
+  ],
+  "cheat_sheet": {{
+    "priorities": [
+      {{"title": "Close the Consistency Gap", "action": "..."}},
+      {{"title": "...", "action": "..."}},
+      {{"title": "...", "action": "..."}},
+      {{"title": "...", "action": "..."}},
+      {{"title": "...", "action": "..."}}
+    ],
+    "rhythm": [
+      {{"cadence": "Every Day",   "items": ["...", "..."]}},
+      {{"cadence": "Every Week",  "items": ["...", "..."]}},
+      {{"cadence": "Every Month", "items": ["...", "..."]}}
+    ],
+    "milestones": [
+      {{"value": "...", "label": "..."}},
+      {{"value": "...", "label": "..."}},
+      {{"value": "...", "label": "..."}}
+    ]
+  }}
 }}
 
 Each dimension narrative should be 150–300 words. The forward_brief should be 400–600 words and may use Markdown headers (## Reach, ## Resonance, ## Authority, ## Priorities, ## Quick Wins) to separate subsections.
 
-The sub_dimensions array must contain exactly 13 entries — one per sub-dimension across all four dimensions. The (dimension, sub_dimension) pair on each entry must exactly match the input sub-dimension names (case- and punctuation-exact). `summary` is required on every entry. `best_practices` is required on entries whose score is 0, 1, 2, or 3 — omit the key entirely on entries whose score is 4 or 5 (do not include it with empty string or null). `improvements` is required on entries whose score is 0, 1, 2, 3, or 4 — omit the key entirely on entries whose score is 5."""
+The sub_dimensions array must contain exactly 13 entries — one per sub-dimension across all four dimensions. The (dimension, sub_dimension) pair on each entry must exactly match the input sub-dimension names (case- and punctuation-exact). `summary` is required on every entry. `best_practices` is required on entries whose score is 0, 1, 2, or 3 — omit the key entirely on entries whose score is 4 or 5 (do not include it with empty string or null). `improvements` is required on entries whose score is 0, 1, 2, 3, or 4 — omit the key entirely on entries whose score is 5.
+
+The cheat_sheet object is required. priorities must contain exactly 5 entries. rhythm must contain exactly 3 entries with `cadence` values "Every Day", "Every Week", "Every Month" in that order. milestones must contain 3 or 4 entries. All string fields are non-empty."""
 
 
 # ============================================================
@@ -713,7 +757,13 @@ def _parse_narrative_response(
         data.get("sub_dimensions") or [], scoring_output
     )
 
-    return NarrativeResult(sections=sections, sub_dimensions=sub_dimensions)
+    cheat_sheet = _parse_cheat_sheet_payload(data.get("cheat_sheet"))
+
+    return NarrativeResult(
+        sections=sections,
+        sub_dimensions=sub_dimensions,
+        cheat_sheet=cheat_sheet,
+    )
 
 
 def _parse_sub_dimension_payload(
@@ -842,6 +892,129 @@ def _parse_sub_dimension_payload(
             )
 
     return result
+
+
+# Expected rhythm cadence labels in canonical order. Claude is instructed
+# to emit exactly these three; the parser enforces both presence and order
+# so the frontend layout (which renders left-to-right top-to-bottom) stays
+# stable across reports.
+_EXPECTED_CHEAT_SHEET_CADENCES = ("Every Day", "Every Week", "Every Month")
+
+
+def _parse_cheat_sheet_payload(raw: object) -> dict | None:
+    """Validate Claude's `cheat_sheet` object into a wire-shaped dict.
+
+    Best-effort posture for missing input — `None` propagates through so
+    legacy / partial fixtures don't break the parser. When the field IS
+    present, we validate the shape strictly: 5 priorities, 3 rhythm
+    sections in the canonical cadence order, 3–4 milestones, all string
+    fields non-empty.
+
+    Returns the structured dict on success or `None` if `raw` is missing
+    or `None`. Malformed payloads raise ValueError so the agent retries.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("cheat_sheet must be an object.")
+
+    # --- Priorities ---------------------------------------------------
+    priorities_raw = raw.get("priorities")
+    if not isinstance(priorities_raw, list) or len(priorities_raw) != 5:
+        raise ValueError(
+            f"cheat_sheet.priorities must be a list of exactly 5 entries "
+            f"(got {type(priorities_raw).__name__} of length "
+            f"{len(priorities_raw) if isinstance(priorities_raw, list) else 'n/a'})."
+        )
+    priorities: list[dict] = []
+    for idx, entry in enumerate(priorities_raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"cheat_sheet.priorities[{idx}] must be an object."
+            )
+        title = entry.get("title")
+        action = entry.get("action")
+        if not isinstance(title, str) or not title.strip():
+            raise ValueError(
+                f"cheat_sheet.priorities[{idx}].title is required."
+            )
+        if not isinstance(action, str) or not action.strip():
+            raise ValueError(
+                f"cheat_sheet.priorities[{idx}].action is required."
+            )
+        priorities.append({"title": title.strip(), "action": action.strip()})
+
+    # --- Rhythm -------------------------------------------------------
+    rhythm_raw = raw.get("rhythm")
+    if (
+        not isinstance(rhythm_raw, list)
+        or len(rhythm_raw) != len(_EXPECTED_CHEAT_SHEET_CADENCES)
+    ):
+        raise ValueError(
+            f"cheat_sheet.rhythm must be a list of "
+            f"{len(_EXPECTED_CHEAT_SHEET_CADENCES)} entries."
+        )
+    rhythm: list[dict] = []
+    for idx, (entry, expected_cadence) in enumerate(
+        zip(rhythm_raw, _EXPECTED_CHEAT_SHEET_CADENCES)
+    ):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"cheat_sheet.rhythm[{idx}] must be an object."
+            )
+        cadence = entry.get("cadence")
+        if cadence != expected_cadence:
+            raise ValueError(
+                f"cheat_sheet.rhythm[{idx}].cadence must be "
+                f"{expected_cadence!r} (got {cadence!r})."
+            )
+        items_raw = entry.get("items")
+        if not isinstance(items_raw, list) or not items_raw:
+            raise ValueError(
+                f"cheat_sheet.rhythm[{idx}].items must be a non-empty list."
+            )
+        items: list[str] = []
+        for j, item in enumerate(items_raw):
+            if not isinstance(item, str) or not item.strip():
+                raise ValueError(
+                    f"cheat_sheet.rhythm[{idx}].items[{j}] must be a "
+                    "non-empty string."
+                )
+            items.append(item.strip())
+        rhythm.append({"cadence": cadence, "items": items})
+
+    # --- Milestones ---------------------------------------------------
+    milestones_raw = raw.get("milestones")
+    if (
+        not isinstance(milestones_raw, list)
+        or not (3 <= len(milestones_raw) <= 4)
+    ):
+        raise ValueError(
+            "cheat_sheet.milestones must be a list of 3 or 4 entries."
+        )
+    milestones: list[dict] = []
+    for idx, entry in enumerate(milestones_raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"cheat_sheet.milestones[{idx}] must be an object."
+            )
+        value = entry.get("value")
+        label = entry.get("label")
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(
+                f"cheat_sheet.milestones[{idx}].value is required."
+            )
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError(
+                f"cheat_sheet.milestones[{idx}].label is required."
+            )
+        milestones.append({"value": value.strip(), "label": label.strip()})
+
+    return {
+        "priorities": priorities,
+        "rhythm": rhythm,
+        "milestones": milestones,
+    }
 
 
 # ============================================================

@@ -169,10 +169,13 @@ export interface Narratives {
   forward_brief: string
   /**
    * Structured cheat sheet — printable one-page reference derived from
-   * the Forward Brief. Currently null on the wire (ORPHEUS-59); the
-   * narrative agent doesn't emit it yet. ORPHEUS-60 tracks restoring
-   * generation. CheatSheetPage renders a not-ready-yet surface while
-   * this is null.
+   * the Forward Brief. Populated by the narrative agent as of
+   * ORPHEUS-60 (2026-06-04). The `| null` union persists because legacy
+   * complete jobs from before ORPHEUS-60 have no `cheat_sheet`
+   * narratives row, so their wire payload still serializes null; on
+   * those jobs CheatSheetPage's null-state branch renders the
+   * not-ready surface as a graceful fallback. New jobs always carry a
+   * populated cheat_sheet.
    */
   cheat_sheet: CheatSheetContent | null
 }

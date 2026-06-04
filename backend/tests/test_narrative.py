@@ -180,6 +180,10 @@ class TestParseResponse:
         # No scoring_output passed → sub_dimensions parsed best-effort; the
         # legacy fixture doesn't include the array, so result is empty here.
         assert result.sub_dimensions == {}
+        # Same best-effort posture for cheat_sheet (ORPHEUS-60): the legacy
+        # fixture omits it, parser returns None rather than raising so
+        # pre-60 callers still work.
+        assert result.cheat_sheet is None
 
     def test_with_code_fences(self):
         raw = "```json\n" + _make_valid_response() + "\n```"
@@ -741,11 +745,55 @@ def _valid_sub_dim_payload() -> list[dict]:
     ]
 
 
-def _full_response_with_sub_dims(sub_dim_payload: list[dict] | None = None) -> str:
-    """Build a complete 5-section + sub-dim response JSON."""
+def _valid_cheat_sheet_payload() -> dict:
+    """Minimal well-shaped cheat_sheet matching the ORPHEUS-60 wire contract.
+
+    5 priorities, 3 cadence sections in canonical order, 3 milestones.
+    Values are placeholder strings — the parser only validates shape and
+    presence, not content.
+    """
+    return {
+        "priorities": [
+            {"title": f"Priority {i + 1}", "action": f"Action step {i + 1}."}
+            for i in range(5)
+        ],
+        "rhythm": [
+            {
+                "cadence": "Every Day",
+                "items": ["Do daily thing one.", "Do daily thing two."],
+            },
+            {
+                "cadence": "Every Week",
+                "items": ["Do weekly thing one.", "Do weekly thing two."],
+            },
+            {
+                "cadence": "Every Month",
+                "items": ["Do monthly thing one."],
+            },
+        ],
+        "milestones": [
+            {"value": "10", "label": "Posts published"},
+            {"value": "3", "label": "New recommendations"},
+            {"value": "12", "label": "Weeks consistent"},
+        ],
+    }
+
+
+def _full_response_with_sub_dims(
+    sub_dim_payload: list[dict] | None = None,
+    cheat_sheet: dict | None = None,
+) -> str:
+    """Build a complete 5-section + sub-dim response JSON.
+
+    The cheat_sheet object is included only when explicitly passed —
+    matches the parser's best-effort posture so existing
+    sub-dim-focused tests don't change behavior. Cheat-sheet-specific
+    tests pass `cheat_sheet=_valid_cheat_sheet_payload()` (or a
+    deliberately-malformed dict for negative cases).
+    """
     if sub_dim_payload is None:
         sub_dim_payload = _valid_sub_dim_payload()
-    return json.dumps({
+    body: dict = {
         "sections": [
             {"section": "Profile Signal Clarity", "narrative": "Profile narrative. " * 10},
             {"section": "Behavioral Signal Strength", "narrative": "Strength narrative. " * 10},
@@ -754,7 +802,10 @@ def _full_response_with_sub_dims(sub_dim_payload: list[dict] | None = None) -> s
             {"section": "forward_brief", "narrative": "## Reach\nForward brief. " * 20},
         ],
         "sub_dimensions": sub_dim_payload,
-    })
+    }
+    if cheat_sheet is not None:
+        body["cheat_sheet"] = cheat_sheet
+    return json.dumps(body)
 
 
 class TestParseSubDimensions:
@@ -1100,6 +1151,156 @@ class TestParseSubDimensionsScoreZero:
                 assert "improvements" in entry, (
                     f"score-0 {key} missing improvements"
                 )
+
+
+# ============================================================
+# Test: Cheat sheet parsing (ORPHEUS-60)
+# ============================================================
+
+
+class TestParseCheatSheet:
+    """ORPHEUS-60 added a structured cheat_sheet payload to the agent's
+    response. Parser validates shape strictly when present, returns None
+    when absent (best-effort posture mirrors sub_dimensions).
+    """
+
+    def test_valid_cheat_sheet_parses_to_dict(self):
+        output = _make_scoring_output()
+        raw = _full_response_with_sub_dims(
+            cheat_sheet=_valid_cheat_sheet_payload()
+        )
+        result = _parse_narrative_response(raw, output)
+        assert result.cheat_sheet is not None
+        assert len(result.cheat_sheet["priorities"]) == 5
+        assert [
+            p["title"] for p in result.cheat_sheet["priorities"]
+        ] == [f"Priority {i + 1}" for i in range(5)]
+        assert [
+            r["cadence"] for r in result.cheat_sheet["rhythm"]
+        ] == ["Every Day", "Every Week", "Every Month"]
+        assert len(result.cheat_sheet["milestones"]) == 3
+
+    def test_missing_cheat_sheet_returns_none(self):
+        """Best-effort: an agent response that omits cheat_sheet still
+        parses (legacy / partial fixture path). Wire surfaces null;
+        CheatSheetPage falls back to the not-ready surface.
+        """
+        output = _make_scoring_output()
+        raw = _full_response_with_sub_dims()  # no cheat_sheet kwarg
+        result = _parse_narrative_response(raw, output)
+        assert result.cheat_sheet is None
+
+    def test_priorities_wrong_count_raises(self):
+        output = _make_scoring_output()
+        cs = _valid_cheat_sheet_payload()
+        cs["priorities"] = cs["priorities"][:4]  # only 4
+        with pytest.raises(
+            ValueError, match="priorities must be a list of exactly 5"
+        ):
+            _parse_narrative_response(
+                _full_response_with_sub_dims(cheat_sheet=cs), output
+            )
+
+    def test_priority_missing_title_raises(self):
+        output = _make_scoring_output()
+        cs = _valid_cheat_sheet_payload()
+        del cs["priorities"][0]["title"]
+        with pytest.raises(
+            ValueError, match=r"priorities\[0\]\.title is required"
+        ):
+            _parse_narrative_response(
+                _full_response_with_sub_dims(cheat_sheet=cs), output
+            )
+
+    def test_priority_empty_action_raises(self):
+        output = _make_scoring_output()
+        cs = _valid_cheat_sheet_payload()
+        cs["priorities"][2]["action"] = "   "
+        with pytest.raises(
+            ValueError, match=r"priorities\[2\]\.action is required"
+        ):
+            _parse_narrative_response(
+                _full_response_with_sub_dims(cheat_sheet=cs), output
+            )
+
+    def test_rhythm_wrong_count_raises(self):
+        output = _make_scoring_output()
+        cs = _valid_cheat_sheet_payload()
+        cs["rhythm"] = cs["rhythm"][:2]
+        with pytest.raises(
+            ValueError, match="rhythm must be a list of 3 entries"
+        ):
+            _parse_narrative_response(
+                _full_response_with_sub_dims(cheat_sheet=cs), output
+            )
+
+    def test_rhythm_wrong_cadence_label_raises(self):
+        output = _make_scoring_output()
+        cs = _valid_cheat_sheet_payload()
+        cs["rhythm"][1]["cadence"] = "Weekly"  # should be 'Every Week'
+        with pytest.raises(
+            ValueError, match=r"rhythm\[1\]\.cadence must be 'Every Week'"
+        ):
+            _parse_narrative_response(
+                _full_response_with_sub_dims(cheat_sheet=cs), output
+            )
+
+    def test_rhythm_empty_items_raises(self):
+        output = _make_scoring_output()
+        cs = _valid_cheat_sheet_payload()
+        cs["rhythm"][0]["items"] = []
+        with pytest.raises(
+            ValueError, match=r"rhythm\[0\]\.items must be a non-empty list"
+        ):
+            _parse_narrative_response(
+                _full_response_with_sub_dims(cheat_sheet=cs), output
+            )
+
+    def test_milestones_too_few_raises(self):
+        output = _make_scoring_output()
+        cs = _valid_cheat_sheet_payload()
+        cs["milestones"] = cs["milestones"][:2]
+        with pytest.raises(
+            ValueError, match="milestones must be a list of 3 or 4"
+        ):
+            _parse_narrative_response(
+                _full_response_with_sub_dims(cheat_sheet=cs), output
+            )
+
+    def test_milestones_too_many_raises(self):
+        output = _make_scoring_output()
+        cs = _valid_cheat_sheet_payload()
+        cs["milestones"] = cs["milestones"] + [
+            {"value": "1", "label": "Extra one"},
+            {"value": "2", "label": "Extra two"},
+        ]
+        with pytest.raises(
+            ValueError, match="milestones must be a list of 3 or 4"
+        ):
+            _parse_narrative_response(
+                _full_response_with_sub_dims(cheat_sheet=cs), output
+            )
+
+    def test_milestones_four_entries_accepted(self):
+        """Spec allows 3–4 entries; the 4-entry case should parse cleanly."""
+        output = _make_scoring_output()
+        cs = _valid_cheat_sheet_payload()
+        cs["milestones"] = cs["milestones"] + [
+            {"value": "1", "label": "Fourth milestone"},
+        ]
+        result = _parse_narrative_response(
+            _full_response_with_sub_dims(cheat_sheet=cs), output
+        )
+        assert result.cheat_sheet is not None
+        assert len(result.cheat_sheet["milestones"]) == 4
+
+    def test_non_dict_cheat_sheet_raises(self):
+        output = _make_scoring_output()
+        with pytest.raises(ValueError, match="cheat_sheet must be an object"):
+            _parse_narrative_response(
+                _full_response_with_sub_dims(cheat_sheet=["not", "a", "dict"]),  # type: ignore[arg-type]
+                output,
+            )
 
 
 if __name__ == "__main__":

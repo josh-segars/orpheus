@@ -241,7 +241,7 @@ async def stage_narrative_generation(
     supabase,
     is_advisory: bool = True,
 ) -> NarrativeResult:
-    """Stage 4: Claude generates dimension narratives + Forward Brief + per-sub-dim slots.
+    """Stage 4: Claude generates dimension narratives + Forward Brief + per-sub-dim slots + cheat sheet.
 
     The five top-level sections (4 dim narratives + forward_brief) are saved
     as rows in the `narratives` table — that's the admin-editable surface.
@@ -249,6 +249,15 @@ async def stage_narrative_generation(
     so the caller can merge them into `scored_dimensions` and persist via
     the `scores` row update — they ride the `dimensions` JSONB rather than
     getting their own table rows because they aren't admin-editable in v1.
+
+    The cheat_sheet (ORPHEUS-60) is persisted as an additional narratives
+    row with section='cheat_sheet' and `generated_text` holding the
+    JSON-encoded payload — same table as the 5 main sections so existing
+    indexes + RLS apply, but `_build_result_payload` knows to deserialize
+    it back to structured JSON on the wire. Admin editing of cheat_sheet
+    via /admin is out of scope for v1 (raw JSON in a textarea is not a
+    useful surface); the existing `/admin/narratives/{id}` endpoint will
+    happily list the row but the editor UX is for the 5 main sections.
 
     Advisory clients get status='draft'; self-serve get status='published'.
     Quality report is passed so Claude can acknowledge data limitations.
@@ -282,9 +291,31 @@ async def stage_narrative_generation(
 
         supabase.table("narratives").insert(row).execute()
 
+    # ORPHEUS-60: persist the structured cheat sheet as a sibling row so
+    # the existing narratives index + ON DELETE CASCADE on job_id apply.
+    # `generated_text` is NOT NULL on this table; we JSON-encode the dict
+    # there and let `_build_result_payload` deserialize on read. None
+    # propagates through (best-effort parser) so a Claude omission
+    # doesn't fail the whole job — CheatSheetPage already has a
+    # not-ready-yet surface for the missing-row case.
+    cheat_sheet_persisted = False
+    if narrative_result.cheat_sheet is not None:
+        row = {
+            "job_id": job_id,
+            "section": "cheat_sheet",
+            "generated_text": json.dumps(narrative_result.cheat_sheet),
+            "status": status,
+            "generated_at": now,
+        }
+        if status == "published":
+            row["published_at"] = now
+        supabase.table("narratives").insert(row).execute()
+        cheat_sheet_persisted = True
+
     logger.info(
         f"[{job_id}] Generated {len(narrative_result.sections)} narrative sections "
         f"+ {len(narrative_result.sub_dimensions)} sub-dim payloads "
+        f"+ cheat_sheet={'yes' if cheat_sheet_persisted else 'no'} "
         f"(status={status})"
     )
     return narrative_result
