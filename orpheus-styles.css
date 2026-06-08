@@ -324,7 +324,7 @@ body {
 }
 .footer-links {
   display: flex;
-  gap: 30px;
+  gap: 24px;  /* ORPHEUS-70 */
   font-family: 'Source Sans 3', sans-serif;
   font-size: 16px;
   font-weight: 400;
