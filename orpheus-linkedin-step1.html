@@ -16,21 +16,29 @@
       <span class="wordmark-orpheus">Orpheus</span>
       <span class="wordmark-social">Social</span>
     </div>
-    <div class="nav-client">
-      <span class="nav-client-text" aria-label="Prepared for Jane Doe">
-        <span class="nav-client-label">Prepared for</span>
-        <span class="nav-client-name">Jane Doe</span>
-      </span>
-      <span class="nav-client-avatar" aria-hidden="true">
-        <span class="nav-client-initials">JD</span>
-      </span>
-      <button type="button" class="nav-logout-button" aria-label="Sign out" title="Sign out">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-          <polyline points="16 17 21 12 16 7"/>
-          <line x1="21" y1="12" x2="9" y2="12"/>
-        </svg>
-      </button>
+    <!-- Account cluster + dropdown (ORPHEUS-71). JS-free disclosure:
+         the hidden checkbox toggles the menu via the shared stylesheet's
+         .nav-account-toggle:not(:checked) ~ .nav-account-menu rule. The
+         React app (PortalNav) renders the same markup with real click /
+         outside-click / Escape behaviour. -->
+    <div class="nav-account">
+      <input type="checkbox" id="account-menu-toggle" class="nav-account-toggle" aria-hidden="true" tabindex="-1">
+      <label for="account-menu-toggle" class="nav-account-trigger">
+        <span class="nav-client-text">
+          <span class="nav-client-label">Logged in as</span>
+          <span class="nav-client-name">Jane Doe</span>
+        </span>
+        <span class="nav-client-avatar" aria-hidden="true">
+          <span class="nav-client-initials">JD</span>
+        </span>
+      </label>
+      <div class="nav-account-menu" role="menu" aria-label="Account menu">
+        <a href="#" class="nav-account-item" role="menuitem">View My Reports</a>
+        <a href="#" class="nav-account-item" role="menuitem">Manage My Account</a>
+        <a href="#" class="nav-account-item" role="menuitem">Log Out</a>
+        <div class="nav-account-divider" role="separator"></div>
+        <a href="#" class="nav-account-item" role="menuitem">View Clients</a>
+      </div>
     </div>
   </nav>
 
