@@ -1,8 +1,7 @@
-import { useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 
-import { useAdvisorClients } from '../../hooks/useAdvisorClients'
-import { useJob } from '../../hooks/useJob'
+import { isAdminEmail } from '../../hooks/useAdmin'
 import { useSessionRoles } from '../../hooks/useSessionRoles'
 import { signOut, useSession } from '../../lib/auth'
 
@@ -14,101 +13,97 @@ interface LinkedInUserMetadata {
 }
 
 /**
- * Top-of-portal nav. Renders an app-wide identity cluster on the right:
+ * Top-of-portal nav. Renders an app-wide identity cluster on the right
+ * that doubles as the trigger for an account dropdown (ORPHEUS-71):
  *
- *   PREPARED FOR
- *   <Report subject's display name>           [avatar] [logout icon]
+ *   LOGGED IN AS
+ *   <Signed-in user's own name>               [avatar]   ▸ (click to open)
  *
- * Name source (ORPHEUS-52):
+ * Identity reframe (ORPHEUS-71): the eyebrow is "Logged in as" + the
+ * signed-in user's OWN name on every surface — no longer the report
+ * subject. The report subject's name moved into the Signal Score hero.
+ * This resolves the ORPHEUS-52 cross-surface oddity where "Prepared
+ * for [own name]" read strangely on /advisor/clients and /admin, and
+ * removes the per-route useJob / useAdvisorClients name resolution the
+ * nav used to do.
  *
- *   - Pure client on their own report     → their own LinkedIn `name`.
- *   - Advisor viewing a client's job      → that client's display_name,
- *                                            sourced from the advisor's
- *                                            GET /clients roster.
- *   - Dual-role advisor on self-report    → their own LinkedIn `name`
- *                                            (the matched client row has
- *                                            `is_self: true`).
- *   - Routes without `:jobId` (Welcome,   → the signed-in user's own
- *     Groundwork, /advisor/clients, etc.)   name. There is no "report
- *                                            subject" on those surfaces;
- *                                            self-attribution is the
- *                                            sensible default.
+ * The dropdown consolidates what used to be three separate nav affordances:
+ *   - Log Out (was the dedicated .nav-logout-button icon, ORPHEUS-52)
+ *   - View Clients (was the .nav-role-tabs toggle, ORPHEUS-39)
+ *   - View My Reports + Manage My Account (new)
  *
- * The avatar stays from the prior dropdown implementation but the
- * dropdown menu itself is gone — sign-out is now a dedicated icon
- * button to the right of the avatar.
+ * Items are role-conditional:
+ *   - View My Reports → "/" (the SmartIndexRedirect routes a client or
+ *     dual-role user to their own latest report). Client/dual-role only.
+ *   - Manage My Account → /account placeholder (ORPHEUS-42 deferred).
+ *     All roles.
+ *   - Log Out → signOut(). All roles.
+ *   - View Clients → /advisor/clients. Advisor / dual-role only.
+ *   - Admin → /admin. Admin-allowlisted emails only.
+ *
+ * Interaction: click-to-open, close on outside-click + Escape, focus
+ * returns to the trigger on Escape.
  */
 export function PortalNav() {
   const { session } = useSession()
   const sessionRolesQuery = useSessionRoles()
   const navigate = useNavigate()
-  const location = useLocation()
-  const params = useParams()
+  const [open, setOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
 
-  // Role flags drive the new (ORPHEUS-39) middle-of-nav tab toggle.
-  // Both can be true (Andrew, dual-role) or just one (pure advisor,
-  // pure client). The toggle only renders for advisors — clients
-  // never need to switch surfaces.
   const roles = sessionRolesQuery.data
   const isAdvisor = Boolean(roles?.advisor_id)
   const isClient = Boolean(roles?.client_id)
-  const onAdvisorSurface = location.pathname.startsWith('/advisor/')
 
-  // Session-user-derived bits — the fallback for every name-source
-  // branch below.
   const meta = (session?.user?.user_metadata ?? {}) as LinkedInUserMetadata
   const email = session?.user?.email ?? ''
-  const sessionDisplayName = pickDisplayName(meta, email)
+  const displayName = pickDisplayName(meta, email)
   const initials = pickInitials(meta, email)
   const picture = meta.picture
+  const isAdmin = isAdminEmail(email)
 
-  // Look up the job's client_id when the current route carries one.
-  // `useJob` is gated on `jobId` being truthy so this is a no-op on
-  // routes like /welcome or /advisor/clients.
-  const jobId = params.jobId
-  const jobQuery = useJob(jobId)
-  const jobClientId = jobQuery.data?.client_id ?? null
+  // Whether the privileged section (View Clients / Admin) renders at all.
+  // Drives the divider so it never floats above an empty section.
+  const hasPrivilegedSection = isAdvisor || isAdmin
 
-  // Advisor's roster — only fires for advisors (the hook gates on
-  // isAdvisor internally). Used to resolve a job's client_id to a
-  // human display_name, and to detect the dual-role "viewing my own
-  // self-report" case via the matched row's `is_self` flag.
-  const advisorClientsQuery = useAdvisorClients()
-  const matchedAdvisorClient =
-    isAdvisor && jobClientId
-      ? advisorClientsQuery.data?.clients.find((c) => c.id === jobClientId)
-      : undefined
+  // Close on outside-click and Escape while the menu is open.
+  useEffect(() => {
+    if (!open) return
 
-  // Subject name = whose report this is. Decision tree:
-  //
-  //   1. Route has no jobId          → session user.
-  //   2. Caller is not an advisor    → must be their own job (the
-  //                                     /jobs/:id endpoint already
-  //                                     enforces ownership), so session
-  //                                     user.
-  //   3. Caller is an advisor and    → advisor's own name (dual-role
-  //      the matched client is_self    on self-report).
-  //   4. Caller is an advisor and    → client's display_name from the
-  //      the matched client is NOT     advisor roster.
-  //      self
-  //
-  // While the advisor's roster or the job is still loading we fall
-  // through to `sessionDisplayName` as a transient placeholder. The
-  // alternative (rendering nothing) caused a layout shift on first
-  // paint for advisors landing directly on /jobs/:id.
-  let subjectDisplayName = sessionDisplayName
-  if (jobId && isAdvisor && matchedAdvisorClient && !matchedAdvisorClient.is_self) {
-    subjectDisplayName = matchedAdvisorClient.display_name
-  }
+    function handlePointerDown(event: MouseEvent) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setOpen(false)
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpen(false)
+        triggerRef.current?.focus()
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [open])
 
   const handleSignOut = async () => {
     setSigningOut(true)
+    setOpen(false)
     try {
       await signOut()
     } finally {
-      // useSession will react to SIGNED_OUT, but we navigate explicitly so
-      // the user lands on /login instead of waiting for the next render.
+      // useSession reacts to SIGNED_OUT, but navigate explicitly so the
+      // user lands on /login without waiting for the next render.
       navigate('/login', { replace: true })
     }
   }
@@ -119,112 +114,87 @@ export function PortalNav() {
         <span className="wordmark-orpheus">Orpheus</span>
         <span className="wordmark-social">Social</span>
       </div>
-      {/*
-        Role-aware middle nav (ORPHEUS-39).
-        - Dual-role users (advisor + client, e.g. Andrew): two-tab
-          toggle between Manage clients and My report. Active tab
-          tracks the current pathname.
-        - Advisor-only users: a single "Manage clients" pill — no
-          toggle, just an active label. There's nowhere else to go
-          and showing a disabled "My report" tab would mislead.
-        - Client-only users: nothing rendered, current behaviour
-          preserved.
-      */}
-      {isAdvisor && isClient && (
-        <div className="nav-role-tabs" role="tablist" aria-label="Portal surface">
-          <Link
-            to="/advisor/clients"
-            role="tab"
-            aria-selected={onAdvisorSurface}
-            className={
-              onAdvisorSurface
-                ? 'nav-role-tab nav-role-tab-active'
-                : 'nav-role-tab'
-            }
-          >
-            Manage clients
-          </Link>
-          <Link
-            to="/"
-            role="tab"
-            aria-selected={!onAdvisorSurface}
-            className={
-              onAdvisorSurface
-                ? 'nav-role-tab'
-                : 'nav-role-tab nav-role-tab-active'
-            }
-          >
-            My report
-          </Link>
-        </div>
-      )}
-      {isAdvisor && !isClient && !onAdvisorSurface && (
-        // Advisor-only users on a non-/advisor route (e.g. /admin) need a
-        // way back to their clients list. The pre-ORPHEUS-56 markup
-        // rendered a non-clickable span here, which left them stuck
-        // typing the URL by hand. Per the ticket's option (b) we hide
-        // the pill entirely on /advisor/clients itself (current-page is
-        // redundant) and render a real Link elsewhere.
-        <div className="nav-role-tabs">
-          <Link to="/advisor/clients" className="nav-role-tab">
-            Manage clients
-          </Link>
-        </div>
-      )}
-      <div className="nav-client">
-        <span
-          className="nav-client-text"
-          aria-label={`Prepared for ${subjectDisplayName}`}
-        >
-          <span className="nav-client-label">Prepared for</span>
-          <span className="nav-client-name">{subjectDisplayName}</span>
-        </span>
-        <span className="nav-client-avatar" aria-hidden="true">
-          {picture ? (
-            <img src={picture} alt="" referrerPolicy="no-referrer" />
-          ) : (
-            <span className="nav-client-initials">{initials}</span>
-          )}
-        </span>
+
+      <div className="nav-account" ref={containerRef}>
         <button
           type="button"
-          className="nav-logout-button"
-          onClick={handleSignOut}
-          disabled={signingOut}
-          aria-label="Sign out"
-          title="Sign out"
+          ref={triggerRef}
+          className="nav-account-trigger"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label={`Account menu for ${displayName}`}
+          onClick={() => setOpen((prev) => !prev)}
         >
-          <LogoutIcon />
+          <span className="nav-client-text">
+            <span className="nav-client-label">Logged in as</span>
+            <span className="nav-client-name">{displayName}</span>
+          </span>
+          <span className="nav-client-avatar" aria-hidden="true">
+            {picture ? (
+              <img src={picture} alt="" referrerPolicy="no-referrer" />
+            ) : (
+              <span className="nav-client-initials">{initials}</span>
+            )}
+          </span>
         </button>
+
+        {open && (
+          <div className="nav-account-menu" role="menu" aria-label="Account menu">
+            {isClient && (
+              <Link
+                to="/"
+                role="menuitem"
+                className="nav-account-item"
+                onClick={() => setOpen(false)}
+              >
+                View My Reports
+              </Link>
+            )}
+            <Link
+              to="/account"
+              role="menuitem"
+              className="nav-account-item"
+              onClick={() => setOpen(false)}
+            >
+              Manage My Account
+            </Link>
+            <button
+              type="button"
+              role="menuitem"
+              className="nav-account-item"
+              onClick={handleSignOut}
+              disabled={signingOut}
+            >
+              Log Out
+            </button>
+
+            {hasPrivilegedSection && (
+              <div className="nav-account-divider" role="separator" />
+            )}
+            {isAdvisor && (
+              <Link
+                to="/advisor/clients"
+                role="menuitem"
+                className="nav-account-item"
+                onClick={() => setOpen(false)}
+              >
+                View Clients
+              </Link>
+            )}
+            {isAdmin && (
+              <Link
+                to="/admin"
+                role="menuitem"
+                className="nav-account-item"
+                onClick={() => setOpen(false)}
+              >
+                Admin
+              </Link>
+            )}
+          </div>
+        )}
       </div>
     </nav>
-  )
-}
-
-/**
- * 24×24 logout glyph — door + arrow exiting to the right. Inline SVG
- * avoids the need to add an icon library (lucide-react etc.) for a
- * single occurrence; the existing nav SVGs in this app are all inline
- * for the same reason.
- */
-function LogoutIcon() {
-  return (
-    <svg
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-      <polyline points="16 17 21 12 16 7" />
-      <line x1="21" y1="12" x2="9" y2="12" />
-    </svg>
   )
 }
 

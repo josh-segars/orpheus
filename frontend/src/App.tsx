@@ -7,6 +7,7 @@ import { useGroundworkProgress } from './hooks/useGroundworkProgress'
 import { useSessionRoles } from './hooks/useSessionRoles'
 import { useSession } from './lib/auth'
 import { hasSeenWelcome } from './lib/welcomeFlag'
+import { AccountPage } from './pages/AccountPage'
 import { AdminPage } from './pages/AdminPage'
 import { AnalysisPage } from './pages/AnalysisPage'
 import { CheatSheetPage } from './pages/CheatSheetPage'
@@ -78,6 +79,13 @@ export default function App() {
         <Route path="/linkedin/step1" element={<LinkedInStep1Page />} />
         <Route path="/linkedin/step2" element={<LinkedInStep2Page />} />
         <Route path="/questionnaire" element={<QuestionnairePage />} />
+        {/*
+          Account management placeholder (ORPHEUS-71). Target of the
+          nav dropdown's "Manage My Account". The real surface is
+          ORPHEUS-42 (beta-deferred); this stub exists so the route is
+          live and discoverable. Available to any authenticated role.
+        */}
+        <Route path="/account" element={<AccountPage />} />
         <Route path="/jobs/:jobId/analysis" element={<AnalysisPage />} />
         <Route path="/jobs/:jobId" element={<SignalScorePage />} />
         <Route path="/jobs/:jobId/forward-brief" element={<ForwardBriefPage />} />

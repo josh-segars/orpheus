@@ -135,16 +135,30 @@ body {
   white-space: nowrap;
 }
 
-/* Identity cluster (ORPHEUS-52). Horizontal row of:
-   text block (PREPARED FOR eyebrow + subject name) → avatar → logout
-   icon button. The cluster appears on every authenticated route; the
-   text block's contents change based on whether the route carries a
-   :jobId and what the caller's role is (see PortalNav). */
-.nav-client {
+/* Account cluster + dropdown (ORPHEUS-71). The identity cluster
+   (eyebrow + name + avatar) is the trigger; the menu opens beneath it.
+   Replaces the ORPHEUS-52 cluster + standalone logout icon and the
+   ORPHEUS-39 role-tab toggle, both folded into the dropdown. The
+   eyebrow now reads "Logged in as" + the signed-in user's own name on
+   every route (PortalNav). */
+.nav-account {
+  position: relative;
+}
+
+.nav-account-trigger {
   display: flex;
   flex-direction: row;
   align-items: center;
   gap: 14px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 10px;
+}
+.nav-account-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 
 .nav-client-text {
@@ -158,11 +172,10 @@ body {
 .nav-client-label {
   font-family: 'Source Sans 3', sans-serif;
   font-weight: 400;
-  /* Eyebrow uses --text-muted per ORPHEUS-52 design; the prior
-     "Confidential Portal for" label used the accent green, but
-     the new "PREPARED FOR" eyebrow reads as quieter framing,
-     not a brand accent. */
-  color: var(--text-muted);
+  /* "LOGGED IN AS" eyebrow takes the accent green per the ORPHEUS-71
+     Figma dropdown (node 190:44) — reverses the muted-grey treatment
+     ORPHEUS-52 used for the "PREPARED FOR" eyebrow. */
+  color: var(--accent);
   line-height: normal;
   margin-bottom: -10px;
   letter-spacing: 0.5px;
@@ -209,75 +222,71 @@ body {
   color: var(--text-strong);
 }
 
-/* Logout icon button — 24×24, sits to the right of the avatar in the
-   identity cluster (ORPHEUS-52). Replaces the prior dropdown trigger;
-   sign-out is a one-click action now, not a menu item. */
-.nav-logout-button {
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+/* Account dropdown menu (ORPHEUS-71). Anchored under the identity
+   cluster trigger. Per the Figma (node 190:44): container background
+   #364048 (the --border token value), 20px radius, near-black
+   (#00080e / --bg-page) dividers; items are 12px uppercase Source
+   Sans 3, 0.5px tracking, right-aligned white. Replaces the retired
+   .nav-logout-button and .nav-role-tab* rules. */
+.nav-account-menu {
+  position: absolute;
+  top: calc(100% + 16px);
+  right: 0;
+  z-index: 50;
+  min-width: 232px;
+  display: flex;
+  flex-direction: column;
+  background: var(--border);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 12px 32px var(--shadow-dark);
+}
+
+.nav-account-item {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-strong);
+  text-align: right;
+  text-decoration: none;
   background: transparent;
   border: none;
-  border-radius: 6px;
-  color: var(--text-muted);
+  padding: 16px 24px;
   cursor: pointer;
-  transition: color 0.15s ease, background-color 0.15s ease;
+  transition: background-color 0.15s ease;
 }
-.nav-logout-button:hover:not(:disabled),
-.nav-logout-button:focus-visible {
-  color: var(--text-strong);
-  background-color: var(--accent-tint-soft);
+.nav-account-item:hover:not(:disabled),
+.nav-account-item:focus-visible {
+  background-color: rgba(0, 0, 0, 0.18);
   outline: none;
 }
-.nav-logout-button:disabled {
+.nav-account-item:disabled {
   opacity: 0.6;
   cursor: progress;
 }
-.nav-logout-button svg {
-  width: 100%;
-  height: 100%;
-  display: block;
+
+.nav-account-divider {
+  height: 1px;
+  background: var(--bg-page);
+  border: none;
 }
 
-/* ── Role tabs (advisor / dual-role middle nav, ORPHEUS-39) ──── */
-.nav-role-tabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px;
-  background: var(--surface-elevated);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+/* Prototype-only CSS-only disclosure. The React app renders the menu
+   conditionally (element absent when closed), so the default
+   display:flex above is correct there. The JS-free prototype keeps the
+   menu in the DOM and toggles it with a hidden checkbox + label; this
+   rule hides it until the toggle is checked. The selector only matches
+   when a .nav-account-toggle sibling exists, so it never affects the
+   React markup. */
+.nav-account-toggle {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
 }
-
-.nav-role-tab {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 14px;
-  border-radius: 10px;
-  font-family: 'Source Sans 3', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  color: var(--text-muted);
-  text-decoration: none;
-  transition: background 120ms ease, color 120ms ease;
-}
-
-.nav-role-tab:hover {
-  color: var(--text-strong);
-}
-
-.nav-role-tab-active {
-  background: var(--primary);
-  color: var(--text-strong);
-}
-
-.nav-role-tab-active:hover {
-  color: var(--text-strong);
+.nav-account-toggle:not(:checked) ~ .nav-account-menu {
+  display: none;
 }
 
 /* ── Footer ─────────────────────────────────────────────────── */

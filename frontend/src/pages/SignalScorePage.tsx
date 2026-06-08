@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { useAdvisorClients } from '../hooks/useAdvisorClients'
 import { useJob } from '../hooks/useJob'
+import { useSessionRoles } from '../hooks/useSessionRoles'
 import type {
   DimensionScore,
   SignalBand,
@@ -26,6 +28,17 @@ import './SignalScorePage.css'
 export function SignalScorePage() {
   const { jobId } = useParams<{ jobId: string }>()
   const { data: job, isLoading, error } = useJob(jobId)
+
+  // Report-subject resolution (ORPHEUS-71). The nav identity cluster now
+  // always shows the signed-in user's own name, so the report subject
+  // ("whose Composition is this?") surfaces in the hero instead. An
+  // advisor viewing a client's report sees "[Client]'s Composition";
+  // everyone else (client on their own report, dual-role advisor on
+  // their self-report) sees "Your Composition". Hooks are called
+  // unconditionally per rules-of-hooks; the advisor roster query gates
+  // internally on the advisor role.
+  const sessionRolesQuery = useSessionRoles()
+  const advisorClientsQuery = useAdvisorClients()
 
   if (isLoading) {
     return (
@@ -64,6 +77,18 @@ export function SignalScorePage() {
   const { scoring, narratives } = job.result
   const { composite, band, dimensions } = scoring.scored_dimensions
 
+  // Advisor viewing a client who isn't themselves → name the subject.
+  const isAdvisor = Boolean(sessionRolesQuery.data?.advisor_id)
+  const matchedClient =
+    isAdvisor && job.client_id
+      ? advisorClientsQuery.data?.clients.find((c) => c.id === job.client_id)
+      : undefined
+  const subjectName =
+    matchedClient && !matchedClient.is_self ? matchedClient.display_name : null
+  const heroEyebrow = subjectName
+    ? `${subjectName}'s Composition`
+    : 'Your Composition'
+
   return (
     <main className="main-interior signal-main">
       {/* Score hero — contained inside main-interior. Band-keyed waveform
@@ -79,7 +104,7 @@ export function SignalScorePage() {
           aria-hidden="true"
         />
         <div className="score-hero-content">
-          <div className="score-hero-eyebrow">Your Composition</div>
+          <div className="score-hero-eyebrow">{heroEyebrow}</div>
           <h1 className="score-hero-band" id="score-hero-band">
             {band}
             <span className="sr-only">

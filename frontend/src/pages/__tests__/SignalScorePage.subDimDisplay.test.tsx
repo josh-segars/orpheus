@@ -205,6 +205,14 @@ vi.mock('../../hooks/useJob', () => ({
   useJob: () => ({ data: fixtureJob, isLoading: false, error: null }),
 }))
 
+// ORPHEUS-71: stub the hero subject-resolution hooks (see SignalScorePage).
+vi.mock('../../hooks/useSessionRoles', () => ({
+  useSessionRoles: () => ({ data: undefined }),
+}))
+vi.mock('../../hooks/useAdvisorClients', () => ({
+  useAdvisorClients: () => ({ data: undefined }),
+}))
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/jobs/remap']}>

@@ -45,6 +45,17 @@ vi.mock('../../hooks/useJob', () => ({
   }),
 }))
 
+// ORPHEUS-71: SignalScorePage now resolves the report subject for the
+// hero eyebrow via useSessionRoles + useAdvisorClients. Stub both so
+// they don't hit React Query without a provider; data:undefined yields
+// the "Your Composition" (self-view) default.
+vi.mock('../../hooks/useSessionRoles', () => ({
+  useSessionRoles: () => ({ data: undefined }),
+}))
+vi.mock('../../hooks/useAdvisorClients', () => ({
+  useAdvisorClients: () => ({ data: undefined }),
+}))
+
 // --------------------------------------------------------------------------- //
 // Render helper — wraps in Routes so useParams resolves to a real jobId.
 // --------------------------------------------------------------------------- //
