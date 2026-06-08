@@ -92,11 +92,28 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* React mounts everything inside #root, so unlike the prototype (whose
+   nav/main/footer are direct children of the flex body) the React shell
+   has #root as the body's only flex child. Without an explicit width it
+   collapses to its widest constrained child (.main-interior, 820px),
+   which then caps nav/footer at 820 instead of their 1200 max. Give
+   #root the same full-width centered column layout the prototype body
+   uses so nav/footer reach their 1200 cap. No-op for the prototype,
+   which has no #root element. */
+#root {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+}
+
 /* ── Navigation ─────────────────────────────────────────────── */
 .nav {
   width: 100%;
   max-width: 1200px;
-  padding: 33px 60px;  /* ORPHEUS-70: ~116px nav height, 60px gutters */
+  padding: 33px 10px;  /* 116px nav height; 10px gutters (ORPHEUS-71 width pass) */
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -294,7 +311,7 @@ body {
   background-color: transparent;
   width: 100%;
   max-width: 1200px;
-  padding: 28px 60px;
+  padding: 28px 10px;  /* 10px gutters to match the nav (ORPHEUS-71 width pass) */
   display: flex;
   align-items: center;
   justify-content: space-between;
