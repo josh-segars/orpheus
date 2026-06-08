@@ -134,20 +134,25 @@
   min-width: 80px;
   padding: 1px 10px 2px;
   border-radius: 20px;
-  background-color: var(--surface-elevated);
+  background-color: var(--border);
   font-family: 'Source Sans 3', sans-serif;
   font-size: 12px;
   font-weight: 400;
   letter-spacing: 0.3px;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: #000803;  /* ORPHEUS-70: dark knockout text on pills */
   white-space: nowrap;
 }
 
-.band-pill-active {
-  background-color: var(--accent-strong);
-  color: var(--text-strong);
-}
+/* ORPHEUS-70: the active pill takes its band's audio-spectrum pip color
+   (Dissonant→pip-1 … Resonant→pip-5). Pills render in fixed band order,
+   so position maps 1:1 to the pip step. */
+.band-pill-active { color: #000803; }
+.band-pill-active:nth-child(1) { background-color: var(--pip-1); }
+.band-pill-active:nth-child(2) { background-color: var(--pip-2); }
+.band-pill-active:nth-child(3) { background-color: var(--pip-3); }
+.band-pill-active:nth-child(4) { background-color: var(--pip-4); }
+.band-pill-active:nth-child(5) { background-color: var(--pip-5); }
 
 .dim-narrative {
   font-family: 'Source Sans 3', sans-serif;
