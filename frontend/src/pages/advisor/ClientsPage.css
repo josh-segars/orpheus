@@ -336,7 +336,7 @@
 }
 
 .advisor-chip-pending {
-  background: rgba(103, 172, 108, 0.18);
+  background: rgba(37, 205, 101, 0.18);
   color: var(--accent);
 }
 
@@ -357,7 +357,7 @@
 
 .advisor-chip-job-pending,
 .advisor-chip-job-running {
-  background: rgba(103, 172, 108, 0.18);
+  background: rgba(37, 205, 101, 0.18);
   color: var(--accent);
 }
 

@@ -19,38 +19,44 @@
        references updated to --text-strong directly.
      • --warm-gold (was "accent" — same role, new color). Aliased. */
 :root {
-  /* Surfaces */
-  --bg-page:           #010c16;
-  --bg-surface:        #010c16;
-  --surface-elevated:  #1C2B3A;  /* avatars, footer band, role-tab active */
+  /* Surfaces (ORPHEUS-70: page bg deepened #010c16 → #00080e) */
+  --bg-page:           #00080e;
+  --bg-surface:        #00080e;
+  --surface-elevated:  #1C2B3A;  /* avatars, footer band, inputs */
 
-  /* Text */
-  --text-strong:       #f9f6f0;  /* headings, wordmark, text on dark bg */
-  --text-body:         #e8f3f7;  /* body copy on dark bg */
+  /* Text (ORPHEUS-70: off-whites collapsed to pure white) */
+  --text-strong:       #ffffff;  /* headings, wordmark, text on dark bg */
+  --text-body:         #ffffff;  /* body copy on dark bg */
   --text-muted:        #91a7af;  /* secondary text, placeholders */
 
   /* Borders + dividers */
   --border:            #364048;
 
-  /* Accents */
-  --accent:            #67ac6c;  /* eyebrows, Social wordmark, hover accents */
-  --accent-strong:     #218f29;  /* active states needing stronger green */
-  --accent-tint-soft:  rgba(103, 172, 108, 0.08);
-  --accent-tint-hover: rgba(103, 172, 108, 0.16);
+  /* Accents (ORPHEUS-70: green brightened #67ac6c → #25cd65;
+     --accent and --accent-strong collapsed to one value — the
+     Figma uses the same green for eyebrows and active band pills.
+     Reintroduce a darker strong variant only if a state needs it.) */
+  --accent:            #25cd65;  /* eyebrows, Social wordmark, hover accents */
+  --accent-strong:     #25cd65;  /* active states (collapsed onto --accent) */
+  --accent-tint-soft:  rgba(37, 205, 101, 0.08);
+  --accent-tint-hover: rgba(37, 205, 101, 0.16);
 
-  /* Primary action */
-  --primary:           #0160d5;
-  --primary-hover:     #1a78ed;
+  /* Primary action (ORPHEUS-70: deep blue → cyan-blue) */
+  --primary:           #00a3ec;
+  --primary-hover:     #2db4f0;
 
-  /* Issue / error tone */
+  /* Issue / error tone — stays red; decoupled from --pip-1 (which
+     coincidentally shared #bf2923 before pip-1 moved to magenta) */
   --issue:             #bf2923;
 
-  /* Audio-spectrum palette — 5-step rating pips, low → high */
-  --pip-1:             #bf2923;  /* red */
-  --pip-2:             #e17800;  /* orange */
-  --pip-3:             #e7ce41;  /* yellow */
-  --pip-4:             #218f29;  /* green */
-  --pip-5:             #006cf1;  /* blue */
+  /* Audio-spectrum palette — 5-step rating pips, low → high.
+     ORPHEUS-70: all five restruck; pips 4–5 now equal --accent /
+     --primary so the top of the spectrum reads on-brand. */
+  --pip-1:             #c21d80;  /* magenta */
+  --pip-2:             #ed7b3d;  /* orange */
+  --pip-3:             #fff021;  /* yellow */
+  --pip-4:             #25cd65;  /* green (= --accent) */
+  --pip-5:             #00a3ec;  /* blue (= --primary) */
 
   /* Shadow on dark — replaces deep-slate-alpha shadow */
   --shadow-dark:       rgba(0, 0, 0, 0.5);
