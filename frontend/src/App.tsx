@@ -11,7 +11,6 @@ import { AccountPage } from './pages/AccountPage'
 import { AdminPage } from './pages/AdminPage'
 import { AnalysisPage } from './pages/AnalysisPage'
 import { CheatSheetPage } from './pages/CheatSheetPage'
-import { ForwardBriefPage } from './pages/ForwardBriefPage'
 import { GroundworkPage } from './pages/GroundworkPage'
 import { InviteCallbackPage } from './pages/InviteCallbackPage'
 import { InviteLandingPage } from './pages/InviteLandingPage'
@@ -88,7 +87,8 @@ export default function App() {
         <Route path="/account" element={<AccountPage />} />
         <Route path="/jobs/:jobId/analysis" element={<AnalysisPage />} />
         <Route path="/jobs/:jobId" element={<SignalScorePage />} />
-        <Route path="/jobs/:jobId/forward-brief" element={<ForwardBriefPage />} />
+        {/* The /jobs/:jobId/forward-brief route was retired in ORPHEUS-69 —
+            the Forward Brief is folded into the Signal Score page. */}
         <Route path="/jobs/:jobId/cheat-sheet" element={<CheatSheetPage />} />
         {/*
           Advisor admin surface (ORPHEUS-39). AdvisorRoute redirects

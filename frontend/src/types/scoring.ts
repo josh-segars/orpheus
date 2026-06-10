@@ -61,6 +61,14 @@ export interface DimensionScore {
   band: SignalBand
   sub_dimensions: SubDimensionScore[]
   completeness_floor_applied: boolean
+  /**
+   * Always-visible 1–2 sentence dimension teaser (ORPHEUS-68). Generated
+   * by the narrative agent and persisted via `scores.dimensions` JSONB.
+   * Optional — pre-ORPHEUS-68 jobs (the three preserved cloud demos)
+   * have no summary; the card falls back to rendering the narrative
+   * directly without the read-more toggle.
+   */
+  summary?: string | null
 }
 
 export interface ScoredDimensions {
@@ -125,9 +133,11 @@ export interface ScoringStageOutput {
 }
 
 // --- Narratives ------------------------------------------------------------
-// Narrative generation returns a dict keyed by dimension name, plus a
-// `forward_brief` Markdown string and a structured `cheat_sheet`.
-// See backend/agents/narrative.py.
+// Narrative generation returns a dict keyed by dimension name plus a
+// structured `cheat_sheet`. The standalone `forward_brief` section was
+// retired in ORPHEUS-68 — its forward-looking guidance is reaxised into
+// the per-dimension combined messaging paragraphs. See
+// backend/agents/narrative.py.
 
 export interface CheatSheetPriority {
   /** Short, imperative title (e.g. "Grow Your Follower Base"). */
@@ -163,10 +173,12 @@ export interface CheatSheetContent {
 }
 
 export interface Narratives {
-  /** Keyed by dimension name (matches DimensionScore.name). */
+  /**
+   * Keyed by dimension name (matches DimensionScore.name). As of
+   * ORPHEUS-68 each value is the combined messaging paragraph —
+   * current-state interpretation + forward-looking guidance, merged.
+   */
   dimension_narratives: Record<string, string>
-  /** Markdown-formatted Forward Brief (400–600 words). */
-  forward_brief: string
   /**
    * Structured cheat sheet — printable one-page reference derived from
    * the Forward Brief. Populated by the narrative agent as of

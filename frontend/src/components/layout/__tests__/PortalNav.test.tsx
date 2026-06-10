@@ -180,6 +180,9 @@ describe('PortalNav account dropdown (ORPHEUS-71)', () => {
   // --- Closed Beta feedback link (ORPHEUS-72) ----------------------------- //
 
   it('hides the Closed Beta Feedback link when VITE_BETA_SURVEY_URL is unset', () => {
+    // Stub to empty explicitly — vitest loads .env.local, so a dev machine
+    // with the real survey URL set would otherwise leak it into this test.
+    vi.stubEnv('VITE_BETA_SURVEY_URL', '')
     vi.mocked(useSessionRoles).mockReturnValue(rolesClientOnly() as ReturnType<typeof useSessionRoles>)
     renderNav()
 

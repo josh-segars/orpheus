@@ -5,6 +5,7 @@ import { useJob } from '../hooks/useJob'
 import { useSessionRoles } from '../hooks/useSessionRoles'
 import type {
   DimensionScore,
+  ForwardBriefData,
   SignalBand,
   SubDimensionScore,
 } from '../types/scoring'
@@ -17,13 +18,24 @@ import './SignalScorePage.css'
 
 /**
  * Signal Score report screen — v2 4-dimension architecture, ORPHEUS-50
- * redesign. Per the approved Figma, the composite display is the band
- * label only (no needle, no number) on top of a full-bleed waveform
- * hero. Each dimension renders as a card showing a 5-pill band row,
- * the dimension narrative, and an expandable sub-dimension list with
- * 5-pip rating rows. Sub-dimension narrative payload comes from
- * SubDimensionScore.{summary, best_practices, improvements} (filled
- * by ORPHEUS-21 when it ships).
+ * redesign + ORPHEUS-69 Forward Brief consolidation. The composite
+ * display is the band label only (no needle, no number) on top of a
+ * band-keyed waveform hero. Each dimension renders as a card showing a
+ * 5-pill band row, the always-visible 1–2 sentence dimension summary
+ * (ORPHEUS-68), a read more / read less toggle revealing the combined
+ * messaging paragraph (the reaxised narrative: interpretation +
+ * forward-looking guidance), and an expandable sub-dimension list with
+ * 5-pip rating rows (ORPHEUS-21).
+ *
+ * The structured metrics block at the bottom renders forward_brief_data
+ * in two sections — "Audience & Reach" (quantitative stat grid +
+ * audience breakdowns) and "Profile Signals" (boolean flag checklist).
+ * The standalone Forward Brief page is retired (ORPHEUS-69); flow is
+ * Signal Score → Cheat Sheet.
+ *
+ * Graceful fallback for pre-ORPHEUS-68 jobs (the three preserved cloud
+ * demos): dimensions without a `summary` render the narrative directly
+ * with no toggle, matching the pre-69 card shape.
  */
 export function SignalScorePage() {
   const { jobId } = useParams<{ jobId: string }>()
@@ -130,19 +142,20 @@ export function SignalScorePage() {
         ))}
       </div>
 
-      {/* Actions */}
+      {/* Structured metrics block (ORPHEUS-69) — the quantitative half of
+          the retired Forward Brief, rendered as data instead of prose. */}
+      {scoring.forward_brief_data && (
+        <MetricsBlock data={scoring.forward_brief_data} />
+      )}
+
+      {/* Actions — flow is Signal Score → Cheat Sheet (ORPHEUS-69). */}
       <div className="actions">
         <Link to="/" className="btn-secondary">
           &larr; Return to Groundwork
         </Link>
-        <div className="actions-group">
-          <Link to={`/jobs/${job.id}/cheat-sheet`} className="btn-secondary">
-            View Cheat Sheet
-          </Link>
-          <Link to={`/jobs/${job.id}/forward-brief`} className="btn-primary">
-            View My Forward Brief &rarr;
-          </Link>
-        </div>
+        <Link to={`/jobs/${job.id}/cheat-sheet`} className="btn-primary">
+          View Cheat Sheet &rarr;
+        </Link>
       </div>
     </main>
   )
@@ -162,6 +175,11 @@ function DimensionCard({ dimension, narrative }: DimensionCardProps) {
   // the same composite SIGNAL_BANDS thresholds.
   const dimBand = dimension.band
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  // ORPHEUS-69: read more / read less toggle for the combined messaging
+  // paragraph. Collapsed by default; only rendered when the dimension
+  // carries a summary (post-ORPHEUS-68 jobs). Pre-68 jobs fall back to
+  // the always-visible narrative with no toggle.
+  const [narrativeOpen, setNarrativeOpen] = useState(false)
 
   const toggle = (name: string) =>
     setExpanded((prev) => {
@@ -174,6 +192,8 @@ function DimensionCard({ dimension, narrative }: DimensionCardProps) {
       return next
     })
 
+  const summary = dimension.summary ?? null
+
   return (
     <div className="dimension-card">
       <div className="dim-header">
@@ -184,7 +204,28 @@ function DimensionCard({ dimension, narrative }: DimensionCardProps) {
           score={dimension.normalized_score}
         />
       </div>
-      {narrative && <p className="dim-narrative">{narrative}</p>}
+      {summary ? (
+        <>
+          <p className="dim-summary">{summary}</p>
+          {narrative && (
+            <>
+              {narrativeOpen && <p className="dim-narrative">{narrative}</p>}
+              <button
+                type="button"
+                className="dim-read-more"
+                onClick={() => setNarrativeOpen((open) => !open)}
+                aria-expanded={narrativeOpen}
+              >
+                {narrativeOpen ? 'Read less' : 'Read more'}
+              </button>
+            </>
+          )}
+        </>
+      ) : (
+        // Graceful fallback for pre-ORPHEUS-68 jobs: no summary on the
+        // wire, so render the narrative directly (pre-69 card shape).
+        narrative && <p className="dim-narrative">{narrative}</p>
+      )}
       {dimension.sub_dimensions.length > 0 && (
         <>
           <div className="dim-divider" />
@@ -313,6 +354,201 @@ function DetailSection({
       )}
     </div>
   )
+}
+
+// --- Metrics block (ORPHEUS-69) --------------------------------------------
+
+/**
+ * Structured rendering of forward_brief_data at the bottom of the page —
+ * the quantitative half of the retired Forward Brief. Two sections
+ * (layout locked with Josh, 2026-06-10):
+ *
+ *   1. "Audience & Reach" — stat-card grid for the numeric metrics,
+ *      followed by compact audience-breakdown lists (seniority /
+ *      industries / geographies / organizations).
+ *   2. "Profile Signals" — the qualitative boolean flags as a
+ *      check / cross row list.
+ *
+ * Every stat renders only when its value is non-null (the parsers emit
+ * null for anything the export didn't carry), and each section hides
+ * entirely when it has nothing to show.
+ */
+function MetricsBlock({ data }: { data: ForwardBriefData }) {
+  const q = data.quantitative
+  const flags = data.qualitative_flags
+
+  const stats: { label: string; value: string }[] = []
+  if (q.follower_count != null)
+    stats.push({ label: 'Followers', value: formatCount(q.follower_count) })
+  if (q.follower_growth_rate != null)
+    stats.push({
+      label: 'New followers / week',
+      value: formatDecimal(q.follower_growth_rate),
+    })
+  if (q.unique_members_reached != null)
+    stats.push({
+      label: 'Members reached',
+      value: formatCount(q.unique_members_reached),
+    })
+  if (q.avg_impressions_per_post != null)
+    stats.push({
+      label: 'Avg impressions / post',
+      value: formatCount(Math.round(q.avg_impressions_per_post)),
+    })
+  if (q.avg_engagement_rate != null)
+    stats.push({
+      label: 'Engagement rate',
+      value: formatPercent(q.avg_engagement_rate),
+    })
+  if (q.top_post_impressions != null)
+    stats.push({
+      label: 'Top post impressions',
+      value: formatCount(q.top_post_impressions),
+    })
+  if (q.avg_comment_length_words != null)
+    stats.push({
+      label: 'Avg comment length',
+      value: `${formatDecimal(q.avg_comment_length_words)} words`,
+    })
+  if (q.longest_posting_gap_weeks != null)
+    stats.push({
+      label: 'Longest posting gap',
+      value: `${q.longest_posting_gap_weeks} wk`,
+    })
+  if (q.zero_post_week_pct != null)
+    stats.push({
+      label: 'Zero-post weeks',
+      value: formatPercent(q.zero_post_week_pct),
+    })
+
+  const seniority = q.audience_seniority
+    ? Object.entries(q.audience_seniority)
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, pct]) => ({ name, pct }))
+    : []
+  const breakdowns: { label: string; segments: { name: string; pct: number }[] }[] = []
+  if (seniority.length > 0)
+    breakdowns.push({ label: 'Audience seniority', segments: seniority })
+  if (q.audience_industries && q.audience_industries.length > 0)
+    breakdowns.push({
+      label: 'Top industries',
+      segments: q.audience_industries.slice(0, 5),
+    })
+  if (q.audience_geography && q.audience_geography.length > 0)
+    breakdowns.push({
+      label: 'Top geographies',
+      segments: q.audience_geography.slice(0, 5),
+    })
+
+  const signals: { label: string; on: boolean }[] = [
+    {
+      label: 'Profile photo present',
+      on: flags.visual_professionalism.photo_present,
+    },
+    {
+      label: 'Call to action in About',
+      on: flags.engagement_invitation.cta_in_about,
+    },
+    {
+      label: 'Services section listed',
+      on: flags.engagement_invitation.services_present,
+    },
+    {
+      label: 'Contact info visible',
+      on: flags.engagement_invitation.contact_visible,
+    },
+    {
+      label: 'Engagement spread across your network',
+      on: !flags.viewer_actor_affinity.concentrated,
+    },
+  ]
+
+  const hasReach = stats.length > 0 || breakdowns.length > 0
+
+  return (
+    <section className="metrics-block" aria-label="Your numbers at a glance">
+      <div className="section-header signal-section-header">
+        <div className="section-eyebrow">The Data</div>
+        <h2 className="section-title">Your Numbers at a Glance</h2>
+      </div>
+
+      {hasReach && (
+        <div className="metrics-section">
+          <div className="metrics-section-label">Audience &amp; Reach</div>
+          {stats.length > 0 && (
+            <div className="metrics-stat-grid">
+              {stats.map((s) => (
+                <div key={s.label} className="metrics-stat">
+                  <div className="metrics-stat-value">{s.value}</div>
+                  <div className="metrics-stat-label">{s.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {breakdowns.length > 0 && (
+            <div className="metrics-breakdowns">
+              {breakdowns.map((b) => (
+                <div key={b.label} className="metrics-breakdown">
+                  <div className="metrics-breakdown-label">{b.label}</div>
+                  <ul className="metrics-breakdown-list">
+                    {b.segments.map((seg) => (
+                      <li key={seg.name} className="metrics-breakdown-item">
+                        <span className="metrics-breakdown-name">{seg.name}</span>
+                        <span className="metrics-breakdown-pct">
+                          {formatPercent(seg.pct)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              {q.top_organizations && q.top_organizations.length > 0 && (
+                <div className="metrics-breakdown">
+                  <div className="metrics-breakdown-label">
+                    Top follower organizations
+                  </div>
+                  <p className="metrics-breakdown-prose">
+                    {q.top_organizations.slice(0, 10).join(', ')}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="metrics-section">
+        <div className="metrics-section-label">Profile Signals</div>
+        <ul className="metrics-signal-list">
+          {signals.map((s) => (
+            <li
+              key={s.label}
+              className={`metrics-signal${s.on ? ' metrics-signal-on' : ''}`}
+            >
+              <span className="metrics-signal-mark" aria-hidden="true">
+                {s.on ? '✓' : '✕'}
+              </span>
+              <span className="metrics-signal-label">{s.label}</span>
+              <span className="sr-only">{s.on ? ' — yes' : ' — no'}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  )
+}
+
+function formatCount(n: number): string {
+  return n.toLocaleString('en-US')
+}
+
+function formatDecimal(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1)
+}
+
+function formatPercent(p: number): string {
+  const pct = p * 100
+  return `${pct < 10 && !Number.isInteger(pct) ? pct.toFixed(1) : Math.round(pct)}%`
 }
 
 // --- Helpers --------------------------------------------------------------

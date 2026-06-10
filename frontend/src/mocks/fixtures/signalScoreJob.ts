@@ -27,6 +27,8 @@ export const demoJob: Job = {
             contribution: 25.2,
             band: 'Tuned', // 0.72 × 100 = 72 → Tuned (65-79)
             completeness_floor_applied: false,
+            summary:
+              'Your profile gives the retrieval system clear, specific language to place you accurately. The visible gap is third-party validation — two recommendations is low for your stage.',
             sub_dimensions: [
               {
                 name: 'Headline specificity',
@@ -119,6 +121,8 @@ export const demoJob: Job = {
             contribution: 16.5,
             band: 'Tuning', // 0.55 × 100 = 55 → Tuning (45-64)
             completeness_floor_applied: false,
+            summary:
+              'Publishing is sporadic rather than systematic — closing the multi-week gaps is higher leverage than raising your weekly peak.',
             sub_dimensions: [
               {
                 name: 'Volume',
@@ -178,6 +182,8 @@ export const demoJob: Job = {
             contribution: 12.2,
             band: 'Tuning', // 0.61 × 100 = 61 → Tuning (45-64)
             completeness_floor_applied: false,
+            summary:
+              'Your engagement is substantive — comment depth is a real strength — but the mix leans toward reactions over original posts.',
             sub_dimensions: [
               {
                 name: 'Original content share',
@@ -235,6 +241,8 @@ export const demoJob: Job = {
             contribution: 10.8,
             band: 'Tuned', // 0.72 × 100 = 72 → Tuned (65-79)
             completeness_floor_applied: false,
+            summary:
+              'Your content confirms the identity your profile declares — alignment is a quiet strength to protect, not a problem to fix.',
             sub_dimensions: [
               {
                 name: 'Topical consistency',
@@ -326,8 +334,6 @@ export const demoJob: Job = {
         'Profile-Behavior Alignment':
           'Content is topically consistent with the identity your profile declares — executive advisory, digital strategy, and adjacent themes. Voice is steady across posts. The alignment is strong enough that a new follower arriving from any single post would reach a profile that confirms rather than contradicts what they just read.',
       },
-      forward_brief:
-        '## Priorities\n\nThe fastest compound improvement comes from closing the consistency gap inside Behavioral Signal Strength. Pick a weekly cadence you will keep for 12 weeks and protect it as non-negotiable.\n\n## Quick Wins\n\n- Request two to three recommendations from senior colleagues this month.\n- Add one outcome-led sentence to each of your three most recent Experience entries.\n- Convert one long-form reply you wrote this quarter into a standalone post.',
       cheat_sheet: {
         priorities: [
           {

@@ -13,7 +13,12 @@
  *     dimension-aware aria-label (sr-only fallback for color-only band)
  *   - sub-dimension rows render with their 5-pip rating displays and
  *     expand to reveal Summary / Best Practices / Improvements
- *   - the actions bar exposes the Forward Brief / Cheat Sheet links
+ *   - dimension cards show the always-visible summary with a read more /
+ *     read less toggle for the combined narrative (ORPHEUS-69)
+ *   - the metrics block renders forward_brief_data stats + profile
+ *     signals (ORPHEUS-69)
+ *   - the actions bar exposes the Cheat Sheet link; the Forward Brief
+ *     surface is retired (ORPHEUS-69)
  */
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -137,13 +142,53 @@ describe('SignalScorePage', () => {
     }
   })
 
-  it('exposes the secondary "Return to Groundwork" link and the primary "View My Forward Brief" link', () => {
+  it('exposes the "Return to Groundwork" and primary "View Cheat Sheet" links; the Forward Brief link is retired (ORPHEUS-69)', () => {
     renderSignalScorePage()
     expect(
       screen.getByRole('link', { name: /return to groundwork/i }),
     ).toBeInTheDocument()
-    const fb = screen.getByRole('link', { name: /view my forward brief/i })
-    expect(fb).toHaveAttribute('href', '/jobs/demo/forward-brief')
+    const cs = screen.getByRole('link', { name: /view cheat sheet/i })
+    expect(cs).toHaveAttribute('href', '/jobs/demo/cheat-sheet')
+    expect(
+      screen.queryByRole('link', { name: /forward brief/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows the always-visible dimension summary and reveals the combined narrative behind a read more toggle (ORPHEUS-69)', async () => {
+    const user = userEvent.setup()
+    renderSignalScorePage()
+    // The summary teaser is visible without interaction…
+    expect(
+      screen.getByText(/two recommendations is low for your stage/i),
+    ).toBeInTheDocument()
+    // …while the combined narrative is collapsed by default.
+    const narrativeSnippet = /reads as substantive and credible/i
+    expect(screen.queryByText(narrativeSnippet)).not.toBeInTheDocument()
+
+    const toggles = screen.getAllByRole('button', { name: /read more/i })
+    expect(toggles).toHaveLength(4) // one per dimension card
+    await user.click(toggles[0])
+    expect(screen.getByText(narrativeSnippet)).toBeInTheDocument()
+    // Toggle flips to "Read less" and collapses on second click.
+    const readLess = screen.getByRole('button', { name: /read less/i })
+    await user.click(readLess)
+    expect(screen.queryByText(narrativeSnippet)).not.toBeInTheDocument()
+  })
+
+  it('renders the metrics block with quantitative stats and profile signal flags (ORPHEUS-69)', () => {
+    renderSignalScorePage()
+    expect(
+      screen.getByRole('heading', { name: /your numbers at a glance/i }),
+    ).toBeInTheDocument()
+    // Quantitative stat from forward_brief_data.quantitative.
+    expect(screen.getByText('Followers')).toBeInTheDocument()
+    expect(screen.getByText('1,247')).toBeInTheDocument()
+    // Audience breakdown list.
+    expect(screen.getByText('Management Consulting')).toBeInTheDocument()
+    // Boolean flags render as the Profile Signals checklist.
+    expect(screen.getByText('Profile Signals')).toBeInTheDocument()
+    expect(screen.getByText('Profile photo present')).toBeInTheDocument()
+    expect(screen.getByText('Call to action in About')).toBeInTheDocument()
   })
 
   it('expands a sub-dimension row when its trigger is clicked, revealing Summary / Best Practices / Improvements', async () => {

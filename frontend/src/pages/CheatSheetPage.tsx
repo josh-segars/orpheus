@@ -4,10 +4,12 @@ import type { CheatSheetPriority } from '../types/scoring'
 import './CheatSheetPage.css'
 
 /**
- * Cheat Sheet — printable one-page reference derived from the Forward
- * Brief. Content is delivered as `narratives.cheat_sheet` (structured,
- * not markdown). Print styles collapse the page to a single Letter
- * portrait sheet; see the `@media print` rules in CheatSheetPage.css.
+ * Cheat Sheet — printable one-page reference drawn from the report's
+ * per-dimension guidance (source repointed from the retired Forward
+ * Brief in ORPHEUS-68/69). Content is delivered as
+ * `narratives.cheat_sheet` (structured, not markdown). Print styles
+ * collapse the page to a single Letter portrait sheet; see the
+ * `@media print` rules in CheatSheetPage.css.
  */
 export function CheatSheetPage() {
   const { jobId } = useParams<{ jobId: string }>()
@@ -62,16 +64,13 @@ export function CheatSheetPage() {
           <div className="section-eyebrow">Cheat Sheet</div>
           <h2 className="section-title">Your Cheat Sheet isn’t ready yet</h2>
           <p className="section-intro">
-            Your Signal Score and Forward Brief are available. The
-            printable one-page summary follows in a future update.
+            Your Signal Score is available. The printable one-page summary
+            follows in a future update.
           </p>
         </div>
         <div className="actions cheat-actions">
           <Link to={`/jobs/${job.id}`} className="btn-secondary">
             &larr; Return to Signal Score
-          </Link>
-          <Link to={`/jobs/${job.id}/forward-brief`} className="btn-primary">
-            View Forward Brief &rarr;
           </Link>
         </div>
       </main>
@@ -83,7 +82,7 @@ export function CheatSheetPage() {
       {/* Screen-only helper row (hidden on print) */}
       <div className="print-helper">
         <div className="print-helper-text">
-          A one-page reference card drawn from your Forward Brief. Print with{' '}
+          A one-page reference card drawn from your Signal Score report. Print with{' '}
           <kbd>⌘</kbd> <kbd>P</kbd> (Mac) or <kbd>Ctrl</kbd> <kbd>P</kbd>{' '}
           (Windows) — the layout is optimized for Letter portrait.
         </div>
@@ -154,16 +153,11 @@ export function CheatSheetPage() {
         )}
       </div>
 
-      {/* Screen-only action bar (hidden on print) */}
+      {/* Screen-only action bar (hidden on print). Flow is Signal Score →
+          Cheat Sheet (ORPHEUS-69); the Forward Brief page is retired. */}
       <div className="actions cheat-actions">
         <Link to={`/jobs/${job.id}`} className="btn-secondary">
           &larr; Return to Signal Score
-        </Link>
-        <Link
-          to={`/jobs/${job.id}/forward-brief`}
-          className="btn-primary"
-        >
-          View Forward Brief &rarr;
         </Link>
       </div>
     </main>

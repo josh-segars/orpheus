@@ -195,7 +195,7 @@ const fixtureJob: Job = {
         'Behavioral Signal Quality': 'Dim narrative.',
         'Profile-Behavior Alignment': 'Dim narrative.',
       },
-      forward_brief: 'Forward brief.',
+      // ORPHEUS-68/69: the standalone forward_brief is retired off the wire.
       cheat_sheet: null,
     },
   },

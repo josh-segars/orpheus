@@ -166,6 +166,37 @@
       margin: 0;
     }
 
+    /* ── Dimension summary + read-more disclosure (ORPHEUS-69) ──
+       The always-visible 1–2 sentence teaser sits above the collapsed
+       combined messaging paragraph (the reaxised narrative). JS-free:
+       a hidden checkbox toggles the paragraph; the React app
+       (SignalScorePage) renders the same visuals with state. */
+    .dim-summary {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 16px;
+      color: var(--text-body);
+      line-height: 1.45;
+      margin: 0;
+    }
+
+    .dim-read-toggle { display: none; }
+    .dim-read-toggle:not(:checked) ~ .dim-narrative { display: none; }
+    .dim-read-toggle:not(:checked) ~ .dim-read-more .dim-read-less-text { display: none; }
+    .dim-read-toggle:checked ~ .dim-read-more .dim-read-more-text { display: none; }
+
+    .dim-read-more {
+      align-self: flex-start;
+      cursor: pointer;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--primary);
+      transition: color 150ms ease;
+    }
+
+    .dim-read-more:hover { color: var(--primary-hover); }
+
     .dim-divider {
       height: 1px;
       width: 100%;
@@ -249,10 +280,151 @@
     }
     .detail-section-list li { margin-bottom: 4px; }
 
-    .actions-group {
+    /* ── Metrics block (ORPHEUS-69) ─────────────────────────────
+       Structured forward_brief_data at the bottom of the page. Two
+       sections: "Audience & Reach" (stat grid + breakdown lists) and
+       "Profile Signals" (boolean check/cross rows). */
+    .metrics-block {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+
+    .metrics-section {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .metrics-section-label {
+      font-family: 'Source Serif 4', serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-strong);
+      line-height: 1.2;
+    }
+
+    .metrics-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    .metrics-stat {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .metrics-stat-value {
+      font-family: 'Source Serif 4', serif;
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--text-strong);
+      line-height: 1.1;
+    }
+
+    .metrics-stat-label {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .metrics-breakdowns {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px 24px;
+    }
+
+    .metrics-breakdown { display: flex; flex-direction: column; gap: 6px; }
+
+    .metrics-breakdown-label {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-strong);
+    }
+
+    .metrics-breakdown-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .metrics-breakdown-item {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 15px;
+      color: var(--text-body);
+      line-height: 1.4;
+    }
+
+    .metrics-breakdown-pct { color: var(--text-muted); flex-shrink: 0; }
+
+    .metrics-breakdown-prose {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 15px;
+      color: var(--text-body);
+      line-height: 1.45;
+      margin: 0;
+    }
+
+    .metrics-signal-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .metrics-signal {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 16px;
+      color: var(--text-body);
+      line-height: 1.4;
+    }
+
+    .metrics-signal-mark {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      font-size: 12px;
+      background-color: var(--surface-elevated);
+      color: var(--text-muted);
+    }
+
+    .metrics-signal-on .metrics-signal-mark {
+      background-color: var(--accent);
+      color: #000803; /* dark knockout, matches band pills (ORPHEUS-70) */
+    }
+
+    @media (max-width: 720px) {
+      .metrics-stat-grid { grid-template-columns: repeat(2, 1fr); }
+      .metrics-breakdowns { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -325,7 +497,10 @@
             <span class="band-pill">Resonant</span>
           </div>
         </div>
-        <p class="dim-narrative">Your profile reads as substantive and credible, the retrieval system has enough specific language to place you in an executive, strategy-oriented embedding space. Experience entries describe scope but lean toward titles rather than outcomes, and the recommendations count is the visible gap.</p>
+        <p class="dim-summary">Your profile gives the retrieval system clear, specific language to place you accurately. The visible gap is third-party validation — two recommendations is low for your stage.</p>
+        <input type="checkbox" id="dim-read-1" class="dim-read-toggle" aria-hidden="true" tabindex="-1">
+        <p class="dim-narrative">Your profile reads as substantive and credible, the retrieval system has enough specific language to place you in an executive, strategy-oriented embedding space. Experience entries describe scope but lean toward titles rather than outcomes, and the recommendations count is the visible gap. Over the next quarter, the highest-leverage move inside this dimension is third-party validation: two to three new recommendations from senior colleagues would close the most visible credibility gap, and one outcome-led sentence per recent Experience entry would sharpen the retrieval signal.</p>
+        <label for="dim-read-1" class="dim-read-more"><span class="dim-read-more-text">Read more</span><span class="dim-read-less-text">Read less</span></label>
         <div class="dim-divider"></div>
         <div class="sub-dim-list">
 
@@ -415,7 +590,10 @@
             <span class="band-pill">Resonant</span>
           </div>
         </div>
-        <p class="dim-narrative">You have posted enough over the past year that the model has data to work with, but publishing is sporadic rather than systematic. An average of 1.4 posts per week is in the functional range, though 29% of weeks had zero posts. Closing the gaps is higher leverage than raising the peak.</p>
+        <p class="dim-summary">Publishing is sporadic rather than systematic — closing the multi-week gaps is higher leverage than raising your weekly peak.</p>
+        <input type="checkbox" id="dim-read-2" class="dim-read-toggle" aria-hidden="true" tabindex="-1">
+        <p class="dim-narrative">You have posted enough over the past year that the model has data to work with, but publishing is sporadic rather than systematic. An average of 1.4 posts per week is in the functional range, though 29% of weeks had zero posts. Closing the gaps is higher leverage than raising the peak. The forward move: pick a weekly cadence you can defend for 12 weeks and protect it as non-negotiable — your 4.2 new followers per week and 18,340 members reached show the audience is there when the stream stays live.</p>
+        <label for="dim-read-2" class="dim-read-more"><span class="dim-read-more-text">Read more</span><span class="dim-read-less-text">Read less</span></label>
         <div class="dim-divider"></div>
         <div class="sub-dim-list">
           <div class="sub-dim-row">
@@ -463,7 +641,10 @@
             <span class="band-pill">Resonant</span>
           </div>
         </div>
-        <p class="dim-narrative">Your activity mix skews toward the signals the optimization targets actually reward. Comments average 34 words, well above passive-engagement thresholds, and about 42% of your activity is original content rather than pure reshares.</p>
+        <p class="dim-summary">Your engagement is substantive — comment depth is a real strength — but the mix leans toward reactions over original posts.</p>
+        <input type="checkbox" id="dim-read-3" class="dim-read-toggle" aria-hidden="true" tabindex="-1">
+        <p class="dim-narrative">Your activity mix skews toward the signals the optimization targets actually reward. Comments average 34 words, well above passive-engagement thresholds, and about 42% of your activity is original content rather than pure reshares. To raise this dimension, shift one weekly slot from reacting to publishing: converting one substantive reply into a standalone post each week moves the original-content share toward the 60% range without reducing comment depth.</p>
+        <label for="dim-read-3" class="dim-read-more"><span class="dim-read-more-text">Read more</span><span class="dim-read-less-text">Read less</span></label>
         <div class="dim-divider"></div>
         <div class="sub-dim-list">
           <div class="sub-dim-row">
@@ -511,7 +692,10 @@
             <span class="band-pill">Resonant</span>
           </div>
         </div>
-        <p class="dim-narrative">Content is topically consistent with the identity your profile declares. Voice is steady across posts. A follower arriving from any single post reaches a profile that confirms rather than contradicts what they just read.</p>
+        <p class="dim-summary">Your content confirms the identity your profile declares — alignment is a quiet strength to protect, not a problem to fix.</p>
+        <input type="checkbox" id="dim-read-4" class="dim-read-toggle" aria-hidden="true" tabindex="-1">
+        <p class="dim-narrative">Content is topically consistent with the identity your profile declares. Voice is steady across posts. A follower arriving from any single post reaches a profile that confirms rather than contradicts what they just read. Going forward this is a strength to maintain rather than repair: hold the current topic discipline as posting volume grows, and check new content themes against the profile's declared focus before introducing them.</p>
+        <label for="dim-read-4" class="dim-read-more"><span class="dim-read-more-text">Read more</span><span class="dim-read-less-text">Read less</span></label>
         <div class="dim-divider"></div>
         <div class="sub-dim-list">
           <div class="sub-dim-row">
@@ -539,12 +723,78 @@
 
     </div>
 
+    <!-- Metrics block (ORPHEUS-69) — structured forward_brief_data, the
+         quantitative half of the retired Forward Brief. Two sections:
+         Audience & Reach (stat grid + breakdown lists) and Profile
+         Signals (boolean check/cross rows). -->
+    <section class="metrics-block" aria-label="Your numbers at a glance">
+      <div class="section-header signal-section-header">
+        <div class="section-eyebrow">The Data</div>
+        <h2 class="section-title">Your Numbers at a Glance</h2>
+      </div>
+
+      <div class="metrics-section">
+        <div class="metrics-section-label">Audience &amp; Reach</div>
+        <div class="metrics-stat-grid">
+          <div class="metrics-stat"><div class="metrics-stat-value">1,247</div><div class="metrics-stat-label">Followers</div></div>
+          <div class="metrics-stat"><div class="metrics-stat-value">4.2</div><div class="metrics-stat-label">New followers / week</div></div>
+          <div class="metrics-stat"><div class="metrics-stat-value">18,340</div><div class="metrics-stat-label">Members reached</div></div>
+          <div class="metrics-stat"><div class="metrics-stat-value">780</div><div class="metrics-stat-label">Avg impressions / post</div></div>
+          <div class="metrics-stat"><div class="metrics-stat-value">1.8%</div><div class="metrics-stat-label">Engagement rate</div></div>
+          <div class="metrics-stat"><div class="metrics-stat-value">7,240</div><div class="metrics-stat-label">Top post impressions</div></div>
+          <div class="metrics-stat"><div class="metrics-stat-value">34 words</div><div class="metrics-stat-label">Avg comment length</div></div>
+          <div class="metrics-stat"><div class="metrics-stat-value">3 wk</div><div class="metrics-stat-label">Longest posting gap</div></div>
+          <div class="metrics-stat"><div class="metrics-stat-value">29%</div><div class="metrics-stat-label">Zero-post weeks</div></div>
+        </div>
+        <div class="metrics-breakdowns">
+          <div class="metrics-breakdown">
+            <div class="metrics-breakdown-label">Audience seniority</div>
+            <ul class="metrics-breakdown-list">
+              <li class="metrics-breakdown-item"><span class="metrics-breakdown-name">Senior</span><span class="metrics-breakdown-pct">31%</span></li>
+              <li class="metrics-breakdown-item"><span class="metrics-breakdown-name">Director</span><span class="metrics-breakdown-pct">10%</span></li>
+              <li class="metrics-breakdown-item"><span class="metrics-breakdown-name">VP</span><span class="metrics-breakdown-pct">6%</span></li>
+            </ul>
+          </div>
+          <div class="metrics-breakdown">
+            <div class="metrics-breakdown-label">Top industries</div>
+            <ul class="metrics-breakdown-list">
+              <li class="metrics-breakdown-item"><span class="metrics-breakdown-name">Management Consulting</span><span class="metrics-breakdown-pct">28%</span></li>
+              <li class="metrics-breakdown-item"><span class="metrics-breakdown-name">Financial Services</span><span class="metrics-breakdown-pct">17%</span></li>
+              <li class="metrics-breakdown-item"><span class="metrics-breakdown-name">Technology</span><span class="metrics-breakdown-pct">13%</span></li>
+            </ul>
+          </div>
+          <div class="metrics-breakdown">
+            <div class="metrics-breakdown-label">Top geographies</div>
+            <ul class="metrics-breakdown-list">
+              <li class="metrics-breakdown-item"><span class="metrics-breakdown-name">DC-Baltimore</span><span class="metrics-breakdown-pct">19%</span></li>
+              <li class="metrics-breakdown-item"><span class="metrics-breakdown-name">New York</span><span class="metrics-breakdown-pct">14%</span></li>
+              <li class="metrics-breakdown-item"><span class="metrics-breakdown-name">San Francisco</span><span class="metrics-breakdown-pct">8%</span></li>
+            </ul>
+          </div>
+          <div class="metrics-breakdown">
+            <div class="metrics-breakdown-label">Top follower organizations</div>
+            <p class="metrics-breakdown-prose">McKinsey, Deloitte, Harvard Business School</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="metrics-section">
+        <div class="metrics-section-label">Profile Signals</div>
+        <ul class="metrics-signal-list">
+          <li class="metrics-signal metrics-signal-on"><span class="metrics-signal-mark" aria-hidden="true">✓</span><span class="metrics-signal-label">Profile photo present</span></li>
+          <li class="metrics-signal"><span class="metrics-signal-mark" aria-hidden="true">✕</span><span class="metrics-signal-label">Call to action in About</span></li>
+          <li class="metrics-signal"><span class="metrics-signal-mark" aria-hidden="true">✕</span><span class="metrics-signal-label">Services section listed</span></li>
+          <li class="metrics-signal metrics-signal-on"><span class="metrics-signal-mark" aria-hidden="true">✓</span><span class="metrics-signal-label">Contact info visible</span></li>
+          <li class="metrics-signal metrics-signal-on"><span class="metrics-signal-mark" aria-hidden="true">✓</span><span class="metrics-signal-label">Engagement spread across your network</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Actions — flow is Signal Score → Cheat Sheet (ORPHEUS-69);
+         the Forward Brief page is retired. -->
     <div class="actions">
       <a href="orpheus-groundwork-v1.html" class="btn-secondary">← Return to Groundwork</a>
-      <div class="actions-group">
-        <a href="orpheus-cheat-sheet.html" class="btn-secondary">View Cheat Sheet</a>
-        <a href="orpheus-forward-brief.html" class="btn-primary">View My Forward Brief →</a>
-      </div>
+      <a href="orpheus-cheat-sheet.html" class="btn-primary">View Cheat Sheet →</a>
     </div>
   </main>
 
