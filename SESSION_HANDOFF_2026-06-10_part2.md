@@ -20,7 +20,7 @@ Session shape: session-start drift check (clean; flagged the un-deleted part-3 h
 |---|---|---|
 | ORPHEUS-68 | Narrative agent reaxis (backend) | ✅ **Done.** Commit `fc75a7b`. |
 | ORPHEUS-69 | Frontend: fold Forward Brief into Signal Score page | ✅ **Done.** Commit `172ed3b`. |
-| ORPHEUS-67 | Forward Brief consolidation (umbrella) | 🔶 **In Progress.** Both sub-items + ORPHEUS-73 done; only the Decision Log paste remains (drafted below). |
+| ORPHEUS-67 | Forward Brief consolidation (umbrella) | ✅ **Done.** Both sub-items + ORPHEUS-73 done; Decision Log entry pasted by Josh same-day. |
 | ORPHEUS-73 | Live test of 68/69 consolidation | ✅ **Done.** Executed same-session — see addendum. |
 | ORPHEUS-74 | Cheat Sheet subtitle renders raw client UUID | ⏳ Backlog. Cosmetic, filed during the 73 walkthrough. |
 | ORPHEUS-66 | Sub-dim word floors still below after 64 | ⏳ Backlog. Editorial, with Andrew. Unchanged. |
@@ -80,7 +80,7 @@ This reverses [Andrew, 2026-04-08] "R/R/A live in the Forward Brief," so it's cr
 3. **ORPHEUS-74** — cheat-sheet subtitle UUID cosmetic, quick fix.
 4. **ORPHEUS-42** — account management page, when prioritized.
 
-ORPHEUS-67 closes when the Decision Log entry is pasted (73 passed in-session).
+ORPHEUS-67 closed in-session: 73 passed and the Decision Log entry was pasted same-day. The entire Forward Brief consolidation cluster (67/68/69/73) is done.
 
 ---
 
@@ -120,7 +120,7 @@ cd ~/git/orpheus && git push origin main
 - **Folder:** `1EQi5XxgOPEFEx5kjhkdEn53F5slZSK-g` ([Orpheus Social > 06_Operations > Shared Canon](https://drive.google.com/drive/folders/1EQi5XxgOPEFEx5kjhkdEn53F5slZSK-g))
 - **State of the Moment doc ID:** `1N7mbJztfOAABNzRANvWU5K_D9And0dFz1_0n42Z8euA`
 - **Decision Log doc ID:** `1cHIcyafWrzdlfdfF4BkVi8MbITyaB4Ii_DTvKLCRbOI`
-- **Decision Log entry required this session** — drafted above (Forward Brief reversal); needs manual paste into the doc (Drive MCP can't edit content in place).
+- **Decision Log entry pasted by Josh 2026-06-10** (Forward Brief reversal — drafted above, kept for the record). The Drive MCP can't edit doc content in place, so this stays a manual step each time.
 
 ---
 
