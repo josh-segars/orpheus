@@ -100,7 +100,16 @@ class SubDimensionScore(BaseModel):
 # --- Dimension scores ---
 
 class DimensionScore(BaseModel):
-    """Score for a single dimension, containing sub-dimension breakdowns."""
+    """Score for a single dimension, containing sub-dimension breakdowns.
+
+    The `summary` narrative field is populated by the narrative generation
+    stage (ORPHEUS-68) — an always-visible 1–2 sentence teaser for the
+    dimension card, distinct from both the combined messaging paragraph
+    (which lives in the `narratives` table as the dimension's section row)
+    and the per-sub-dim Summary slot. It rides the `scores.dimensions`
+    JSONB the same way the sub-dim narrative fields do (ORPHEUS-21), so
+    no migration and no admin-edit surface in v1.
+    """
     name: str
     weight: float = Field(..., description="Dimension weight as decimal (e.g. 0.35)")
     confidence: ConfidenceLabel
@@ -122,6 +131,15 @@ class DimensionScore(BaseModel):
     sub_dimensions: list[SubDimensionScore]
     completeness_floor_applied: bool = Field(
         False, description="True if Dim 1 completeness floor capped the contribution"
+    )
+    summary: Optional[str] = Field(
+        None,
+        description=(
+            "Always-visible 1–2 sentence dimension teaser (~15–40 words), "
+            "populated by the narrative stage (ORPHEUS-68). Distinct from "
+            "the combined messaging paragraph (narratives table) and the "
+            "sub-dim Summary slots. None on jobs that predate ORPHEUS-68."
+        ),
     )
 
 

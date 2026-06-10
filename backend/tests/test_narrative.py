@@ -149,14 +149,17 @@ def _make_scoring_output(composite=77.6, band=SignalBand.TUNED):
 
 
 def _make_valid_response():
-    """Build a valid Claude response JSON string."""
+    """Build a valid Claude response JSON string.
+
+    ORPHEUS-68 shape: 4 dimension sections (no forward_brief), each with a
+    required `summary` teaser plus the combined messaging `narrative`.
+    """
     return json.dumps({
         "sections": [
-            {"section": "Profile Signal Clarity", "narrative": "The profile presents a clear professional identity. " * 10},
-            {"section": "Behavioral Signal Strength", "narrative": "Activity levels over the trailing period show. " * 10},
-            {"section": "Behavioral Signal Quality", "narrative": "The engagement pattern demonstrates. " * 8},
-            {"section": "Profile-Behavior Alignment", "narrative": "Content and profile signals are aligned. " * 8},
-            {"section": "forward_brief", "narrative": "## Reach\nFollower base of 12,500. " * 20},
+            {"section": "Profile Signal Clarity", "summary": "The profile reads clearly overall.", "narrative": "The profile presents a clear professional identity. " * 10},
+            {"section": "Behavioral Signal Strength", "summary": "Activity is consistent and recent.", "narrative": "Activity levels over the trailing period show. " * 10},
+            {"section": "Behavioral Signal Quality", "summary": "Engagement quality is substantive.", "narrative": "The engagement pattern demonstrates. " * 8},
+            {"section": "Profile-Behavior Alignment", "summary": "Content matches the declared identity.", "narrative": "Content and profile signals are aligned. " * 8},
         ]
     })
 
@@ -177,6 +180,9 @@ class TestParseResponse:
         assert isinstance(result, NarrativeResult)
         assert set(result.sections.keys()) == EXPECTED_SECTIONS
         assert all(isinstance(v, str) and len(v) > 0 for v in result.sections.values())
+        # ORPHEUS-68: summaries parsed alongside narratives, same keys.
+        assert set(result.summaries.keys()) == EXPECTED_SECTIONS
+        assert all(isinstance(v, str) and len(v) > 0 for v in result.summaries.values())
         # No scoring_output passed → sub_dimensions parsed best-effort; the
         # legacy fixture doesn't include the array, so result is empty here.
         assert result.sub_dimensions == {}
@@ -193,9 +199,9 @@ class TestParseResponse:
     def test_missing_section_raises(self):
         data = {
             "sections": [
-                {"section": "Profile Signal Clarity", "narrative": "Some text."},
-                {"section": "Behavioral Signal Strength", "narrative": "Some text."},
-                # Missing 3 sections
+                {"section": "Profile Signal Clarity", "summary": "S.", "narrative": "Some text."},
+                {"section": "Behavioral Signal Strength", "summary": "S.", "narrative": "Some text."},
+                # Missing 2 sections
             ]
         }
         with pytest.raises(ValueError, match="Missing sections"):
@@ -204,11 +210,10 @@ class TestParseResponse:
     def test_empty_narrative_raises(self):
         data = {
             "sections": [
-                {"section": "Profile Signal Clarity", "narrative": ""},
-                {"section": "Behavioral Signal Strength", "narrative": "Text."},
-                {"section": "Behavioral Signal Quality", "narrative": "Text."},
-                {"section": "Profile-Behavior Alignment", "narrative": "Text."},
-                {"section": "forward_brief", "narrative": "Text."},
+                {"section": "Profile Signal Clarity", "summary": "S.", "narrative": ""},
+                {"section": "Behavioral Signal Strength", "summary": "S.", "narrative": "Text."},
+                {"section": "Behavioral Signal Quality", "summary": "S.", "narrative": "Text."},
+                {"section": "Profile-Behavior Alignment", "summary": "S.", "narrative": "Text."},
             ]
         }
         with pytest.raises(ValueError, match="Empty narrative"):
@@ -217,15 +222,42 @@ class TestParseResponse:
     def test_unexpected_section_raises(self):
         data = {
             "sections": [
-                {"section": "Made Up Section", "narrative": "Text."},
-                {"section": "Profile Signal Clarity", "narrative": "Text."},
-                {"section": "Behavioral Signal Strength", "narrative": "Text."},
-                {"section": "Behavioral Signal Quality", "narrative": "Text."},
-                {"section": "Profile-Behavior Alignment", "narrative": "Text."},
-                {"section": "forward_brief", "narrative": "Text."},
+                {"section": "Made Up Section", "summary": "S.", "narrative": "Text."},
+                {"section": "Profile Signal Clarity", "summary": "S.", "narrative": "Text."},
+                {"section": "Behavioral Signal Strength", "summary": "S.", "narrative": "Text."},
+                {"section": "Behavioral Signal Quality", "summary": "S.", "narrative": "Text."},
+                {"section": "Profile-Behavior Alignment", "summary": "S.", "narrative": "Text."},
             ]
         }
         with pytest.raises(ValueError, match="Unexpected section"):
+            _parse_narrative_response(json.dumps(data))
+
+    def test_forward_brief_section_raises(self):
+        """ORPHEUS-68: a stray forward_brief entry is an unexpected section
+        — a half-migrated Claude response should retry, not silently ship
+        the old shape."""
+        data = {
+            "sections": [
+                {"section": "Profile Signal Clarity", "summary": "S.", "narrative": "Text."},
+                {"section": "Behavioral Signal Strength", "summary": "S.", "narrative": "Text."},
+                {"section": "Behavioral Signal Quality", "summary": "S.", "narrative": "Text."},
+                {"section": "Profile-Behavior Alignment", "summary": "S.", "narrative": "Text."},
+                {"section": "forward_brief", "summary": "S.", "narrative": "## Reach\nText."},
+            ]
+        }
+        with pytest.raises(ValueError, match="Unexpected section"):
+            _parse_narrative_response(json.dumps(data))
+
+    def test_missing_summary_raises(self):
+        data = json.loads(_make_valid_response())
+        del data["sections"][0]["summary"]
+        with pytest.raises(ValueError, match="summary"):
+            _parse_narrative_response(json.dumps(data))
+
+    def test_empty_summary_raises(self):
+        data = json.loads(_make_valid_response())
+        data["sections"][2]["summary"] = "   "
+        with pytest.raises(ValueError, match="summary"):
             _parse_narrative_response(json.dumps(data))
 
     def test_missing_sections_key_raises(self):
@@ -239,11 +271,10 @@ class TestParseResponse:
     def test_whitespace_only_narrative_raises(self):
         data = {
             "sections": [
-                {"section": "Profile Signal Clarity", "narrative": "   \n  "},
-                {"section": "Behavioral Signal Strength", "narrative": "Text."},
-                {"section": "Behavioral Signal Quality", "narrative": "Text."},
-                {"section": "Profile-Behavior Alignment", "narrative": "Text."},
-                {"section": "forward_brief", "narrative": "Text."},
+                {"section": "Profile Signal Clarity", "summary": "S.", "narrative": "   \n  "},
+                {"section": "Behavioral Signal Strength", "summary": "S.", "narrative": "Text."},
+                {"section": "Behavioral Signal Quality", "summary": "S.", "narrative": "Text."},
+                {"section": "Profile-Behavior Alignment", "summary": "S.", "narrative": "Text."},
             ]
         }
         with pytest.raises(ValueError, match="Empty narrative"):
@@ -311,8 +342,11 @@ class TestSystemPrompt:
     def test_output_format_present(self):
         prompt = _build_system_prompt()
         assert '"section": "Profile Signal Clarity"' in prompt
-        assert '"section": "forward_brief"' in prompt
-        assert "150" in prompt and "300" in prompt  # word counts
+        # ORPHEUS-68: forward_brief retired from the output schema; each
+        # section entry carries a summary field instead.
+        assert '"section": "forward_brief"' not in prompt
+        assert '"summary"' in prompt
+        assert "200" in prompt and "400" in prompt  # narrative word counts
 
 
 # ============================================================
@@ -516,8 +550,10 @@ class TestConfigDefaults:
             assert len(FOCUS_INSTRUCTIONS[key]) > 50
 
     def test_expected_sections_count(self):
-        assert len(EXPECTED_SECTIONS) == 5
-        assert "forward_brief" in EXPECTED_SECTIONS
+        # ORPHEUS-68: forward_brief retired; the 4 dimensions are the only
+        # top-level sections.
+        assert len(EXPECTED_SECTIONS) == 4
+        assert "forward_brief" not in EXPECTED_SECTIONS
 
 
 # ============================================================
@@ -783,7 +819,7 @@ def _full_response_with_sub_dims(
     sub_dim_payload: list[dict] | None = None,
     cheat_sheet: dict | None = None,
 ) -> str:
-    """Build a complete 5-section + sub-dim response JSON.
+    """Build a complete 4-section + sub-dim response JSON (ORPHEUS-68 shape).
 
     The cheat_sheet object is included only when explicitly passed —
     matches the parser's best-effort posture so existing
@@ -795,11 +831,10 @@ def _full_response_with_sub_dims(
         sub_dim_payload = _valid_sub_dim_payload()
     body: dict = {
         "sections": [
-            {"section": "Profile Signal Clarity", "narrative": "Profile narrative. " * 10},
-            {"section": "Behavioral Signal Strength", "narrative": "Strength narrative. " * 10},
-            {"section": "Behavioral Signal Quality", "narrative": "Quality narrative. " * 8},
-            {"section": "Profile-Behavior Alignment", "narrative": "Alignment narrative. " * 8},
-            {"section": "forward_brief", "narrative": "## Reach\nForward brief. " * 20},
+            {"section": "Profile Signal Clarity", "summary": "Profile teaser.", "narrative": "Profile narrative. " * 10},
+            {"section": "Behavioral Signal Strength", "summary": "Strength teaser.", "narrative": "Strength narrative. " * 10},
+            {"section": "Behavioral Signal Quality", "summary": "Quality teaser.", "narrative": "Quality narrative. " * 8},
+            {"section": "Profile-Behavior Alignment", "summary": "Alignment teaser.", "narrative": "Alignment narrative. " * 8},
         ],
         "sub_dimensions": sub_dim_payload,
     }

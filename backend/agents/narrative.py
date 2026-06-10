@@ -1,13 +1,21 @@
-"""Narrative generation agent — produces dimension narratives and Forward Brief.
+"""Narrative generation agent — produces per-dimension narratives, summaries,
+sub-dimension slots, and the cheat sheet.
 
 This is the second of two Claude API calls in the pipeline (the first is
 rubric scoring in agents/rubric.py). By the time this stage runs, all scores
 are already computed and final. Claude's job here is interpretation and
 communication — not scoring.
 
-Architecture (from Narrative Generation Spec, approved April 2026):
+Architecture (from Narrative Generation Spec, approved April 2026; reaxised
+under ORPHEUS-67/68, 2026-06-10 — the standalone Forward Brief section is
+retired and its forward-looking guidance is regenerated per dimension):
 - Claude receives: scored_dimensions, forward_brief_data, questionnaire answers
-- Claude returns: 5 sections (4 dimension narratives + 1 forward_brief) as JSON
+- Claude returns: 4 dimension sections (each a 1–2 sentence `summary` plus a
+  combined messaging `narrative` = current-state interpretation + forward-
+  looking guidance), 13 sub-dimension slot payloads, and the cheat sheet
+- forward_brief_data remains an INPUT (still computed by the scoring engine);
+  it grounds the forward-looking guidance and renders as a structured metrics
+  block on the frontend instead of feeding a standalone narrative
 - Score-to-narrative mappings are explicit in the prompt — not left to Claude's
   open-ended judgment
 - Advisor-level configuration (voice, directness, mechanics, focus) shapes the
@@ -18,8 +26,9 @@ Decisions (current assumptions, accepted):
 - Self-serve: direct second-person
 - Recommendation style: coaching suggestions
 - System mechanics: behind the curtain
-- Lengths: 150-300 words per dimension, 400-600 for Forward Brief
-- Single Claude call for all 5 sections
+- Lengths: 200-400 words per dimension narrative (absorbs the retired
+  ~500-word Forward Brief), 15-40 words per dimension summary
+- Single Claude call for all payloads
 """
 
 import json
@@ -34,10 +43,16 @@ from backend.models.quality import DataQualityReport, IssueSeverity
 class NarrativeResult(NamedTuple):
     """Structured return from the narrative agent.
 
-    Three payloads in one Claude call:
-      * sections — the 5 top-level narratives (4 dimensions + forward_brief),
-        keyed by section identifier. Same shape `generate_narratives` has
-        returned since the v2 pipeline shipped.
+    Four payloads in one Claude call:
+      * sections — the 4 dimension narratives (combined messaging paragraphs:
+        current-state interpretation + forward-looking guidance, merged per
+        ORPHEUS-68), keyed by dimension name. The standalone forward_brief
+        section is retired.
+      * summaries — the 4 always-visible 1–2 sentence dimension teasers,
+        keyed by dimension name. Net-new field (ORPHEUS-68) — distinct from
+        the combined paragraph and from the sub-dim Summary slot. Merged
+        into ScoringStageOutput.scored_dimensions before persisting (same
+        JSONB path as sub_dimensions).
       * sub_dimensions — per-sub-dim narrative slots, keyed by
         `(dimension_name, sub_dim_name)` for direct merge into
         ScoringStageOutput.scored_dimensions before persisting (ORPHEUS-21).
@@ -45,12 +60,14 @@ class NarrativeResult(NamedTuple):
         'improvements' (scores 0–4, list[str]). Score 0 takes the same
         full-payload posture as score 1 per ORPHEUS-63.
       * cheat_sheet — structured one-page reference card derived from the
-        Forward Brief (ORPHEUS-60). Dict with priorities (5) / rhythm (3) /
-        milestones (3–4). `None` when Claude omits the section entirely
-        (best-effort parse posture; the worker treats `None` as "skip the
-        narratives row" rather than failing the whole job).
+        per-dimension combined messaging (ORPHEUS-60; source repointed in
+        ORPHEUS-68). Dict with priorities (5) / rhythm (3) / milestones
+        (3–4). `None` when Claude omits the section entirely (best-effort
+        parse posture; the worker treats `None` as "skip the narratives
+        row" rather than failing the whole job).
     """
     sections: dict[str, str]
+    summaries: dict[str, str]
     sub_dimensions: dict[tuple[str, str], dict]
     cheat_sheet: dict | None
 
@@ -137,26 +154,30 @@ MECHANICS_INSTRUCTIONS = {
 
 FOCUS_INSTRUCTIONS = {
     "thought_leadership": (
-        "In the Forward Brief, give extra attention to content quality, "
-        "topic consistency, audience industry alignment, and engagement depth. "
+        "In the forward-looking guidance within the dimension narratives, give "
+        "extra attention to content quality, topic consistency, audience "
+        "industry alignment, and engagement depth. "
         "Recommendations should emphasize content strategy and authority building."
     ),
     "business_development": (
-        "In the Forward Brief, give extra attention to reach metrics, audience "
-        "seniority, geography alignment, and engagement invitation signals. "
+        "In the forward-looking guidance within the dimension narratives, give "
+        "extra attention to reach metrics, audience seniority, geography "
+        "alignment, and engagement invitation signals. "
         "Recommendations should emphasize visibility to target buyers and "
         "conversion-oriented profile elements."
     ),
     "recruiting": (
-        "In the Forward Brief, give extra attention to audience composition, "
-        "follower growth, and profile completeness as a talent brand signal. "
+        "In the forward-looking guidance within the dimension narratives, give "
+        "extra attention to audience composition, follower growth, and profile "
+        "completeness as a talent brand signal. "
         "Recommendations should emphasize employer brand and candidate-facing elements."
     ),
     "career_transition": (
-        "In the Forward Brief, give extra attention to profile-behavior alignment, "
-        "identity clarity, and how the current content pattern supports or "
-        "contradicts the desired professional direction. Recommendations should "
-        "emphasize repositioning signals."
+        "In the forward-looking guidance within the dimension narratives, give "
+        "extra attention to profile-behavior alignment, identity clarity, and "
+        "how the current content pattern supports or contradicts the desired "
+        "professional direction. Recommendations should emphasize "
+        "repositioning signals."
     ),
 }
 
@@ -207,9 +228,21 @@ For quantitative sub-dimensions (Dimensions 2 and 3, scale 0–5):
 **Score 4:** Strong activity level. Affirm the pattern.
 **Score 5:** Exceptional volume. Brief acknowledgment.
 
+## Dimension narratives
+
+Each of the four dimensions gets two generated fields:
+
+**Summary** (1–2 sentences, ~15–40 words): an always-visible teaser for the dimension card. State the single most important takeaway for this dimension — what the reader should know before deciding whether to read further. Grounded in the dimension's scores and data, but written as a standalone sentence or two, not a truncated lede of the narrative. Distinct from the per-sub-dimension Summary slots.
+
+**Narrative** (200–400 words): a combined messaging paragraph with two movements, merged into continuous prose (no internal headers):
+1. *Interpretation* — what the dimension's scores mean for this person, calibrated to score level per the mappings above.
+2. *Forward-looking guidance* — where this dimension should go next, grounded in the Forward Brief data metrics (reach, audience composition, behavioral depth, qualitative flags) where they bear on this dimension. This is the guidance that previously lived in a standalone Forward Brief document; it is now regenerated per dimension. Anchor it in the client's stated motivation (Q3) and 12-month success picture (Q8) where relevant.
+
+Distribute the Forward Brief data across the dimensions where each metric naturally belongs — reach and audience metrics with the behavioral dimensions, profile flags with the profile dimensions. Do not force every metric into every narrative.
+
 ## Sub-dimension narratives
 
-In addition to the four dimension narratives and the Forward Brief, you produce per-sub-dimension narrative payloads for **every** sub-dimension in every dimension. There are 13 total: five in Profile Signal Clarity, four in Behavioral Signal Strength, two in Behavioral Signal Quality, two in Profile-Behavior Alignment.
+In addition to the four dimension narratives and summaries, you produce per-sub-dimension narrative payloads for **every** sub-dimension in every dimension. There are 13 total: five in Profile Signal Clarity, four in Behavioral Signal Strength, two in Behavioral Signal Quality, two in Profile-Behavior Alignment.
 
 Each sub-dimension narrative has up to three slots. The slot structure is **conditional on score** — slots are present or absent based on the score itself, not calibrated by tone. Do not include placeholder content for an omitted slot.
 
@@ -230,17 +263,17 @@ The internal sub-dimension names (Headline Clarity, History Depth, Outbound Enga
 
 ## Cheat Sheet
 
-In addition to the dimension narratives, Forward Brief, and sub-dimension slots above, you produce a structured **cheat sheet** — a printable one-page reference card derived from the Forward Brief. Client receives both: the Forward Brief is long-form prose; the Cheat Sheet is the same conclusions restructured for at-a-glance review. They are complementary, not redundant.
+In addition to the dimension narratives, summaries, and sub-dimension slots above, you produce a structured **cheat sheet** — a printable one-page reference card derived from the per-dimension combined messaging. Client receives both: the dimension narratives are long-form prose; the Cheat Sheet is the same conclusions restructured for at-a-glance review. They are complementary, not redundant.
 
 The cheat sheet has three sections:
 
 **Priorities** — exactly 5 entries, ordered by leverage (highest-impact first). Each is a short imperative title (3–6 words, e.g., "Close the Consistency Gap") plus a 1-to-2-sentence action describing the specific move the client should make. If the action carries a measurable target, append a final sentence wrapping the target in `**bold**` markers (e.g., `**Target: 2 new recommendations in 30 days.**`). Plain text — no other markdown formatting in the action string.
 
-The 5 priorities should align with the Forward Brief's Priorities + Quick Wins subsections — they are the same observations rephrased for the cheat sheet's compressed form, not an independent synthesis. If the Forward Brief surfaces fewer than 5 distinct moves, derive the remaining priorities from the highest-leverage dimension narratives.
+The 5 priorities should align with the forward-looking guidance in the dimension narratives — they are the same moves rephrased for the cheat sheet's compressed form, not an independent synthesis. Order across dimensions by leverage, not by dimension order; weight toward the lowest-scoring dimensions where the guidance has the most room to move the client.
 
-**Rhythm** — exactly 3 cadence sections in order: "Every Day", "Every Week", "Every Month". Each carries 2–4 checklist items as short imperative sentences (under 12 words each). Items are concrete behaviors the client could do at that cadence, derived from the Quick Wins and ongoing-practice implications of the Forward Brief.
+**Rhythm** — exactly 3 cadence sections in order: "Every Day", "Every Week", "Every Month". Each carries 2–4 checklist items as short imperative sentences (under 12 words each). Items are concrete behaviors the client could do at that cadence, derived from the ongoing-practice implications of the dimension narratives' forward-looking guidance.
 
-**Milestones** — 3–4 entries representing 90-day quantitative targets. Each is a `value` (short, e.g., "12", "36+", "2") + `label` (e.g., "Weeks without a gap", "Posts published", "New recommendations"). Pick milestones that map to the highest-leverage priorities and the metrics surfaced in Reach / Resonance / Authority where possible.
+**Milestones** — 3–4 entries representing 90-day quantitative targets. Each is a `value` (short, e.g., "12", "36+", "2") + `label` (e.g., "Weeks without a gap", "Posts published", "New recommendations"). Pick milestones that map to the highest-leverage priorities and the metrics surfaced in the Forward Brief data input where possible.
 
 Voice / directness / mechanics rules apply uniformly to the cheat sheet — match the register of the dimension narratives. The cheat sheet is the only structured output beyond JSON keys, but its strings still read as natural prose.
 
@@ -249,10 +282,10 @@ Voice / directness / mechanics rules apply uniformly to the cheat sheet — matc
 The questionnaire is a 9-question intake the client completes before the diagnostic. Use it to shape voice, framing, and emphasis — not to drive scoring (scores are final before you see them).
 
 - **Q1 (current situation)** and **Q2 (actively pursuing)** anchor how you frame relevance. A client between roles pursuing board positions reads differently than an active founder pursuing investor relationships.
-- **Q3 (what's driving interest in this engagement now)** anchors the opening of the Forward Brief. Use the client's stated motivation as the entry point.
+- **Q3 (what's driving interest in this engagement now)** anchors the forward-looking guidance in the dimension narratives. Use the client's stated motivation as the entry point for where each dimension should go next.
 - **Q4 (current LinkedIn approach)** and **Q5 (comfort with current presence)** anchor the dimension narratives. A "passive" or "uncertain" client should hear recommendations framed as low-friction starting points; an "active and engaged" client should hear refinement-level observations.
 - **Q6 (familiarity with how LinkedIn works)** and **Q7 (understanding of online-presence impact)** calibrate how much explaining you do. Low familiarity → spell out what the observations mean in plain terms. High familiarity → reference patterns without belaboring them. Combine with the configured system_mechanics setting; never override that setting, just calibrate within it.
-- **Q8 (12-month success picture)** anchors the Forward Brief's Priorities and Quick Wins. Recommendations should plausibly move the client toward what they described. If they chose "All of the above," treat all four targets as in scope.
+- **Q8 (12-month success picture)** anchors the forward-looking guidance and the cheat sheet's Priorities. Recommendations should plausibly move the client toward what they described. If they chose "All of the above," treat all four targets as in scope.
 - **Q9** is a wildcard. If the client provided substantive context, acknowledge it explicitly somewhere appropriate. If they wrote "Nothing to add" or similar, ignore it.
 
 Treat the questionnaire as a brief from the client, not as constraints. If the data contradicts what the client said about themselves, name the gap honestly without moralizing.
@@ -274,22 +307,22 @@ Return a JSON object with exactly this structure:
   "sections": [
     {{
       "section": "Profile Signal Clarity",
+      "summary": "...",
       "narrative": "..."
     }},
     {{
       "section": "Behavioral Signal Strength",
+      "summary": "...",
       "narrative": "..."
     }},
     {{
       "section": "Behavioral Signal Quality",
+      "summary": "...",
       "narrative": "..."
     }},
     {{
       "section": "Profile-Behavior Alignment",
-      "narrative": "..."
-    }},
-    {{
-      "section": "forward_brief",
+      "summary": "...",
       "narrative": "..."
     }}
   ],
@@ -324,7 +357,7 @@ Return a JSON object with exactly this structure:
   }}
 }}
 
-Each dimension narrative should be 150–300 words. The forward_brief should be 400–600 words and may use Markdown headers (## Reach, ## Resonance, ## Authority, ## Priorities, ## Quick Wins) to separate subsections.
+The sections array must contain exactly 4 entries — one per dimension, no forward_brief entry. `summary` (1–2 sentences, ~15–40 words) and `narrative` (200–400 words, continuous prose, no Markdown headers) are both required and non-empty on every entry.
 
 The sub_dimensions array must contain exactly 13 entries — one per sub-dimension across all four dimensions. The (dimension, sub_dimension) pair on each entry must exactly match the input sub-dimension names (case- and punctuation-exact). `summary` is required on every entry. `best_practices` is required on entries whose score is 0, 1, 2, or 3 — omit the key entirely on entries whose score is 4 or 5 (do not include it with empty string or null). `improvements` is required on entries whose score is 0, 1, 2, 3, or 4 — omit the key entirely on entries whose score is 5.
 
@@ -638,9 +671,9 @@ USER_PROMPT_TEMPLATE = """Generate narrative text for the following Signal Score
 {quality_section}
 ---
 
-Generate all 5 sections (4 dimension narratives + forward_brief) as a single JSON object. Remember:
-- Dimension narratives: 150–300 words each. Interpret the scores — don't recite them.
-- Forward Brief: 400–600 words. Use ## headers for Reach, Resonance, Authority, Priorities, and Quick Wins subsections.
+Generate all 4 dimension sections (summary + narrative each), the 13 sub-dimension payloads, and the cheat sheet as a single JSON object. Remember:
+- Dimension summaries: 1–2 sentences (~15–40 words). The single most important takeaway, standalone.
+- Dimension narratives: 200–400 words each, continuous prose. Interpret the scores — don't recite them — then carry into forward-looking guidance grounded in the Forward Brief data above.
 - Every observation must trace to specific data in the input above.
 - Calibrate language intensity to the score level (see system prompt mappings).
 - If data quality issues are noted above, acknowledge limitations honestly without overstating them."""
@@ -696,7 +729,6 @@ EXPECTED_SECTIONS = {
     "Behavioral Signal Strength",
     "Behavioral Signal Quality",
     "Profile-Behavior Alignment",
-    "forward_brief",
 }
 
 
@@ -706,9 +738,14 @@ def _parse_narrative_response(
 ) -> NarrativeResult:
     """Parse Claude's JSON response into a NarrativeResult.
 
-    Validates two payloads:
-      * 5 top-level sections matching EXPECTED_SECTIONS (4 dim narratives
-        + forward_brief). Empty narratives raise.
+    Validates three payloads (ORPHEUS-68 dropped the forward_brief section;
+    EXPECTED_SECTIONS is the 4 dimensions only):
+      * 4 dimension sections matching EXPECTED_SECTIONS, each carrying a
+        required `summary` (the always-visible 1–2 sentence teaser) and a
+        required `narrative` (the combined messaging paragraph). Empty
+        values raise. A stray forward_brief entry raises like any other
+        unexpected section so a half-migrated Claude response retries
+        rather than silently shipping the old shape.
       * 13 sub-dimension entries (when scoring_output is provided), each
         keyed by (dimension, sub_dimension). Conditional slot validation
         is cross-referenced against the score:
@@ -718,6 +755,8 @@ def _parse_narrative_response(
         Stray entries that don't match a real sub-dim raise; missing
         required slots raise; unexpected slots on a score-5 entry are
         tolerated but logged-and-dropped (Claude occasionally over-emits).
+      * cheat_sheet — strict shape validation when present, None when
+        absent.
 
     When scoring_output is None, sub-dimension validation is best-effort:
     we still parse the array but skip the score-keyed conditional checks
@@ -738,16 +777,21 @@ def _parse_narrative_response(
         raise ValueError("Response missing 'sections' key")
 
     sections: dict[str, str] = {}
+    summaries: dict[str, str] = {}
     for entry in data["sections"]:
         section = entry.get("section", "")
         narrative = entry.get("narrative", "")
+        summary = entry.get("summary", "")
 
         if section not in EXPECTED_SECTIONS:
             raise ValueError(f"Unexpected section: '{section}'")
         if not narrative or not narrative.strip():
             raise ValueError(f"Empty narrative for section: '{section}'")
+        if not isinstance(summary, str) or not summary.strip():
+            raise ValueError(f"Missing or empty summary for section: '{section}'")
 
         sections[section] = narrative.strip()
+        summaries[section] = summary.strip()
 
     missing = EXPECTED_SECTIONS - set(sections.keys())
     if missing:
@@ -761,6 +805,7 @@ def _parse_narrative_response(
 
     return NarrativeResult(
         sections=sections,
+        summaries=summaries,
         sub_dimensions=sub_dimensions,
         cheat_sheet=cheat_sheet,
     )
@@ -1032,10 +1077,11 @@ async def generate_narratives(
 ) -> NarrativeResult:
     """Generate all narrative sections for a Signal Score report.
 
-    Single Claude call emits both top-level sections (4 dimension narratives
-    + forward_brief) and per-sub-dim narrative payloads (13 entries, one per
-    sub-dimension across the four dimensions). ORPHEUS-21 introduced the
-    sub-dim layer; the existing five-section return is unchanged in content.
+    Single Claude call emits the 4 dimension sections (combined messaging
+    narrative + always-visible summary each — ORPHEUS-68 retired the
+    standalone forward_brief section and reaxised its forward-looking
+    guidance into the dimension narratives), the per-sub-dim narrative
+    payloads (13 entries, ORPHEUS-21), and the cheat sheet (ORPHEUS-60).
 
     Args:
         client: Anthropic API client.
@@ -1054,9 +1100,10 @@ async def generate_narratives(
         max_retries: Number of retries on parse failure.
 
     Returns:
-        NarrativeResult — `sections` (5 entries, same keys as pre-ORPHEUS-21)
-        and `sub_dimensions` (13 entries, keyed by (dim_name, sub_dim_name)
-        with conditional slot contents).
+        NarrativeResult — `sections` + `summaries` (4 entries each, keyed by
+        dimension name), `sub_dimensions` (13 entries, keyed by
+        (dim_name, sub_dim_name) with conditional slot contents), and
+        `cheat_sheet` (dict | None).
     """
     system_prompt = _build_system_prompt(narrative_config)
 
@@ -1075,11 +1122,12 @@ async def generate_narratives(
     for attempt in range(1 + max_retries):
         response = client.messages.create(
             model=model,
-            # Bumped from 4096 to 8192 in ORPHEUS-21. 4 dim narratives
-            # (~225w each) + forward_brief (~500w) + 13 sub-dim payloads
-            # (avg ~120w each) lands around 3000 words / ~4000 tokens —
-            # right at the old ceiling, with no margin for JSON overhead
-            # or retries. 8192 gives comfortable headroom.
+            # Bumped from 4096 to 8192 in ORPHEUS-21. Post-ORPHEUS-68 the
+            # ~500w forward_brief is redistributed into the 4 dimension
+            # narratives (~300w each) + 4 short summaries; with the 13
+            # sub-dim payloads + cheat sheet the output stays ~3300 words
+            # / ~4400 tokens — comfortable under the 8192 ceiling
+            # (ORPHEUS-65 ran the larger high-score payload clean).
             max_tokens=8192,
             system=system_prompt,
             messages=[{"role": "user", "content": user_message}],

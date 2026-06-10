@@ -1,16 +1,15 @@
 """Tests for the worker pipeline helpers in backend/workers/processor.py.
 
-Today covers `_merge_sub_dim_narratives` only — the rest of the
-processor module is integration-shaped (Supabase + Anthropic side
-effects) and exercised live in the ORPHEUS-44 e2e walk-through rather
-than under pytest.
+Covers `_merge_sub_dim_narratives` (ORPHEUS-21) and `_merge_dim_summaries`
+(ORPHEUS-68) — the rest of the processor module is integration-shaped
+(Supabase + Anthropic side effects) and exercised live in the e2e
+walk-throughs rather than under pytest.
 
-`_merge_sub_dim_narratives` is the in-place mutation step that lands
-the narrative agent's per-sub-dim payloads onto the ScoringStageOutput
-model before the `scores.dimensions` JSONB is re-persisted (ORPHEUS-21).
-A bug here surfaces as silently-empty sub-dim slots on the wire even
-when Claude generated them correctly, so it's worth its own test
-surface independent of the parser.
+Both helpers are in-place mutation steps that land the narrative agent's
+payloads onto the ScoringStageOutput model before the `scores.dimensions`
+JSONB is re-persisted. A bug here surfaces as silently-empty narrative
+slots on the wire even when Claude generated them correctly, so they're
+worth their own test surface independent of the parser.
 """
 
 from __future__ import annotations
@@ -31,7 +30,10 @@ from backend.models.scoring import (
     ViewerActorAffinity,
     VisualProfessionalism,
 )
-from backend.workers.processor import _merge_sub_dim_narratives
+from backend.workers.processor import (
+    _merge_dim_summaries,
+    _merge_sub_dim_narratives,
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -197,3 +199,44 @@ class TestMergeSubDimNarratives:
         assert '"summary":"Summary text."' in dumped
         assert '"best_practices":"BP text."' in dumped
         assert '"improvements":["Action."]' in dumped
+
+
+class TestMergeDimSummaries:
+    """ORPHEUS-68: the per-dimension summary teaser rides the same
+    scores.dimensions JSONB path as the sub-dim slots."""
+
+    def test_applies_summaries_by_dimension_name(self):
+        output = _minimal_scoring_output()
+        summaries = {
+            "Profile Signal Clarity": "Profile teaser sentence.",
+            "Behavioral Signal Strength": "Strength teaser sentence.",
+        }
+        _merge_dim_summaries(output, summaries)
+
+        dims = {d.name: d for d in output.scored_dimensions.dimensions}
+        assert dims["Profile Signal Clarity"].summary == "Profile teaser sentence."
+        assert dims["Behavioral Signal Strength"].summary == "Strength teaser sentence."
+
+    def test_missing_summary_tolerated(self):
+        """A dimension absent from the summaries dict keeps summary=None —
+        same tolerance posture as _merge_sub_dim_narratives."""
+        output = _minimal_scoring_output()
+        _merge_dim_summaries(output, {"Profile Signal Clarity": "Only one."})
+
+        dims = {d.name: d for d in output.scored_dimensions.dimensions}
+        assert dims["Profile Signal Clarity"].summary == "Only one."
+        assert dims["Behavioral Signal Strength"].summary is None
+
+    def test_empty_dict_is_noop(self):
+        output = _minimal_scoring_output()
+        _merge_dim_summaries(output, {})
+        for dim in output.scored_dimensions.dimensions:
+            assert dim.summary is None
+
+    def test_summary_round_trips_through_json(self):
+        """After merging, model_dump_json carries the dimension summary so
+        the worker's UPDATE on scores.dimensions reaches the wire."""
+        output = _minimal_scoring_output()
+        _merge_dim_summaries(output, {"Profile Signal Clarity": "Wire teaser."})
+        dumped = output.scored_dimensions.model_dump_json()
+        assert '"summary":"Wire teaser."' in dumped

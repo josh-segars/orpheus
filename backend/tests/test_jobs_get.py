@@ -343,6 +343,8 @@ def _score_row(*, job_id: str) -> dict[str, Any]:
                     "band": "Tuned",
                     "sub_dimensions": [],
                     "completeness_floor_applied": False,
+                    # ORPHEUS-68: per-dim summary teaser rides this JSONB.
+                    "summary": "Profile teaser sentence.",
                 },
             ],
         },
@@ -366,12 +368,14 @@ def _narrative_row(
 
 @pytest.mark.asyncio
 async def test_complete_job_assembles_payload():
-    """ORPHEUS-59: a complete job returns a fully-shaped `result` payload.
+    """ORPHEUS-59 + ORPHEUS-68: a complete job returns a fully-shaped
+    `result` payload.
 
     Covers the wire contract end to end: `scored_dimensions` populated
-    from `scores.dimensions`, `dimension_narratives` keyed by section
-    name from `generated_text`, `forward_brief` from its row, and
-    `cheat_sheet` serialized as null (the agent doesn't emit it yet).
+    from `scores.dimensions` (carrying the per-dim `summary` teaser),
+    `dimension_narratives` keyed by section name from `generated_text`,
+    no `forward_brief` wire key (retired in ORPHEUS-68), and
+    `cheat_sheet` serialized as null when the row is absent.
     """
     fake = FakeSupabase(
         responses=[
@@ -387,8 +391,8 @@ async def test_complete_job_assembles_payload():
             },
             # scores query
             {"data": [_score_row(job_id=JOB_1_ID)]},
-            # narratives query — 4 dim sections + forward_brief, no
-            # cheat_sheet (matches the agent's actual output)
+            # narratives query — 4 dim sections, no forward_brief, no
+            # cheat_sheet (matches the post-ORPHEUS-68 agent output)
             {
                 "data": [
                     _narrative_row(
@@ -406,10 +410,6 @@ async def test_complete_job_assembles_payload():
                     _narrative_row(
                         section="Profile-Behavior Alignment",
                         generated_text="Alignment narrative.",
-                    ),
-                    _narrative_row(
-                        section="forward_brief",
-                        generated_text="Forward brief body.",
                     ),
                 ]
             },
@@ -429,8 +429,13 @@ async def test_complete_job_assembles_payload():
     scoring = result.result["scoring"]
     assert scoring["scored_dimensions"]["composite"] == 58.0
     assert scoring["scored_dimensions"]["band"] == "Tuning"
+    # ORPHEUS-68: per-dim summary passes through the JSONB verbatim.
+    assert (
+        scoring["scored_dimensions"]["dimensions"][0]["summary"]
+        == "Profile teaser sentence."
+    )
     assert scoring["forward_brief_data"]["quantitative"]["follower_count"] == 1247
-    # Narratives: four dimension entries + forward_brief, no cheat_sheet.
+    # Narratives: four dimension entries; forward_brief retired off the wire.
     narr = result.result["narratives"]
     assert set(narr["dimension_narratives"].keys()) == {
         "Profile Signal Clarity",
@@ -438,7 +443,7 @@ async def test_complete_job_assembles_payload():
         "Behavioral Signal Quality",
         "Profile-Behavior Alignment",
     }
-    assert narr["forward_brief"] == "Forward brief body."
+    assert "forward_brief" not in narr
     assert narr["cheat_sheet"] is None
     assert fake.tables_queried == ["jobs", "scores", "narratives"]
 
@@ -471,8 +476,8 @@ async def test_complete_job_edited_text_wins_over_generated():
                         edited_text="Andrew's hand-tuned version.",
                     ),
                     _narrative_row(
-                        section="forward_brief",
-                        generated_text="Generated brief.",
+                        section="Behavioral Signal Strength",
+                        generated_text="Generated strength narrative.",
                         edited_text="   ",  # whitespace-only doesn't win
                     ),
                 ]
@@ -494,7 +499,10 @@ async def test_complete_job_edited_text_wins_over_generated():
         == "Andrew's hand-tuned version."
     )
     # Whitespace-only edited_text falls through to generated_text.
-    assert narr["forward_brief"] == "Generated brief."
+    assert (
+        narr["dimension_narratives"]["Behavioral Signal Strength"]
+        == "Generated strength narrative."
+    )
 
 
 @pytest.mark.asyncio
@@ -535,14 +543,11 @@ async def test_complete_job_with_missing_scores_returns_no_result():
 
 
 @pytest.mark.asyncio
-async def test_complete_job_with_missing_forward_brief_returns_no_result():
-    """Missing forward_brief narrative → `result` is null.
-
-    Dimension narratives without the forward_brief is an incomplete
-    state — the frontend's Forward Brief page would 500 on a null
-    body. Surface null `result` so the polling stays open until the
-    full set lands.
-    """
+async def test_complete_job_legacy_forward_brief_row_ignored():
+    """ORPHEUS-68: the three preserved pre-68 demo jobs still carry a
+    section='forward_brief' narratives row. The handler ignores it —
+    no `forward_brief` wire key, no leak into dimension_narratives,
+    and the rest of the payload assembles normally."""
     fake = FakeSupabase(
         responses=[
             {
@@ -561,7 +566,52 @@ async def test_complete_job_with_missing_forward_brief_returns_no_result():
                         section="Profile Signal Clarity",
                         generated_text="Profile narrative.",
                     ),
-                    # no forward_brief row
+                    _narrative_row(
+                        section="forward_brief",
+                        generated_text="## Reach\nLegacy forward brief body.",
+                    ),
+                ]
+            },
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_client_roles(CLIENT_1_ID),
+        )
+
+    assert result.state == "complete"
+    assert result.result is not None
+    narr = result.result["narratives"]
+    assert "forward_brief" not in narr
+    assert "forward_brief" not in narr["dimension_narratives"]
+    assert narr["dimension_narratives"]["Profile Signal Clarity"] == "Profile narrative."
+
+
+@pytest.mark.asyncio
+async def test_complete_job_with_no_dimension_narratives_returns_no_result():
+    """ORPHEUS-68 readiness gate: narratives rows exist but none of them
+    is a dimension section (e.g. only a cheat_sheet row landed before a
+    crash) → `result` is null so the polling AnalysisPage stays open."""
+    fake = FakeSupabase(
+        responses=[
+            {
+                "data": [
+                    _job_row(
+                        job_id=JOB_1_ID,
+                        client_id=CLIENT_1_ID,
+                        status_value="complete",
+                    )
+                ]
+            },
+            {"data": [_score_row(job_id=JOB_1_ID)]},
+            {
+                "data": [
+                    _narrative_row(
+                        section="cheat_sheet",
+                        generated_text="{}",
+                    ),
                 ]
             },
         ]
@@ -647,10 +697,6 @@ async def test_complete_job_cheat_sheet_section_deserializes():
                         generated_text="Alignment narrative.",
                     ),
                     _narrative_row(
-                        section="forward_brief",
-                        generated_text="Forward brief body.",
-                    ),
-                    _narrative_row(
                         section="cheat_sheet",
                         generated_text=json.dumps(_SAMPLE_CHEAT_SHEET),
                     ),
@@ -698,8 +744,8 @@ async def test_complete_job_malformed_cheat_sheet_falls_back_to_null():
             {
                 "data": [
                     _narrative_row(
-                        section="forward_brief",
-                        generated_text="Forward brief body.",
+                        section="Profile Signal Clarity",
+                        generated_text="Profile narrative.",
                     ),
                     _narrative_row(
                         section="cheat_sheet",
@@ -745,8 +791,8 @@ async def test_complete_job_cheat_sheet_edited_text_currently_falls_back():
             {
                 "data": [
                     _narrative_row(
-                        section="forward_brief",
-                        generated_text="Forward brief body.",
+                        section="Profile Signal Clarity",
+                        generated_text="Profile narrative.",
                     ),
                     _narrative_row(
                         section="cheat_sheet",

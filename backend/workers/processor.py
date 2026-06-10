@@ -5,8 +5,10 @@ then runs the 4-stage pipeline:
 
   1. Ingestion    — parse LinkedIn ZIP + XLSX into structured data
   2. Rubric       — Claude applies Dim 1 + Dim 4 rubrics → integer scores
-  3. Scoring      — deterministic computation of all dimensions + Forward Brief
-  4. Narrative    — Claude generates dimension narratives + Forward Brief text
+  3. Scoring      — deterministic computation of all dimensions + Forward Brief data
+  4. Narrative    — Claude generates dimension narratives + summaries,
+                    sub-dim slots, and the cheat sheet (the standalone
+                    Forward Brief narrative was retired in ORPHEUS-68)
 
 Updates job state: pending → running → complete (or failed, max 3 retries).
 
@@ -241,14 +243,16 @@ async def stage_narrative_generation(
     supabase,
     is_advisory: bool = True,
 ) -> NarrativeResult:
-    """Stage 4: Claude generates dimension narratives + Forward Brief + per-sub-dim slots + cheat sheet.
+    """Stage 4: Claude generates dimension narratives + summaries + per-sub-dim slots + cheat sheet.
 
-    The five top-level sections (4 dim narratives + forward_brief) are saved
-    as rows in the `narratives` table — that's the admin-editable surface.
-    The 13 per-sub-dim narrative payloads are returned in the NarrativeResult
-    so the caller can merge them into `scored_dimensions` and persist via
-    the `scores` row update — they ride the `dimensions` JSONB rather than
-    getting their own table rows because they aren't admin-editable in v1.
+    The four dimension sections (combined messaging paragraphs — ORPHEUS-68
+    retired the standalone forward_brief section) are saved as rows in the
+    `narratives` table — that's the admin-editable surface. The 4 per-dim
+    summaries and the 13 per-sub-dim narrative payloads are returned in the
+    NarrativeResult so the caller can merge them into `scored_dimensions`
+    and persist via the `scores` row update — they ride the `dimensions`
+    JSONB rather than getting their own table rows because they aren't
+    admin-editable in v1.
 
     The cheat_sheet (ORPHEUS-60) is persisted as an additional narratives
     row with section='cheat_sheet' and `generated_text` holding the
@@ -314,6 +318,7 @@ async def stage_narrative_generation(
 
     logger.info(
         f"[{job_id}] Generated {len(narrative_result.sections)} narrative sections "
+        f"+ {len(narrative_result.summaries)} dim summaries "
         f"+ {len(narrative_result.sub_dimensions)} sub-dim payloads "
         f"+ cheat_sheet={'yes' if cheat_sheet_persisted else 'no'} "
         f"(status={status})"
@@ -345,6 +350,26 @@ def _merge_sub_dim_narratives(
             sub.summary = entry.get("summary")
             sub.best_practices = entry.get("best_practices")
             sub.improvements = entry.get("improvements")
+
+
+def _merge_dim_summaries(
+    scoring_output: ScoringStageOutput,
+    summaries: dict[str, str],
+) -> None:
+    """Apply Stage 4's per-dimension summaries to the scoring model in place.
+
+    ORPHEUS-68: the always-visible 1–2 sentence dimension teaser rides the
+    `scores.dimensions` JSONB the same way the sub-dim narrative slots do —
+    no migration, no admin-edit surface in v1 (the combined messaging
+    paragraph in the `narratives` table remains the admin-editable text).
+    Missing entries are tolerated for the same reason as in
+    `_merge_sub_dim_narratives` — the parser already enforced 4-summary
+    coverage at response-validation time.
+    """
+    for dim in scoring_output.scored_dimensions.dimensions:
+        summary = summaries.get(dim.name)
+        if summary:
+            dim.summary = summary
 
 
 # ============================================================
@@ -410,12 +435,14 @@ async def run_pipeline(supabase, anthropic_client: Anthropic, job: dict):
         narrative_config, quality_report, job_id, supabase, is_advisory
     )
 
-    # Stage 4b: Merge sub-dim narratives into scored_dimensions and re-persist
-    # the `scores.dimensions` JSONB so the GET /jobs/{id} payload picks them
-    # up via the existing wire path (ORPHEUS-21). Sub-dim narratives are
-    # intentionally not stored in the `narratives` table — that surface is
-    # for admin-editable text; sub-dim slots are agent-generated only.
+    # Stage 4b: Merge sub-dim narratives (ORPHEUS-21) and per-dim summaries
+    # (ORPHEUS-68) into scored_dimensions and re-persist the
+    # `scores.dimensions` JSONB so the GET /jobs/{id} payload picks them
+    # up via the existing wire path. Neither is stored in the `narratives`
+    # table — that surface is for admin-editable text; these slots are
+    # agent-generated only.
     _merge_sub_dim_narratives(scoring_output, narrative_result.sub_dimensions)
+    _merge_dim_summaries(scoring_output, narrative_result.summaries)
     supabase.table("scores").update({
         "dimensions": json.loads(scoring_output.scored_dimensions.model_dump_json()),
     }).eq("job_id", job_id).execute()

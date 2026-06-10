@@ -389,9 +389,17 @@ def _build_result_payload(supabase, job_id: str) -> dict | None:
     """Join scoring + narratives rows into the JobResultPayload dict.
 
     Returns None when the worker hasn't finished writing either half —
-    no scores row, or no narratives at all, or the forward_brief
-    narrative is missing. ORPHEUS-59 reconciled three mismatches
-    between this reader and what the worker actually persists:
+    no scores row, or no narratives at all. ORPHEUS-68 retired the
+    standalone forward_brief narrative: new jobs don't write the row,
+    and the wire payload no longer carries a `forward_brief` key. Rows
+    with section='forward_brief' on the three preserved pre-68 demo
+    jobs are tolerated and ignored. The per-dimension `summary` field
+    (the always-visible card teaser) rides `scores.dimensions` JSONB
+    and surfaces through `scored_dimensions` automatically — null on
+    pre-68 jobs, which the frontend renders via graceful fallback.
+
+    ORPHEUS-59 reconciled three mismatches between this reader and
+    what the worker actually persists:
 
       * `narratives.content` was renamed to `generated_text` (plus
         `edited_text` for the admin-edit override path; ORPHEUS-31).
@@ -429,7 +437,6 @@ def _build_result_payload(supabase, job_id: str) -> dict | None:
 
     score_row = scores.data[0]
     dimension_narratives: dict[str, str] = {}
-    forward_brief: str | None = None
     cheat_sheet: dict | None = None
 
     for n in narratives_rows.data:
@@ -446,7 +453,10 @@ def _build_result_payload(supabase, job_id: str) -> dict | None:
             text = ""
 
         if section == "forward_brief":
-            forward_brief = text
+            # ORPHEUS-68: the standalone Forward Brief is retired. The three
+            # preserved pre-68 demo jobs still have this row — ignore it
+            # rather than surface or 500.
+            continue
         elif section == "cheat_sheet":
             # ORPHEUS-60: deserialize the JSON-encoded CheatSheetContent
             # back into a dict for the wire. Malformed JSON falls back to
@@ -470,7 +480,7 @@ def _build_result_payload(supabase, job_id: str) -> dict | None:
         else:
             dimension_narratives[section] = text
 
-    if forward_brief is None:
+    if not dimension_narratives:
         return None
 
     return {
@@ -480,7 +490,6 @@ def _build_result_payload(supabase, job_id: str) -> dict | None:
         },
         "narratives": {
             "dimension_narratives": dimension_narratives,
-            "forward_brief": forward_brief,
             "cheat_sheet": cheat_sheet,
         },
     }
