@@ -1,5 +1,7 @@
 import { Link, useParams } from 'react-router-dom'
+import { useAdvisorClients } from '../hooks/useAdvisorClients'
 import { useJob } from '../hooks/useJob'
+import { useSessionRoles } from '../hooks/useSessionRoles'
 import type { CheatSheetPriority } from '../types/scoring'
 import './CheatSheetPage.css'
 
@@ -14,6 +16,18 @@ import './CheatSheetPage.css'
 export function CheatSheetPage() {
   const { jobId } = useParams<{ jobId: string }>()
   const { data: job, isLoading, error } = useJob(jobId)
+
+  // Report-subject resolution (ORPHEUS-74) — same pattern as the Signal
+  // Score hero post-ORPHEUS-71. An advisor viewing a client's report gets
+  // "prepared for [display_name]" from the advisor roster; everyone else
+  // (client on their own report, dual-role advisor on their self-report)
+  // gets no clause. Replaces the old formatClientName(job.client_id)
+  // helper, which title-cased real client UUIDs into junk — it was
+  // written for the MSW demo fixture's "jane-doe" id. Hooks are called
+  // unconditionally per rules-of-hooks; the roster query gates internally
+  // on the advisor role.
+  const sessionRolesQuery = useSessionRoles()
+  const advisorClientsQuery = useAdvisorClients()
 
   if (isLoading) {
     return (
@@ -49,7 +63,13 @@ export function CheatSheetPage() {
     )
   }
 
-  const clientName = job.client_id ? formatClientName(job.client_id) : null
+  const isAdvisor = Boolean(sessionRolesQuery.data?.advisor_id)
+  const matchedClient =
+    isAdvisor && job.client_id
+      ? advisorClientsQuery.data?.clients.find((c) => c.id === job.client_id)
+      : undefined
+  const clientName =
+    matchedClient && !matchedClient.is_self ? matchedClient.display_name : null
   const { cheat_sheet } = job.result.narratives
 
   // Cheat sheet is populated for every job generated after ORPHEUS-60
@@ -204,13 +224,4 @@ function renderBold(text: string): React.ReactNode[] {
   }
   if (last < text.length) out.push(text.slice(last))
   return out
-}
-
-/** Turn "jane-doe" into "Jane Doe". Defensive against odd ids. */
-function formatClientName(clientId: string): string {
-  return clientId
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ')
 }
