@@ -64,6 +64,11 @@ export function PortalNav() {
   const picture = meta.picture
   const isAdmin = isAdminEmail(email)
 
+  // Closed Beta feedback link (ORPHEUS-72). Rendered only when the env var
+  // is set, so non-beta builds don't show a dangling button. URL is wired
+  // via VITE_BETA_SURVEY_URL (mirror into Vercel); see .env.local.example.
+  const surveyUrl = (import.meta.env.VITE_BETA_SURVEY_URL as string | undefined)?.trim()
+
   // Whether the privileged section (View Clients / Admin) renders at all.
   // Drives the divider so it never floats above an empty section.
   const hasPrivilegedSection = isAdvisor || isAdmin
@@ -114,6 +119,17 @@ export function PortalNav() {
         <span className="wordmark-orpheus">Orpheus</span>
         <span className="wordmark-social">Social</span>
       </div>
+
+      {surveyUrl && (
+        <a
+          className="nav-survey-link"
+          href={surveyUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Closed Beta Feedback
+        </a>
+      )}
 
       <div className="nav-account" ref={containerRef}>
         <button

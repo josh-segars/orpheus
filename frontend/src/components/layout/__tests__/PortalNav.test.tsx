@@ -84,6 +84,11 @@ describe('PortalNav account dropdown (ORPHEUS-71)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(isAdminEmail).mockReturnValue(false)
+    vi.unstubAllEnvs()
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
   it('renders the "Logged in as" eyebrow and the signed-in user’s own name', () => {
@@ -170,5 +175,25 @@ describe('PortalNav account dropdown (ORPHEUS-71)', () => {
     await user.click(screen.getByRole('menuitem', { name: /log out/i }))
 
     expect(signOut).toHaveBeenCalledTimes(1)
+  })
+
+  // --- Closed Beta feedback link (ORPHEUS-72) ----------------------------- //
+
+  it('hides the Closed Beta Feedback link when VITE_BETA_SURVEY_URL is unset', () => {
+    vi.mocked(useSessionRoles).mockReturnValue(rolesClientOnly() as ReturnType<typeof useSessionRoles>)
+    renderNav()
+
+    expect(screen.queryByRole('link', { name: /closed beta feedback/i })).not.toBeInTheDocument()
+  })
+
+  it('renders the Closed Beta Feedback link to the survey URL (new tab) when the env var is set', () => {
+    vi.stubEnv('VITE_BETA_SURVEY_URL', 'https://forms.example.com/beta')
+    vi.mocked(useSessionRoles).mockReturnValue(rolesClientOnly() as ReturnType<typeof useSessionRoles>)
+    renderNav()
+
+    const link = screen.getByRole('link', { name: /closed beta feedback/i })
+    expect(link).toHaveAttribute('href', 'https://forms.example.com/beta')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
   })
 })
