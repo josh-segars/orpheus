@@ -11,6 +11,9 @@ Architecture notes (from Andrew's specification):
 - Observable-over-inferred: score only what is explicitly present.
 - Rare-5 rule: if in doubt between 4 and 5, score 4.
 - The scoring engine is identical for all clients — no stream distinction.
+- Rubric calls run at temperature 0 by default (ORPHEUS-75): API-default
+  sampling produced band-crossing composite swings on borderline profiles;
+  temp-0 measured zero variance over 20 runs per profile.
 """
 
 import json
@@ -343,10 +346,16 @@ async def score_dimension_1(
     client: Anthropic,
     zip_data: ZipData,
     model: str = "claude-sonnet-4-20250514",
+    temperature: float | None = 0.0,
 ) -> dict[str, int]:
     """Apply Dimension 1 rubrics via Claude.
 
     Returns dict mapping sub-dimension names to integer scores (1-5).
+
+    temperature: defaults to 0.0 for deterministic scoring (ORPHEUS-75 —
+    API-default sampling produced band-crossing composite swings on
+    borderline profiles; temp-0 measured 0.00 stdev over 20 runs).
+    Pass None to omit the parameter and use the API default.
     """
     profile_data = _format_profile_for_dim1(zip_data)
     user_message = DIM1_USER_TEMPLATE.format(
@@ -359,6 +368,7 @@ async def score_dimension_1(
         max_tokens=256,
         system=DIM1_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_message}],
+        **({"temperature": temperature} if temperature is not None else {}),
     )
 
     return _parse_scores(response.content[0].text, DIM1_EXPECTED_KEYS)
@@ -368,10 +378,14 @@ async def score_dimension_4(
     client: Anthropic,
     zip_data: ZipData,
     model: str = "claude-sonnet-4-20250514",
+    temperature: float | None = 0.0,
 ) -> dict[str, int]:
     """Apply Dimension 4 rubrics via Claude.
 
     Returns dict mapping sub-dimension names to integer scores (1-5).
+
+    temperature: defaults to 0.0 for deterministic scoring (ORPHEUS-75).
+    Pass None to omit the parameter and use the API default.
     """
     content_data = _format_content_for_dim4(zip_data)
     user_message = DIM4_USER_TEMPLATE.format(
@@ -384,6 +398,7 @@ async def score_dimension_4(
         max_tokens=128,
         system=DIM4_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_message}],
+        **({"temperature": temperature} if temperature is not None else {}),
     )
 
     return _parse_scores(response.content[0].text, DIM4_EXPECTED_KEYS)
@@ -393,16 +408,20 @@ async def score_rubrics(
     client: Anthropic,
     zip_data: ZipData,
     model: str = "claude-sonnet-4-20250514",
+    temperature: float | None = 0.0,
 ) -> tuple[dict[str, int], dict[str, int]]:
     """Score both Dimension 1 and Dimension 4 rubrics.
 
     Returns (dim1_scores, dim4_scores) — each a dict mapping
     sub-dimension names to integer scores (1-5).
 
+    temperature: defaults to 0.0 for deterministic scoring (ORPHEUS-75),
+    passed to both calls. Pass None to use the API default.
+
     These feed directly into the scoring engine:
         engine.build_dimension_1_from_rubrics(dim1_scores, zip_data)
         engine.build_dimension_4_from_rubrics(dim4_scores)
     """
-    dim1 = await score_dimension_1(client, zip_data, model)
-    dim4 = await score_dimension_4(client, zip_data, model)
+    dim1 = await score_dimension_1(client, zip_data, model, temperature)
+    dim4 = await score_dimension_4(client, zip_data, model, temperature)
     return dim1, dim4
