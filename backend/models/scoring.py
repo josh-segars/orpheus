@@ -75,14 +75,14 @@ class SubDimensionScore(BaseModel):
         None,
         description=(
             "Data-grounded observation specific to this person on this "
-            "sub-dimension. ~25–45 words. Always present when narratives "
+            "sub-dimension. Up to ~45 words. Always present when narratives "
             "are generated."
         ),
     )
     best_practices: Optional[str] = Field(
         None,
         description=(
-            "Generic standard for this sub-dimension (~18–35 words). "
+            "Generic standard for this sub-dimension (up to ~35 words). "
             "Populated only at scores 0–3 — at 4–5 the standard is "
             "implicit and the slot stays empty."
         ),
@@ -135,7 +135,7 @@ class DimensionScore(BaseModel):
     summary: Optional[str] = Field(
         None,
         description=(
-            "Always-visible 1–2 sentence dimension teaser (~15–40 words), "
+            "Always-visible 1–2 sentence dimension teaser (up to ~40 words), "
             "populated by the narrative stage (ORPHEUS-68). Distinct from "
             "the combined messaging paragraph (narratives table) and the "
             "sub-dim Summary slots. None on jobs that predate ORPHEUS-68."

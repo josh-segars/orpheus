@@ -26,8 +26,9 @@ Decisions (current assumptions, accepted):
 - Self-serve: direct second-person
 - Recommendation style: coaching suggestions
 - System mechanics: behind the curtain
-- Lengths: 200-400 words per dimension narrative (absorbs the retired
-  ~500-word Forward Brief), 15-40 words per dimension summary
+- Lengths: ceilings only, no floors (ORPHEUS-66 — observed output runs
+  short of floors and reads well; accept observed length). Up to ~400
+  words per dimension narrative, up to ~40 words per dimension summary
 - Single Claude call for all payloads
 """
 
@@ -232,9 +233,9 @@ For quantitative sub-dimensions (Dimensions 2 and 3, scale 0–5):
 
 Each of the four dimensions gets two generated fields:
 
-**Summary** (1–2 sentences, ~15–40 words): an always-visible teaser for the dimension card. State the single most important takeaway for this dimension — what the reader should know before deciding whether to read further. Grounded in the dimension's scores and data, but written as a standalone sentence or two, not a truncated lede of the narrative. Distinct from the per-sub-dimension Summary slots.
+**Summary** (1–2 sentences, up to ~40 words): an always-visible teaser for the dimension card. State the single most important takeaway for this dimension — what the reader should know before deciding whether to read further. Grounded in the dimension's scores and data, but written as a standalone sentence or two, not a truncated lede of the narrative. Distinct from the per-sub-dimension Summary slots.
 
-**Narrative** (200–400 words): a combined messaging paragraph with two movements, merged into continuous prose (no internal headers):
+**Narrative** (up to ~400 words): a combined messaging paragraph with two movements, merged into continuous prose (no internal headers). Write as long as the content earns — both movements must be present and substantive, but do not pad to reach a length:
 1. *Interpretation* — what the dimension's scores mean for this person, calibrated to score level per the mappings above.
 2. *Forward-looking guidance* — where this dimension should go next, grounded in the Forward Brief data metrics (reach, audience composition, behavioral depth, qualitative flags) where they bear on this dimension. This is the guidance that previously lived in a standalone Forward Brief document; it is now regenerated per dimension. Anchor it in the client's stated motivation (Q3) and 12-month success picture (Q8) where relevant.
 
@@ -247,13 +248,13 @@ In addition to the four dimension narratives and summaries, you produce per-sub-
 Each sub-dimension narrative has up to three slots. The slot structure is **conditional on score** — slots are present or absent based on the score itself, not calibrated by tone. Do not include placeholder content for an omitted slot.
 
 **Summary** (always present, every sub-dimension, every score):
-25–45 words. A data-grounded observation specific to this person on this sub-dimension. For rubric sub-dimensions (Dim 1, Dim 4), reference the specific profile content or content pattern that drove the score. For quantitative sub-dimensions (Dim 2, Dim 3), the raw metric value is surfaced in the input — name it explicitly in the Summary (e.g., "Active in 11 of the last 52 weeks", or "No original posts recorded during the evaluation period").
+Up to ~45 words — complete sentences, dense over long. A data-grounded observation specific to this person on this sub-dimension. For rubric sub-dimensions (Dim 1, Dim 4), reference the specific profile content or content pattern that drove the score. For quantitative sub-dimensions (Dim 2, Dim 3), the raw metric value is surfaced in the input — name it explicitly in the Summary (e.g., "Active in 11 of the last 52 weeks", or "No original posts recorded during the evaluation period").
 
 **Best Practices** (only at scores 0, 1, 2, or 3):
-18–35 words. A generic standard for this sub-dimension. What good looks like, evergreen, not personalized. The same Best Practices content for the same sub-dimension across reports is acceptable — this is reference content the client can return to. **Omit entirely at scores 4 and 5.** Do not include a "no changes needed" placeholder.
+Up to ~35 words. A generic standard for this sub-dimension. What good looks like, evergreen, not personalized. The same Best Practices content for the same sub-dimension across reports is acceptable — this is reference content the client can return to. **Omit entirely at scores 4 and 5.** Do not include a "no changes needed" placeholder.
 
 **Improvements** (only at scores 0, 1, 2, 3, or 4):
-3–5 specific bullets at scores 0 or 1; 2–4 at scores 2–3; 1–2 at score 4. Each bullet 15–25 words, written as a concrete action the client could take. Score-aware count — do not pad to hit a minimum, and do not omit useful actions to hit a maximum. **Omit entirely at score 5.** Do not include a "minor polish" stretch bullet.
+3–5 specific bullets at scores 0 or 1; 2–4 at scores 2–3; 1–2 at score 4. Each bullet up to ~25 words, written as a concrete action the client could take. Score-aware count — do not pad to hit a minimum, and do not omit useful actions to hit a maximum. **Omit entirely at score 5.** Do not include a "minor polish" stretch bullet.
 
 A score of 0 indicates absent or negligible measurable activity for this sub-dimension. Treat score 0 the same as score 1 for slot structure (full payload of Summary + Best Practices + Improvements). Calibrate the Summary's language to name the absence honestly — "no original posts recorded during the window," not "low posting cadence" — and frame Improvements as starting moves rather than refinements.
 
@@ -357,7 +358,7 @@ Return a JSON object with exactly this structure:
   }}
 }}
 
-The sections array must contain exactly 4 entries — one per dimension, no forward_brief entry. `summary` (1–2 sentences, ~15–40 words) and `narrative` (200–400 words, continuous prose, no Markdown headers) are both required and non-empty on every entry.
+The sections array must contain exactly 4 entries — one per dimension, no forward_brief entry. `summary` (1–2 sentences, up to ~40 words) and `narrative` (up to ~400 words, continuous prose, no Markdown headers) are both required and non-empty on every entry.
 
 The sub_dimensions array must contain exactly 13 entries — one per sub-dimension across all four dimensions. The (dimension, sub_dimension) pair on each entry must exactly match the input sub-dimension names (case- and punctuation-exact). `summary` is required on every entry. `best_practices` is required on entries whose score is 0, 1, 2, or 3 — omit the key entirely on entries whose score is 4 or 5 (do not include it with empty string or null). `improvements` is required on entries whose score is 0, 1, 2, 3, or 4 — omit the key entirely on entries whose score is 5.
 
@@ -672,8 +673,8 @@ USER_PROMPT_TEMPLATE = """Generate narrative text for the following Signal Score
 ---
 
 Generate all 4 dimension sections (summary + narrative each), the 13 sub-dimension payloads, and the cheat sheet as a single JSON object. Remember:
-- Dimension summaries: 1–2 sentences (~15–40 words). The single most important takeaway, standalone.
-- Dimension narratives: 200–400 words each, continuous prose. Interpret the scores — don't recite them — then carry into forward-looking guidance grounded in the Forward Brief data above.
+- Dimension summaries: 1–2 sentences (up to ~40 words). The single most important takeaway, standalone.
+- Dimension narratives: up to ~400 words each, continuous prose. Interpret the scores — don't recite them — then carry into forward-looking guidance grounded in the Forward Brief data above.
 - Every observation must trace to specific data in the input above.
 - Calibrate language intensity to the score level (see system prompt mappings).
 - If data quality issues are noted above, acknowledge limitations honestly without overstating them."""
