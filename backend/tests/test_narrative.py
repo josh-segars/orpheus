@@ -346,7 +346,10 @@ class TestSystemPrompt:
         # section entry carries a summary field instead.
         assert '"section": "forward_brief"' not in prompt
         assert '"summary"' in prompt
-        assert "200" in prompt and "400" in prompt  # narrative word counts
+        # ORPHEUS-66: word floors dropped, ceilings kept — narrative up to
+        # ~400 words, summary up to ~40 words.
+        assert "up to ~400 words" in prompt
+        assert "up to ~40 words" in prompt
 
 
 # ============================================================
