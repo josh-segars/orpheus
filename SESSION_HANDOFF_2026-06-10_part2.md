@@ -10,7 +10,7 @@ Two code commits this session (one per ticket, already pushed by Josh) plus this
 fc75a7b ORPHEUS-68: reaxis Forward Brief into per-dimension narratives + summary field  ← pushed
 ```
 
-Session shape: session-start drift check (clean; flagged the un-deleted part-3 handoff file, since removed by Josh) → pulled the 67/68/69 ticket cluster → two open decisions locked with Josh up front (summary persistence → `scores.dimensions` JSONB; metrics-block layout → 2 sections) → ORPHEUS-68 backend reaxis + tests + commit → ORPHEUS-69 frontend + prototype sync + tests + commit → both tickets closed in Plane with closing comments → ORPHEUS-73 filed (live validation) → Josh pushed, ran pytest (**257 green**) → wrap.
+Session shape: session-start drift check (clean; flagged the un-deleted part-3 handoff file, since removed by Josh) → pulled the 67/68/69 ticket cluster → two open decisions locked with Josh up front (summary persistence → `scores.dimensions` JSONB; metrics-block layout → 2 sections) → ORPHEUS-68 backend reaxis + tests + commit → ORPHEUS-69 frontend + prototype sync + tests + commit → both tickets closed in Plane with closing comments → ORPHEUS-73 filed (live validation) → Josh pushed, ran pytest (**257 green**) → wrap → **session extended: ORPHEUS-73 executed and closed same-day** (see addendum at the bottom).
 
 ---
 
@@ -20,8 +20,9 @@ Session shape: session-start drift check (clean; flagged the un-deleted part-3 h
 |---|---|---|
 | ORPHEUS-68 | Narrative agent reaxis (backend) | ✅ **Done.** Commit `fc75a7b`. |
 | ORPHEUS-69 | Frontend: fold Forward Brief into Signal Score page | ✅ **Done.** Commit `172ed3b`. |
-| ORPHEUS-67 | Forward Brief consolidation (umbrella) | 🔶 **In Progress.** Both sub-items shipped; stays open for ORPHEUS-73 + the Decision Log entry (drafted below, needs manual paste). |
-| ORPHEUS-73 | Live test of 68/69 consolidation | ⏳ Backlog. **Top pickup for next session.** |
+| ORPHEUS-67 | Forward Brief consolidation (umbrella) | 🔶 **In Progress.** Both sub-items + ORPHEUS-73 done; only the Decision Log paste remains (drafted below). |
+| ORPHEUS-73 | Live test of 68/69 consolidation | ✅ **Done.** Executed same-session — see addendum. |
+| ORPHEUS-74 | Cheat Sheet subtitle renders raw client UUID | ⏳ Backlog. Cosmetic, filed during the 73 walkthrough. |
 | ORPHEUS-66 | Sub-dim word floors still below after 64 | ⏳ Backlog. Editorial, with Andrew. Unchanged. |
 | ORPHEUS-42 | Self-serve account management page | ⏸ Backlog. `/account` placeholder live. Unchanged. |
 | ORPHEUS-45 / 48 / 40 / 41 | Edit action / branding / Stripe / disconnect | ⏸ Backlog / deferred. Unchanged. |
@@ -74,11 +75,12 @@ This reverses [Andrew, 2026-04-08] "R/R/A live in the Forward Brief," so it's cr
 
 ## Recommended pickup for next session
 
-1. **ORPHEUS-73** — live cloud validation of 68/69. Pre-flight: Railway redeploy of backend + worker (**watch the auto-deploy quirk** — both 2026-06-02 pushes needed a manual redeploy click) + Vercel redeploy. Validate: fresh job emits the new shape first-attempt (watch parser retries / token ceiling), summaries persist + render with the toggle, combined narratives read as merged prose with no R/R/A leakage (word counts vs. the 200–400 spec — note the 64/66 history of Claude running short), metrics block renders from real data, no forward_brief row written, 3 demo jobs still render via fallback.
-2. **ORPHEUS-66** — sub-dim word floors, with Andrew. Cheap once he decides; the same question may now extend to the new 200–400w dimension-narrative budget — consider folding both into one editorial pass.
-3. **ORPHEUS-42** — account management page, when prioritized.
+1. **ORPHEUS-66** — word-count editorial pass, with Andrew. Now covers three layers that all run short of spec: sub-dim slots (the original 66), the new dimension summaries (13–21w observed vs. ~15–40 guidance), and the new combined narratives (201–274w observed vs. 200–400 — in spec but bottom of range). One consolidated decision (recommend: accept observed lengths) clears all three.
+2. **Rubric inter-rater variance** — ORPHEUS-73 caught Andrew's identical data scoring 75.75/Tuned vs. 83/Resonant (ORPHEUS-65), a band-crossing swing from Dim 1/4 Claude-rubric non-determinism. This is PRODUCT_CONTEXT Open Question 4 made concrete; worth a ticket + a consistency experiment before launch.
+3. **ORPHEUS-74** — cheat-sheet subtitle UUID cosmetic, quick fix.
+4. **ORPHEUS-42** — account management page, when prioritized.
 
-ORPHEUS-67 closes when 73 passes and the Decision Log entry is pasted.
+ORPHEUS-67 closes when the Decision Log entry is pasted (73 passed in-session).
 
 ---
 
@@ -119,3 +121,15 @@ cd ~/git/orpheus && git push origin main
 - **State of the Moment doc ID:** `1N7mbJztfOAABNzRANvWU5K_D9And0dFz1_0n42Z8euA`
 - **Decision Log doc ID:** `1cHIcyafWrzdlfdfF4BkVi8MbITyaB4Ii_DTvKLCRbOI`
 - **Decision Log entry required this session** — drafted above (Forward Brief reversal); needs manual paste into the doc (Drive MCP can't edit content in place).
+
+---
+
+## Addendum — ORPHEUS-73 executed and closed same-session
+
+After the wrap commit, Josh extended the session to run the live validation. **Full pass; ORPHEUS-73 closed.** Method + findings (full record in the Plane closing comment):
+
+- **Fresh jobs, both preserved profiles:** uploads cloned server-side to new job paths (Supabase Storage copy via a temporarily-enabled `http` Postgres extension, dropped after — sandbox egress to supabase.co is blocked), pending rows inserted with pre-generated ids. Josh's data → `e11eff50` (27/Untuned, 112s); Andrew's data → `710b14be` (75.75/Tuned, 99s). No parser retries, no truncation.
+- **DB:** 4 dim narratives + cheat_sheet, no forward_brief row; summaries in `scores.dimensions`; narratives 201–274w, no headers, no R/R/A leakage; cheat sheets valid (5/3/4) on both.
+- **UI (Claude-in-Chrome on live prod):** summary + read-more toggle, both metrics-block shapes (sparse null-tolerant + fully populated), View Cheat Sheet primary, advisor-view hero subject, pre-68 fallback on `bd513cbd`, dead `/forward-brief` → 404, cheat sheet renders.
+- **Findings:** (1) **rubric variance** — Andrew's identical data 75.75/Tuned vs. 83/Resonant on the 65 run; band-crossing Dim 1/4 non-determinism; OQ4 made concrete, ticket-worthy. (2) Word counts at the low end of spec across all layers — fold into ORPHEUS-66. (3) **ORPHEUS-74 filed** — cheat-sheet subtitle title-cases the raw client UUID.
+- **Cloud state:** 3 pre-68 demo jobs untouched; 2 new post-68 demo jobs added. The `http` extension was dropped after use.
