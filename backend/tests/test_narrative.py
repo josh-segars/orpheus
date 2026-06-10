@@ -288,8 +288,10 @@ class TestParseResponse:
 class TestSystemPrompt:
 
     def test_default_config(self):
+        # ORPHEUS-77: the platform default voice is second_person_direct.
         prompt = _build_system_prompt()
-        assert "third-person" in prompt.lower() or "third person" in prompt.lower()
+        assert "second person" in prompt.lower()
+        assert "Address the client directly" in prompt
         assert "coaching" in prompt.lower() or "could" in prompt
         assert "Do NOT reference" in prompt  # behind_curtain mechanics
 
@@ -297,6 +299,23 @@ class TestSystemPrompt:
         prompt = _build_system_prompt({"voice": "second_person_direct"})
         assert "second person" in prompt.lower()
         assert "Your headline" in prompt or "Your profile" in prompt
+
+    def test_third_person_voice_still_selectable(self):
+        # ORPHEUS-77 flipped the default but kept third_person_neutral as a
+        # selectable per-advisor option (advisors.narrative_config).
+        prompt = _build_system_prompt({"voice": "third_person_neutral"})
+        assert "third-person" in prompt.lower() or "third person" in prompt.lower()
+        assert "an advisor can present and personalize" in prompt
+
+    def test_score_calibration_examples_in_second_person(self):
+        # ORPHEUS-77 register audit: the static score-to-narrative examples
+        # match the platform-default second-person register, and the prompt
+        # carries the Voice-section-wins precedence note for advisors who
+        # select a different voice.
+        prompt = _build_system_prompt()
+        assert "Your headline does not communicate" in prompt
+        assert "The headline does not communicate" not in prompt
+        assert "the Voice section wins" in prompt
 
     def test_prescriptive_style(self):
         prompt = _build_system_prompt({"recommendation_style": "prescriptive"})
@@ -317,8 +336,10 @@ class TestSystemPrompt:
 
     def test_unknown_voice_falls_back(self):
         prompt = _build_system_prompt({"voice": "nonexistent_voice"})
-        # Should fall back to third_person_neutral
-        assert "third-person" in prompt.lower() or "third person" in prompt.lower()
+        # Should fall back to the platform default — second_person_direct
+        # since ORPHEUS-77.
+        assert "Address the client directly" in prompt
+        assert "warm" in prompt.lower()
 
     def test_no_focus_when_none(self):
         prompt = _build_system_prompt({"practice_focus": None})
@@ -528,6 +549,10 @@ class TestFormatQuestionnaire:
 # ============================================================
 
 class TestConfigDefaults:
+
+    def test_default_voice_is_second_person_direct(self):
+        # ORPHEUS-77: platform default flipped from third_person_neutral.
+        assert DEFAULT_NARRATIVE_CONFIG["voice"] == "second_person_direct"
 
     def test_default_config_keys(self):
         assert "voice" in DEFAULT_NARRATIVE_CONFIG

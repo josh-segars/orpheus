@@ -22,8 +22,12 @@ retired and its forward-looking guidance is regenerated per dimension):
   prompt at runtime. Platform defaults apply when no advisor config is set.
 
 Decisions (current assumptions, accepted):
-- Advisory: neutral third-person (advisor edits into their own voice)
-- Self-serve: direct second-person
+- Voice: direct second-person for ALL client-facing generated content
+  (ORPHEUS-77, 2026-06-10 — revises the original advisory = third-person /
+  self-serve = second-person split; Andrew + Josh aligned). The
+  third_person_neutral voice survives as a selectable per-advisor option
+  in VOICE_INSTRUCTIONS (narrative_config on the advisors row) but is no
+  longer the platform default.
 - Recommendation style: coaching suggestions
 - System mechanics: behind the curtain
 - Lengths: ceilings only, no floors (ORPHEUS-66 — observed output runs
@@ -78,7 +82,9 @@ class NarrativeResult(NamedTuple):
 # ============================================================
 
 DEFAULT_NARRATIVE_CONFIG = {
-    "voice": "third_person_neutral",
+    # Platform default flipped to second person in ORPHEUS-77 (2026-06-10).
+    # third_person_neutral remains selectable via advisors.narrative_config.
+    "voice": "second_person_direct",
     "recommendation_style": "coaching",
     "system_mechanics": "behind_curtain",
     "practice_focus": None,  # None = balanced across all areas
@@ -111,19 +117,19 @@ DIRECTNESS_INSTRUCTIONS = {
     "coaching": (
         "Frame recommendations as collaborative observations and suggestions. "
         "Use language like 'could,' 'might consider,' 'one approach would be.' "
-        'Example: "The About section could be sharpened by leading with current work..." '
+        'Example: "Your About section could be sharpened by leading with current work..." '
         'Not: "Rewrite your About section to lead with current work."'
     ),
     "prescriptive": (
         "Frame recommendations as clear, specific instructions. The client "
         "should know exactly what to change and how. Use action verbs. "
-        'Example: "Rewrite the headline to name your specific domain and current role." '
-        'Not: "The headline could potentially be more specific."'
+        'Example: "Rewrite your headline to name your specific domain and current role." '
+        'Not: "Your headline could potentially be more specific."'
     ),
     "balanced": (
         "Blend observation with direction. Lead with what the data shows, "
         "then state the recommended action clearly. "
-        'Example: "The headline is broad enough to dilute the professional signal. '
+        'Example: "Your headline is broad enough to dilute your professional signal. '
         'Narrowing it to name your specific expertise would strengthen retrieval."'
     ),
 }
@@ -203,22 +209,22 @@ You are NOT scoring. All scores are final before you see them. Your job is inter
 
 ## Score-to-narrative direction
 
-For each sub-dimension, calibrate your language to the score level:
+For each sub-dimension, calibrate your language to the score level. (Examples throughout this prompt are written in the platform-default second-person register; if the Voice section below specifies a different register, the Voice section wins — apply the same calibration in that register.)
 
 **Score 1 (gap):** Name what is missing or broken. Direct, clear language.
-"The headline does not communicate a recognizable professional identity."
+"Your headline does not communicate a recognizable professional identity."
 
 **Score 2 (weakness):** Acknowledge what exists but name what's insufficient. Measured but clear.
-"While an About section is present, it does not connect past experience to current work."
+"While your About section is present, it does not connect your past experience to your current work."
 
 **Score 3 (partial):** Name what works and what could be sharper. Balanced.
-"The experience descriptions communicate a general trajectory but could be more outcome-oriented."
+"Your experience descriptions communicate a general trajectory but could be more outcome-oriented."
 
 **Score 4 (strength):** Affirm the strength. Note minor refinements only if relevant. Positive.
-"The headline clearly signals a specific professional domain. A small refinement might..."
+"Your headline clearly signals a specific professional domain. A small refinement might..."
 
 **Score 5 (exceptional):** Brief affirmation. Don't over-explain what's working.
-"The profile presents an exceptionally clear and coherent professional identity."
+"Your profile presents an exceptionally clear and coherent professional identity."
 
 For quantitative sub-dimensions (Dimensions 2 and 3, scale 0–5):
 
@@ -691,9 +697,11 @@ def _build_system_prompt(narrative_config: dict | None = None) -> str:
     """
     cfg = {**DEFAULT_NARRATIVE_CONFIG, **(narrative_config or {})}
 
+    # Unknown voice values fall back to the platform default (flipped to
+    # second_person_direct in ORPHEUS-77, matching DEFAULT_NARRATIVE_CONFIG).
     voice = VOICE_INSTRUCTIONS.get(
         cfg["voice"],
-        VOICE_INSTRUCTIONS["third_person_neutral"]
+        VOICE_INSTRUCTIONS["second_person_direct"]
     )
     directness = DIRECTNESS_INSTRUCTIONS.get(
         cfg["recommendation_style"],
