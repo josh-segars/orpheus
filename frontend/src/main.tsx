@@ -2,6 +2,13 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
+// Vercel observability (ORPHEUS-79). Framework-agnostic React builds —
+// this is a Vite app, not Next.js, so the /react entrypoints are required.
+// Both components no-op outside production Vercel deployments unless the
+// corresponding dashboard toggle is enabled (Project → Analytics /
+// Speed Insights), so local dev and vitest are unaffected.
+import { Analytics } from '@vercel/analytics/react'
+import { SpeedInsights } from '@vercel/speed-insights/react'
 
 // Import the shared design-system stylesheet (single source of truth,
 // also used by the HTML prototype screens in repo root).
@@ -47,6 +54,8 @@ async function bootstrap() {
         <BrowserRouter>
           <App />
         </BrowserRouter>
+        <Analytics />
+        <SpeedInsights />
       </QueryClientProvider>
     </StrictMode>,
   )
