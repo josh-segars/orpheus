@@ -214,7 +214,6 @@
     .sub-dim-row {
       display: flex;
       align-items: center;
-      gap: 16px;
       padding: 6px 4px;
     }
 
@@ -226,17 +225,18 @@
       line-height: 1.4;
     }
 
-    /* Expand/collapse caret (ORPHEUS-76) — click affordance mirrored from
-       the React app. The first Dim-1 row shows the rotated open state to
-       match its statically-expanded detail block below. */
+    /* Expand/collapse caret (ORPHEUS-76, restyled per Figma node 146:42) —
+       filled Material-style triangle in a 24×24 box, left of the name:
+       arrow_right (▸) collapsed, rotated 90° to arrow_drop_down (▾) when
+       open. The first Dim-1 row shows the open state to match its
+       statically-expanded detail block below. */
     .sub-dim-caret {
       flex-shrink: 0;
-      margin-right: 4px;
-      color: var(--text-muted);
+      color: var(--text-strong);
     }
 
     .sub-dim-row.is-expanded .sub-dim-caret {
-      transform: rotate(180deg);
+      transform: rotate(90deg);
     }
 
     .pip-row {
@@ -265,7 +265,9 @@
       display: flex;
       flex-direction: column;
       gap: 14px;
-      padding: 10px 24px 14px;
+      /* Left inset aligns the detail sections with the sub-dim name,
+         which sits after the 24px caret box + 4px row padding. */
+      padding: 10px 24px 14px 28px;
     }
 
     .detail-section { display: flex; flex-direction: column; gap: 4px; }
@@ -518,6 +520,7 @@
         <div class="sub-dim-list">
 
           <div class="sub-dim-row is-expanded">
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 24 24" width="24" height="24"><path d="M10 17V7l5 5z" fill="currentColor"/></svg>
             <span class="sub-dim-name">Headline specificity</span>
             <div class="pip-row" aria-hidden="true">
               <span class="pip pip-1 pip-filled"></span>
@@ -526,7 +529,6 @@
               <span class="pip pip-4 pip-filled"></span>
               <span class="pip pip-5 pip-filled"></span>
             </div>
-            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
 
           <!-- Expanded detail (illustrative; the React app toggles this) -->
@@ -546,6 +548,7 @@
           </div>
 
           <div class="sub-dim-row">
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 24 24" width="24" height="24"><path d="M10 17V7l5 5z" fill="currentColor"/></svg>
             <span class="sub-dim-name">About-section substance</span>
             <div class="pip-row" aria-hidden="true">
               <span class="pip pip-1 pip-filled"></span>
@@ -554,10 +557,10 @@
               <span class="pip pip-4 pip-filled"></span>
               <span class="pip pip-5"></span>
             </div>
-            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
 
           <div class="sub-dim-row">
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 24 24" width="24" height="24"><path d="M10 17V7l5 5z" fill="currentColor"/></svg>
             <span class="sub-dim-name">Experience narrative</span>
             <div class="pip-row" aria-hidden="true">
               <span class="pip pip-1 pip-filled"></span>
@@ -566,10 +569,10 @@
               <span class="pip pip-4"></span>
               <span class="pip pip-5"></span>
             </div>
-            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
 
           <div class="sub-dim-row">
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 24 24" width="24" height="24"><path d="M10 17V7l5 5z" fill="currentColor"/></svg>
             <span class="sub-dim-name">Skills coherence</span>
             <div class="pip-row" aria-hidden="true">
               <span class="pip pip-1 pip-filled"></span>
@@ -578,10 +581,10 @@
               <span class="pip pip-4 pip-filled"></span>
               <span class="pip pip-5"></span>
             </div>
-            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
 
           <div class="sub-dim-row">
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 24 24" width="24" height="24"><path d="M10 17V7l5 5z" fill="currentColor"/></svg>
             <span class="sub-dim-name">Recommendations social proof</span>
             <div class="pip-row" aria-hidden="true">
               <span class="pip pip-1 pip-filled"></span>
@@ -590,7 +593,6 @@
               <span class="pip pip-4"></span>
               <span class="pip pip-5"></span>
             </div>
-            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
 
         </div>
@@ -615,6 +617,7 @@
         <div class="dim-divider"></div>
         <div class="sub-dim-list">
           <div class="sub-dim-row">
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 24 24" width="24" height="24"><path d="M10 17V7l5 5z" fill="currentColor"/></svg>
             <span class="sub-dim-name">Volume</span>
             <div class="pip-row" aria-hidden="true">
               <span class="pip pip-1 pip-filled"></span>
@@ -623,9 +626,9 @@
               <span class="pip pip-4"></span>
               <span class="pip pip-5"></span>
             </div>
-            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
           <div class="sub-dim-row">
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 24 24" width="24" height="24"><path d="M10 17V7l5 5z" fill="currentColor"/></svg>
             <span class="sub-dim-name">Recency</span>
             <div class="pip-row" aria-hidden="true">
               <span class="pip pip-1 pip-filled"></span>
@@ -634,9 +637,9 @@
               <span class="pip pip-4"></span>
               <span class="pip pip-5"></span>
             </div>
-            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
           <div class="sub-dim-row">
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 24 24" width="24" height="24"><path d="M10 17V7l5 5z" fill="currentColor"/></svg>
             <span class="sub-dim-name">Coherence</span>
             <div class="pip-row" aria-hidden="true">
               <span class="pip pip-1 pip-filled"></span>
@@ -645,7 +648,6 @@
               <span class="pip pip-4"></span>
               <span class="pip pip-5"></span>
             </div>
-            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
         </div>
       </div>
@@ -669,6 +671,7 @@
         <div class="dim-divider"></div>
         <div class="sub-dim-list">
           <div class="sub-dim-row">
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 24 24" width="24" height="24"><path d="M10 17V7l5 5z" fill="currentColor"/></svg>
             <span class="sub-dim-name">Original content share</span>
             <div class="pip-row" aria-hidden="true">
               <span class="pip pip-1 pip-filled"></span>
@@ -677,9 +680,9 @@
               <span class="pip pip-4"></span>
               <span class="pip pip-5"></span>
             </div>
-            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
           <div class="sub-dim-row">
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 24 24" width="24" height="24"><path d="M10 17V7l5 5z" fill="currentColor"/></svg>
             <span class="sub-dim-name">Comment depth</span>
             <div class="pip-row" aria-hidden="true">
               <span class="pip pip-1 pip-filled"></span>
@@ -688,9 +691,9 @@
               <span class="pip pip-4 pip-filled"></span>
               <span class="pip pip-5"></span>
             </div>
-            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
           <div class="sub-dim-row">
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 24 24" width="24" height="24"><path d="M10 17V7l5 5z" fill="currentColor"/></svg>
             <span class="sub-dim-name">Reaction mix</span>
             <div class="pip-row" aria-hidden="true">
               <span class="pip pip-1 pip-filled"></span>
@@ -699,7 +702,6 @@
               <span class="pip pip-4"></span>
               <span class="pip pip-5"></span>
             </div>
-            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
         </div>
       </div>
@@ -723,6 +725,7 @@
         <div class="dim-divider"></div>
         <div class="sub-dim-list">
           <div class="sub-dim-row">
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 24 24" width="24" height="24"><path d="M10 17V7l5 5z" fill="currentColor"/></svg>
             <span class="sub-dim-name">Topical consistency</span>
             <div class="pip-row" aria-hidden="true">
               <span class="pip pip-1 pip-filled"></span>
@@ -731,9 +734,9 @@
               <span class="pip pip-4 pip-filled"></span>
               <span class="pip pip-5"></span>
             </div>
-            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
           <div class="sub-dim-row">
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 24 24" width="24" height="24"><path d="M10 17V7l5 5z" fill="currentColor"/></svg>
             <span class="sub-dim-name">Voice consistency</span>
             <div class="pip-row" aria-hidden="true">
               <span class="pip pip-1 pip-filled"></span>
@@ -742,7 +745,6 @@
               <span class="pip pip-4"></span>
               <span class="pip pip-5"></span>
             </div>
-            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
         </div>
       </div>

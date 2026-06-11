@@ -283,8 +283,25 @@ function SubDimRow({ sub, expanded, onToggle }: SubDimRowProps) {
   const filledPips = pipCount(sub)
   const hasDetail = isExpandable(sub)
 
+  /* Expand/collapse caret (ORPHEUS-76, restyled per Figma node 146:42) —
+     a filled Material-style triangle in a 24×24 box, LEFT of the name:
+     arrow_right (▸) collapsed, rotating 90° to arrow_drop_down (▾) when
+     open. Only expandable rows render it; static rows pad to align. */
+  const caret = hasDetail ? (
+    <svg
+      className="sub-dim-caret"
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width="24"
+      height="24"
+    >
+      <path d="M10 17V7l5 5z" fill="currentColor" />
+    </svg>
+  ) : null
+
   const row = (
     <div className="sub-dim-row-content">
+      {caret}
       <span className="sub-dim-name">{subDimDisplayName(sub.name)}</span>
       <PipRow filled={filledPips} />
     </div>
@@ -303,24 +320,6 @@ function SubDimRow({ sub, expanded, onToggle }: SubDimRowProps) {
         aria-expanded={expanded}
       >
         {row}
-        {/* Expand/collapse caret (ORPHEUS-76) — click affordance for the
-            expandable row; rotates 180° when open via .is-expanded. */}
-        <svg
-          className="sub-dim-caret"
-          aria-hidden="true"
-          viewBox="0 0 12 8"
-          width="12"
-          height="8"
-        >
-          <path
-            d="M1 1.5 6 6.5 11 1.5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
       </button>
       {expanded && (
         <div className="sub-dim-detail">

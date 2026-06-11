@@ -225,9 +225,7 @@
 
 .sub-dim-trigger {
   width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: block;
   background: transparent;
   border: none;
   padding: 6px 0;
@@ -245,38 +243,33 @@
 }
 
 .sub-dim-row-content {
-  flex: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
   padding: 0 4px;
 }
 
-/* Expand/collapse caret (ORPHEUS-76) — click affordance on expandable
-   sub-dim rows. Rotates open; brightens with the row hover. */
+/* Expand/collapse caret (ORPHEUS-76, restyled per Figma node 146:42) —
+   filled Material-style triangle in a 24×24 box, left of the name.
+   Collapsed it points right (arrow_right); .is-expanded rotates it 90°
+   to point down (arrow_drop_down). */
 .sub-dim-caret {
   flex-shrink: 0;
-  margin-right: 4px;
-  color: var(--text-muted);
-  transition: transform 150ms ease, color 150ms ease;
+  color: var(--text-strong);
+  transition: transform 150ms ease;
 }
 
 .sub-dim-expandable.is-expanded .sub-dim-caret {
-  transform: rotate(180deg);
+  transform: rotate(90deg);
 }
 
-.sub-dim-trigger:hover .sub-dim-caret {
-  color: var(--text-strong);
-}
-
-/* Static (non-expandable) rows carry no caret; reserve its footprint so
-   the pip columns align across mixed lists (pre-ORPHEUS-21 jobs). */
+/* Static (non-expandable) rows carry no caret; reserve its 24px box so
+   names + pips align across mixed lists (pre-ORPHEUS-21 jobs). */
 .sub-dim-static .sub-dim-row-content {
-  padding-right: 32px;
+  padding-left: 28px;
 }
 
 .sub-dim-name {
+  flex: 1;
   font-family: 'Source Sans 3', sans-serif;
   font-size: 16px;
   font-weight: 400;
@@ -314,7 +307,9 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 10px 24px 14px;
+  /* Left inset aligns the detail sections with the sub-dim name, which
+     sits after the 24px caret box + 4px row padding (Figma 34:1084). */
+  padding: 10px 24px 14px 28px;
 }
 
 .detail-section {
