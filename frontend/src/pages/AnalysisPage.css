@@ -41,7 +41,7 @@
 .status-dot:nth-child(3) { animation-delay: 0.4s; }
 
 .status-label {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 14px;
   font-weight: 600;
   color: var(--warm-stone);

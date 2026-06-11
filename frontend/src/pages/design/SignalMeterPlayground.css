@@ -4,7 +4,7 @@
   max-width: 1600px;
   margin: 0 auto;
   padding: 40px 24px 120px;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   color: var(--warm-text);
 }
 
@@ -12,7 +12,7 @@
   margin-bottom: 24px;
 }
 .smp-title {
-  font-family: 'Source Serif 4', serif;
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
   font-weight: 700;
   font-size: 28px;
   margin: 0 0 6px;
@@ -55,13 +55,13 @@
   color: var(--warm-stone);
 }
 .smp-control-readout {
-  font-family: 'Source Serif 4', serif;
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
   font-weight: 700;
   font-size: 18px;
   color: var(--warm-text);
 }
 .smp-control-band {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-weight: 600;
   font-size: 13px;
   color: var(--warm-gold);
@@ -83,7 +83,7 @@
   border: 1px solid var(--warm-border);
   border-radius: 6px;
   padding: 4px 10px;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 12px;
   color: var(--warm-stone);
   cursor: pointer;

@@ -15,7 +15,7 @@
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
 }
 
 .ssd-svg {

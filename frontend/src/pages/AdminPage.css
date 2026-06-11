@@ -16,7 +16,7 @@
 }
 
 .admin-title {
-  font-family: 'Source Serif 4', serif;
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
   font-weight: 600;
   font-size: 32px;
   margin: 0 0 8px;
@@ -35,7 +35,7 @@
 }
 
 .admin-section-title {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-size: 12px;
@@ -96,7 +96,7 @@
 
 .admin-table th {
   text-align: left;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   font-size: 11px;
@@ -225,7 +225,7 @@
   padding: 2px 8px;
   font-size: 11px;
   cursor: pointer;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
 }
 
 .admin-narrative-chip:hover {
@@ -262,7 +262,7 @@
 }
 
 .admin-editor-section {
-  font-family: 'Source Serif 4', serif;
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
   font-size: 18px;
   font-weight: 600;
   color: var(--text-strong);
@@ -315,7 +315,7 @@
 }
 
 .admin-editor-label {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   font-size: 11px;
@@ -330,7 +330,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 12px 14px;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 14px;
   resize: vertical;
 }
@@ -364,7 +364,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 8px 12px;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 14px;
 }
 
@@ -374,7 +374,7 @@
   border: none;
   border-radius: 10px;
   padding: 10px 18px;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;

@@ -38,7 +38,7 @@
 
 .mismatch-value {
   margin: 0;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 1rem;
   color: var(--warm-text);
   word-break: break-all;

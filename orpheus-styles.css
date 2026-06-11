@@ -4,6 +4,30 @@
    reusable UI patterns shared across portal pages.
    ============================================================ */
 
+/* ── Font Fallbacks (ORPHEUS-80) ───────────────────────────── */
+/* Metric-tuned local fallbacks so the Google Fonts `display=swap`
+   exchange is (nearly) layout-neutral — the single biggest CLS
+   contributor on cold-cache visits. `size-adjust` scales the local
+   font's advance widths to match the webfont; values were measured
+   empirically against the loaded webfonts (canvas measureText ratio
+   on the production app, 2026-06-11):
+     • Source Serif 4 ≈ Times New Roman × 100.2%
+     • Source Sans 3  ≈ Arial           × 92.7%
+   These faces only ever render during the font-loading window (and
+   for users whose font requests fail), via the font stacks below.
+   Vertical metrics are governed by the explicit line-heights set
+   throughout this file, so ascent/descent overrides are omitted. */
+@font-face {
+  font-family: 'Source Serif 4 Fallback';
+  src: local('Times New Roman');
+  size-adjust: 100.2%;
+}
+@font-face {
+  font-family: 'Source Sans 3 Fallback';
+  src: local('Arial');
+  size-adjust: 92.7%;
+}
+
 /* ── Design Tokens ─────────────────────────────────────────── */
 /* Dark mode is canonical (no light variant) as of ORPHEUS-50.
    Token values reflect their dark-mode equivalents. The legacy
@@ -83,7 +107,7 @@ html, body { height: 100%; }
 
 body {
   background-color: var(--warm-ivory);
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -132,7 +156,7 @@ body {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -165,7 +189,7 @@ body {
 .wordmark-orpheus {
   position: absolute;
   left: 0; top: 0;
-  font-family: 'Source Serif 4', serif;
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
   font-size: 38px;
   font-weight: 900;
   font-variation-settings: 'opsz' 38;
@@ -177,7 +201,7 @@ body {
 .wordmark-social {
   position: absolute;
   left: 57.52px; top: 38.94px;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 16px;
   font-weight: 400;
   letter-spacing: 6.08px;
@@ -222,7 +246,7 @@ body {
 }
 
 .nav-client-label {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-weight: 400;
   /* "LOGGED IN AS" eyebrow takes the accent green per the ORPHEUS-71
      Figma dropdown (node 190:44) — reverses the muted-grey treatment
@@ -235,7 +259,7 @@ body {
   font-size: 12px;
 }
 .nav-client-name {
-  font-family: 'Source Serif 4', serif;
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
   font-size: 24px;
   font-weight: 700;
   font-style: italic;
@@ -267,7 +291,7 @@ body {
   display: block;
 }
 .nav-client-initials {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -295,7 +319,7 @@ body {
 }
 
 .nav-account-item {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.5px;
@@ -363,7 +387,7 @@ body {
 .wordmark-sm-orpheus {
   position: absolute;
   left: 0; top: 0;
-  font-family: 'Source Serif 4', serif;
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
   font-size: 23.78px;
   font-weight: 900;
   letter-spacing: -0.9512px;
@@ -374,7 +398,7 @@ body {
 .wordmark-sm-social {
   position: absolute;
   left: 36px; top: 24.37px;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 10.01px;
   font-weight: 400;
   letter-spacing: 3.8038px;
@@ -386,7 +410,7 @@ body {
 .footer-links {
   display: flex;
   gap: 24px;  /* ORPHEUS-70 */
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 16px;
   font-weight: 400;
   color: var(--text-strong);
@@ -404,7 +428,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 13px;
   font-weight: 400;
   color: var(--warm-stone);
@@ -434,7 +458,7 @@ body {
   border-bottom: 1px solid var(--warm-border);
 }
 .section-eyebrow {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.16em;
@@ -442,7 +466,7 @@ body {
   color: var(--accent);
 }
 .section-title {
-  font-family: 'Source Serif 4', serif;
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
   font-size: 32px;
   font-weight: 900;
   font-variation-settings: 'opsz' 32;
@@ -450,7 +474,7 @@ body {
   line-height: 1.1;
 }
 .section-intro {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 15px;
   font-weight: 300;
   color: var(--warm-stone);
@@ -475,7 +499,7 @@ body {
   align-items: baseline;
 }
 .question-number {
-  font-family: 'Source Serif 4', serif;
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
   font-size: 13px;
   font-weight: 700;
   font-style: italic;
@@ -484,7 +508,7 @@ body {
   line-height: 1.5;
 }
 .question-text {
-  font-family: 'Source Serif 4', serif;
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
   font-size: 17px;
   font-weight: 700;
   font-variation-settings: 'opsz' 17;
@@ -493,7 +517,7 @@ body {
   cursor: default;
 }
 .question-helper {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 13px;
   font-weight: 300;
   font-style: italic;
@@ -509,7 +533,7 @@ textarea {
   border: 1px solid var(--warm-border);
   border-radius: 10px;
   padding: 16px;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 15px;
   font-weight: 400;
   color: var(--warm-text);
@@ -556,7 +580,7 @@ textarea::placeholder { color: var(--text-muted); }
   box-shadow: inset 0 0 0 4px var(--warm-parchment);
 }
 .option-text {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 15px;
   font-weight: 400;
   color: var(--warm-text);
@@ -570,7 +594,7 @@ textarea::placeholder { color: var(--text-muted); }
   border: none;
   border-bottom: 1px solid var(--warm-border);
   outline: none;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 15px;
   font-weight: 400;
   color: var(--warm-text);
@@ -642,7 +666,7 @@ textarea::placeholder { color: var(--text-muted); }
   background-color: var(--warm-parchment);
   border: 1.5px solid var(--warm-border);
   border-radius: 10px;
-  font-family: 'Source Serif 4', serif;
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
   font-size: 17px;
   font-weight: 700;
   color: var(--warm-stone);
@@ -656,7 +680,7 @@ textarea::placeholder { color: var(--text-muted); }
   color: white;
 }
 .scale-label {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 11px;
   font-weight: 400;
   color: var(--warm-stone);
@@ -675,7 +699,7 @@ textarea::placeholder { color: var(--text-muted); }
 }
 .btn-secondary {
   display: inline-block;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -692,7 +716,7 @@ textarea::placeholder { color: var(--text-muted); }
 .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
 .btn-primary {
   display: inline-block;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -726,7 +750,7 @@ textarea::placeholder { color: var(--text-muted); }
   gap: 4px;
 }
 .info-notice-label {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -734,7 +758,7 @@ textarea::placeholder { color: var(--text-muted); }
   color: var(--warm-gold);
 }
 .info-notice-body {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 14px;
   font-weight: 400;
   color: var(--warm-text);
@@ -776,7 +800,7 @@ textarea::placeholder { color: var(--text-muted); }
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-family: 'Source Serif 4', serif;
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
   font-size: 15px;
   font-weight: 700;
   font-variation-settings: 'opsz' 15;
@@ -792,7 +816,7 @@ textarea::placeholder { color: var(--text-muted); }
 }
 .step:last-child .step-content { padding-bottom: 0; }
 .step-title {
-  font-family: 'Source Serif 4', serif;
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
   font-size: 17px;
   font-weight: 700;
   font-variation-settings: 'opsz' 17;
@@ -800,7 +824,7 @@ textarea::placeholder { color: var(--text-muted); }
   line-height: 1.3;
 }
 .step-body {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 15px;
   font-weight: 400;
   color: var(--warm-stone);
@@ -811,7 +835,7 @@ textarea::placeholder { color: var(--text-muted); }
   color: var(--warm-text);
 }
 .step-note {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 13px;
   font-weight: 300;
   font-style: italic;
@@ -832,7 +856,7 @@ textarea::placeholder { color: var(--text-muted); }
   margin-top: 10px;
 }
 .screenshot-label {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 12px;
   font-weight: 400;
   font-style: italic;
@@ -849,7 +873,7 @@ textarea::placeholder { color: var(--text-muted); }
   border-top: 1px solid var(--warm-border);
 }
 .upload-label {
-  font-family: 'Source Serif 4', serif;
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
   font-size: 17px;
   font-weight: 700;
   font-variation-settings: 'opsz' 17;
@@ -873,7 +897,7 @@ textarea::placeholder { color: var(--text-muted); }
   background-color: var(--accent-tint-soft);
 }
 .upload-clear {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 13px;
   font-weight: 600;
   color: var(--accent);
@@ -892,20 +916,20 @@ textarea::placeholder { color: var(--text-muted); }
   stroke-width: 1.5;
 }
 .upload-primary {
-  font-family: 'Source Serif 4', serif;
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
   font-size: 16px;
   font-weight: 700;
   font-variation-settings: 'opsz' 16;
   color: var(--warm-text);
 }
 .upload-secondary {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 13px;
   font-weight: 300;
   color: var(--warm-stone);
 }
 .upload-file-type {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.1em;

@@ -17,7 +17,7 @@
      boundary numbers, band labels, and the reticle all stay aligned. */
   --sm-inset: 16px;
 
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
   color: var(--sm-label);
   width: 100%;
   display: flex;
