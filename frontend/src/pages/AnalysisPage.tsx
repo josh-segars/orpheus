@@ -94,7 +94,7 @@ export function AnalysisPage() {
     return (
       <main className="main-interior">
         <div className="page-status">
-          Your analysis is complete &mdash; taking you to your Signal Score&hellip;
+          Your analysis is complete &mdash; taking you to your report&hellip;
         </div>
       </main>
     )
@@ -112,7 +112,7 @@ export function AnalysisPage() {
 
       <p className="section-intro">
         Your Groundwork is complete. Andrew is now reviewing your materials
-        and preparing your Signal Score diagnostic. You will receive a
+        and preparing your report. You will receive a
         message directly when your results are ready &mdash; typically
         within 48 hours.
       </p>

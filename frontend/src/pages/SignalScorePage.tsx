@@ -55,7 +55,7 @@ export function SignalScorePage() {
   if (isLoading) {
     return (
       <main className="main-interior">
-        <div className="page-status">Loading your Signal Score&hellip;</div>
+        <div className="page-status">Loading your report&hellip;</div>
       </main>
     )
   }
@@ -76,7 +76,7 @@ export function SignalScorePage() {
         <div className="section-header">
           <div className="section-eyebrow">Analysis in Progress</div>
           <h2 className="section-title">
-            Your Signal Score is still being prepared
+            Your report is still being prepared
           </h2>
           <p className="section-intro">
             This page will refresh automatically when the analysis is complete.
@@ -154,7 +154,7 @@ export function SignalScorePage() {
           &larr; Return to Groundwork
         </Link>
         <Link to={`/jobs/${job.id}/cheat-sheet`} className="btn-primary">
-          View Cheat Sheet &rarr;
+          View Quick Reference Card &rarr;
         </Link>
       </div>
     </main>
@@ -303,6 +303,24 @@ function SubDimRow({ sub, expanded, onToggle }: SubDimRowProps) {
         aria-expanded={expanded}
       >
         {row}
+        {/* Expand/collapse caret (ORPHEUS-76) — click affordance for the
+            expandable row; rotates 180° when open via .is-expanded. */}
+        <svg
+          className="sub-dim-caret"
+          aria-hidden="true"
+          viewBox="0 0 12 8"
+          width="12"
+          height="8"
+        >
+          <path
+            d="M1 1.5 6 6.5 11 1.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
       </button>
       {expanded && (
         <div className="sub-dim-detail">

@@ -32,7 +32,7 @@ export function CheatSheetPage() {
   if (isLoading) {
     return (
       <main className="main-interior">
-        <div className="page-status">Loading your Cheat Sheet&hellip;</div>
+        <div className="page-status">Loading your Quick Reference Card&hellip;</div>
       </main>
     )
   }
@@ -53,7 +53,7 @@ export function CheatSheetPage() {
         <div className="section-header">
           <div className="section-eyebrow">Analysis in Progress</div>
           <h2 className="section-title">
-            Your Cheat Sheet is still being prepared
+            Your Quick Reference Card is still being prepared
           </h2>
           <p className="section-intro">
             This page will refresh automatically when the analysis is complete.
@@ -81,16 +81,16 @@ export function CheatSheetPage() {
     return (
       <main className="main-interior">
         <div className="section-header">
-          <div className="section-eyebrow">Cheat Sheet</div>
-          <h2 className="section-title">Your Cheat Sheet isn’t ready yet</h2>
+          <div className="section-eyebrow">Quick Reference Card</div>
+          <h2 className="section-title">Your Quick Reference Card isn’t ready yet</h2>
           <p className="section-intro">
-            Your Signal Score is available. The printable one-page summary
+            Your report is available. The printable one-page summary
             follows in a future update.
           </p>
         </div>
         <div className="actions cheat-actions">
           <Link to={`/jobs/${job.id}`} className="btn-secondary">
-            &larr; Return to Signal Score
+            &larr; Return to your report
           </Link>
         </div>
       </main>
@@ -102,7 +102,7 @@ export function CheatSheetPage() {
       {/* Screen-only helper row (hidden on print) */}
       <div className="print-helper">
         <div className="print-helper-text">
-          A one-page reference card drawn from your Signal Score report. Print with{' '}
+          A one-page reference card drawn from your report. Print with{' '}
           <kbd>⌘</kbd> <kbd>P</kbd> (Mac) or <kbd>Ctrl</kbd> <kbd>P</kbd>{' '}
           (Windows) — the layout is optimized for Letter portrait.
         </div>
@@ -118,7 +118,7 @@ export function CheatSheetPage() {
       {/* The "document" — what the printed page shows. */}
       <div className="cheat-doc">
         <header className="cheat-header">
-          <div className="cheat-eyebrow">Cheat Sheet</div>
+          <div className="cheat-eyebrow">Quick Reference Card</div>
           <h1 className="cheat-title">Your Signal, at a Glance</h1>
           <div className="cheat-subtitle">
             Priorities and weekly rhythm
@@ -177,7 +177,7 @@ export function CheatSheetPage() {
           Cheat Sheet (ORPHEUS-69); the Forward Brief page is retired. */}
       <div className="actions cheat-actions">
         <Link to={`/jobs/${job.id}`} className="btn-secondary">
-          &larr; Return to Signal Score
+          &larr; Return to your report
         </Link>
       </div>
     </main>

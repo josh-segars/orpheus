@@ -142,12 +142,14 @@ describe('SignalScorePage', () => {
     }
   })
 
-  it('exposes the "Return to Groundwork" and primary "View Cheat Sheet" links; the Forward Brief link is retired (ORPHEUS-69)', () => {
+  it('exposes the "Return to Groundwork" and primary "View Quick Reference Card" links; the Forward Brief link is retired (ORPHEUS-69; copy renamed in ORPHEUS-76)', () => {
     renderSignalScorePage()
     expect(
       screen.getByRole('link', { name: /return to groundwork/i }),
     ).toBeInTheDocument()
-    const cs = screen.getByRole('link', { name: /view cheat sheet/i })
+    // ORPHEUS-76: user-facing copy says "Quick Reference Card"; the route
+    // and code identifiers keep the cheat-sheet name.
+    const cs = screen.getByRole('link', { name: /view quick reference card/i })
     expect(cs).toHaveAttribute('href', '/jobs/demo/cheat-sheet')
     expect(
       screen.queryByRole('link', { name: /forward brief/i }),

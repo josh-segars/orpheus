@@ -225,7 +225,9 @@
 
 .sub-dim-trigger {
   width: 100%;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   background: transparent;
   border: none;
   padding: 6px 0;
@@ -243,11 +245,35 @@
 }
 
 .sub-dim-row-content {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 0 4px;
+}
+
+/* Expand/collapse caret (ORPHEUS-76) — click affordance on expandable
+   sub-dim rows. Rotates open; brightens with the row hover. */
+.sub-dim-caret {
+  flex-shrink: 0;
+  margin-right: 4px;
+  color: var(--text-muted);
+  transition: transform 150ms ease, color 150ms ease;
+}
+
+.sub-dim-expandable.is-expanded .sub-dim-caret {
+  transform: rotate(180deg);
+}
+
+.sub-dim-trigger:hover .sub-dim-caret {
+  color: var(--text-strong);
+}
+
+/* Static (non-expandable) rows carry no caret; reserve its footprint so
+   the pip columns align across mixed lists (pre-ORPHEUS-21 jobs). */
+.sub-dim-static .sub-dim-row-content {
+  padding-right: 32px;
 }
 
 .sub-dim-name {

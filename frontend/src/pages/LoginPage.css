@@ -22,11 +22,31 @@
   gap: 18px;
 }
 
+/* The shared .wordmark-orpheus / .wordmark-social spans are absolutely
+   positioned — built for the nav's .wordmark box (position: relative,
+   139 × 61.94px). This container was a plain flex row, so the spans
+   escaped the card and anchored to the page. Fix (ORPHEUS-76): make the
+   container the positioning context with the nav geometry scaled 1.5×,
+   centered in the card, and scale the type to match. */
 .login-wordmark {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
+  position: relative;
+  width: 208.5px;
+  height: 92.91px;
+  align-self: center;
   margin-bottom: 8px;
+}
+
+.login-wordmark .wordmark-orpheus {
+  font-size: 57px;
+  font-variation-settings: 'opsz' 57;
+  letter-spacing: -2.28px;
+}
+
+.login-wordmark .wordmark-social {
+  left: 86.28px;
+  top: 58.41px;
+  font-size: 24px;
+  letter-spacing: 9.12px;
 }
 
 .login-title {

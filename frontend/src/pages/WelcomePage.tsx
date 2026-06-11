@@ -62,18 +62,18 @@ export function WelcomePage() {
             </p>
           </div>
           <div className="welcome-card-step">
-            <div className="welcome-card-step-title">Signal Score</div>
+            <div className="welcome-card-step-title">Report</div>
             <p className="welcome-card-step-body">
-              Your <em>Signal Score</em> measures how your professional
-              presence is being interpreted across 5 dimensions, giving you a
-              precise picture of where you stand and where you can strengthen
-              your signal.
+              Your <em>report</em> measures how your professional presence
+              is being interpreted across 4 dimensions, giving you a precise
+              picture of where you stand and where you can strengthen your
+              signal.
             </p>
           </div>
           <div className="welcome-card-step">
             <div className="welcome-card-step-title">Forward Brief</div>
             <p className="welcome-card-step-body">
-              Your <em>Forward Brief</em> translates your Signal Score into a
+              Your <em>Forward Brief</em> translates your report into a
               prioritized plan with specific steps to ensure your professional
               presence reflects the credibility you&rsquo;ve earned.
             </p>

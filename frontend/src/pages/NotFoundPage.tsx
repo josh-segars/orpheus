@@ -12,7 +12,7 @@ export function NotFoundPage() {
       </div>
       <div className="actions">
         <Link to="/jobs/demo" className="btn-primary">
-          Return to your Signal Score
+          Return to your report
         </Link>
       </div>
     </main>

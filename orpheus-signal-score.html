@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Orpheus Social — Signal Score</title>
+  <title>Orpheus Social — Report</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,500;0,8..60,700;0,8..60,900;1,8..60,700;1,8..60,900&family=Source+Sans+3:ital,wght@0,400;0,600;1,600&display=swap" rel="stylesheet">
@@ -214,16 +214,29 @@
     .sub-dim-row {
       display: flex;
       align-items: center;
-      justify-content: space-between;
       gap: 16px;
       padding: 6px 4px;
     }
 
     .sub-dim-name {
+      flex: 1;
       font-family: 'Source Sans 3', sans-serif;
       font-size: 16px;
       color: var(--text-body);
       line-height: 1.4;
+    }
+
+    /* Expand/collapse caret (ORPHEUS-76) — click affordance mirrored from
+       the React app. The first Dim-1 row shows the rotated open state to
+       match its statically-expanded detail block below. */
+    .sub-dim-caret {
+      flex-shrink: 0;
+      margin-right: 4px;
+      color: var(--text-muted);
+    }
+
+    .sub-dim-row.is-expanded .sub-dim-caret {
+      transform: rotate(180deg);
     }
 
     .pip-row {
@@ -504,7 +517,7 @@
         <div class="dim-divider"></div>
         <div class="sub-dim-list">
 
-          <div class="sub-dim-row">
+          <div class="sub-dim-row is-expanded">
             <span class="sub-dim-name">Headline specificity</span>
             <div class="pip-row" aria-hidden="true">
               <span class="pip pip-1 pip-filled"></span>
@@ -513,6 +526,7 @@
               <span class="pip pip-4 pip-filled"></span>
               <span class="pip pip-5 pip-filled"></span>
             </div>
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
 
           <!-- Expanded detail (illustrative; the React app toggles this) -->
@@ -540,6 +554,7 @@
               <span class="pip pip-4 pip-filled"></span>
               <span class="pip pip-5"></span>
             </div>
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
 
           <div class="sub-dim-row">
@@ -551,6 +566,7 @@
               <span class="pip pip-4"></span>
               <span class="pip pip-5"></span>
             </div>
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
 
           <div class="sub-dim-row">
@@ -562,6 +578,7 @@
               <span class="pip pip-4 pip-filled"></span>
               <span class="pip pip-5"></span>
             </div>
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
 
           <div class="sub-dim-row">
@@ -573,6 +590,7 @@
               <span class="pip pip-4"></span>
               <span class="pip pip-5"></span>
             </div>
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
 
         </div>
@@ -605,6 +623,7 @@
               <span class="pip pip-4"></span>
               <span class="pip pip-5"></span>
             </div>
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
           <div class="sub-dim-row">
             <span class="sub-dim-name">Recency</span>
@@ -615,6 +634,7 @@
               <span class="pip pip-4"></span>
               <span class="pip pip-5"></span>
             </div>
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
           <div class="sub-dim-row">
             <span class="sub-dim-name">Coherence</span>
@@ -625,6 +645,7 @@
               <span class="pip pip-4"></span>
               <span class="pip pip-5"></span>
             </div>
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
         </div>
       </div>
@@ -656,6 +677,7 @@
               <span class="pip pip-4"></span>
               <span class="pip pip-5"></span>
             </div>
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
           <div class="sub-dim-row">
             <span class="sub-dim-name">Comment depth</span>
@@ -666,6 +688,7 @@
               <span class="pip pip-4 pip-filled"></span>
               <span class="pip pip-5"></span>
             </div>
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
           <div class="sub-dim-row">
             <span class="sub-dim-name">Reaction mix</span>
@@ -676,6 +699,7 @@
               <span class="pip pip-4"></span>
               <span class="pip pip-5"></span>
             </div>
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
         </div>
       </div>
@@ -707,6 +731,7 @@
               <span class="pip pip-4 pip-filled"></span>
               <span class="pip pip-5"></span>
             </div>
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
           <div class="sub-dim-row">
             <span class="sub-dim-name">Voice consistency</span>
@@ -717,6 +742,7 @@
               <span class="pip pip-4"></span>
               <span class="pip pip-5"></span>
             </div>
+            <svg class="sub-dim-caret" aria-hidden="true" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
         </div>
       </div>
@@ -794,7 +820,7 @@
          the Forward Brief page is retired. -->
     <div class="actions">
       <a href="orpheus-groundwork-v1.html" class="btn-secondary">← Return to Groundwork</a>
-      <a href="orpheus-cheat-sheet.html" class="btn-primary">View Cheat Sheet →</a>
+      <a href="orpheus-cheat-sheet.html" class="btn-primary">View Quick Reference Card →</a>
     </div>
   </main>
 

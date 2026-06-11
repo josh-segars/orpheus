@@ -94,7 +94,7 @@ export function GroundworkPage() {
           Your progress is saved. We have placed the LinkedIn data requests
           first, as one step requires up to 24 hours for LinkedIn to prepare
           your files. Starting there now means the rest can happen while you
-          wait. Your Signal Score analysis begins as soon as all items are
+          wait. Your analysis begins as soon as all items are
           complete.
         </p>
       </div>
