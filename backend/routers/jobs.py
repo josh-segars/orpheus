@@ -29,7 +29,7 @@ from backend.auth import SessionRoles, get_current_session_roles
 from backend.db import get_service_client
 from backend.ingestion.xlsx_parser import parse_xlsx
 from backend.ingestion.zip_parser import parse_zip
-from backend.models.job import Job
+from backend.models.job import Job, JobSummary
 
 logger = logging.getLogger("orpheus.jobs")
 
@@ -89,6 +89,22 @@ async def create_job(
     client_id = roles.client_id
     assert client_id is not None  # narrowed by is_client() guard above
 
+    # ── 0. Concurrent-run guard (ORPHEUS-81) ───────────────────────────
+    # One in-flight pipeline per client. Checked before the uploads are
+    # even read so the reject is cheap. The frontend hides the "Run a
+    # new report" entry point while a job is in flight; this is the
+    # authoritative backstop for direct submissions.
+
+    supabase = get_service_client()
+    if _has_active_job(supabase, client_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "You already have a report in progress. Please wait for "
+                "it to finish before starting a new one."
+            ),
+        )
+
     # ── 1. Read & validate uploads ─────────────────────────────────────
 
     archive_bytes = await _read_upload(archive, _MAX_ARCHIVE_BYTES, "archive")
@@ -131,8 +147,6 @@ async def create_job(
         ) from exc
 
     # ── 3. Mint the job row ────────────────────────────────────────────
-
-    supabase = get_service_client()
 
     job_insert = (
         supabase.table("jobs")
@@ -238,6 +252,71 @@ async def create_job(
         result=None,
         error=None,
     )
+
+
+@router.get("", response_model=list[JobSummary])
+async def list_jobs(
+    roles: SessionRoles = Depends(get_current_session_roles),
+) -> list[JobSummary]:
+    """List the caller's own jobs, newest first (ORPHEUS-81).
+
+    Backs the client's reports list page. Client role required — the
+    advisor surface keeps its `latest_job` chip on `GET /clients` for
+    v1 (per-client report history is a separate follow-up), so there's
+    no advisor branch here. Dual-role callers (Andrew) get their own
+    client row's jobs, same as any client.
+
+    Two queries: the caller's jobs, then a bucketed scores read
+    (`job_id, band`) for the complete ones so each list row can show
+    its composite band without dragging the full result payload over
+    the wire. Mirrors the bucketing pattern in `GET /clients`.
+    """
+    if not roles.is_client():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Viewing reports requires a client profile.",
+        )
+    client_id = roles.client_id
+    assert client_id is not None  # narrowed by is_client() guard above
+
+    supabase = get_service_client()
+
+    jobs_result = (
+        supabase.table("jobs")
+        .select("id,status,created_at,updated_at")
+        .eq("client_id", client_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    rows = jobs_result.data or []
+    if not rows:
+        return []
+
+    complete_ids = [
+        str(r["id"]) for r in rows if r.get("status") == "complete"
+    ]
+    band_by_job: dict[str, str] = {}
+    if complete_ids:
+        scores_result = (
+            supabase.table("scores")
+            .select("job_id,band")
+            .in_("job_id", complete_ids)
+            .execute()
+        )
+        for s in scores_result.data or []:
+            if s.get("band"):
+                band_by_job[str(s["job_id"])] = s["band"]
+
+    return [
+        JobSummary(
+            id=str(r["id"]),
+            state=r["status"],
+            created_at=r["created_at"],
+            updated_at=r.get("updated_at"),
+            band=band_by_job.get(str(r["id"])),
+        )
+        for r in rows
+    ]
 
 
 @router.get("/{job_id}", response_model=Job)
@@ -350,6 +429,26 @@ async def get_job(
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
+
+
+def _has_active_job(supabase, client_id: str) -> bool:
+    """True when the client has a job in a non-terminal state.
+
+    The concurrent-run guard on POST /jobs (ORPHEUS-81): one in-flight
+    pipeline per client. `pending` and `running` are the non-terminal
+    states; `complete` and `failed` don't block a new run (failed jobs
+    are retried by submitting fresh — the worker's own 3× retry happens
+    within the `running` state).
+    """
+    result = (
+        supabase.table("jobs")
+        .select("id")
+        .eq("client_id", client_id)
+        .in_("status", ["pending", "running"])
+        .limit(1)
+        .execute()
+    )
+    return bool(result.data)
 
 
 async def _read_upload(
