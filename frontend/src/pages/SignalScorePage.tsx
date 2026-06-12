@@ -148,13 +148,16 @@ export function SignalScorePage() {
         <MetricsBlock data={scoring.forward_brief_data} />
       )}
 
-      {/* Actions — flow is Signal Score → Cheat Sheet (ORPHEUS-69). */}
+      {/* Actions — flow is Signal Score → Cheat Sheet (ORPHEUS-69).
+          The secondary action retargets to the reports list under
+          ORPHEUS-81 (deviates from Figma node 5:133's "Return to
+          Groundwork", which predates multi-report support). */}
       <div className="actions">
-        <Link to="/" className="btn-secondary">
-          &larr; Return to Groundwork
+        <Link to="/reports" className="btn-secondary">
+          &larr; View My Reports
         </Link>
         <Link to={`/jobs/${job.id}/cheat-sheet`} className="btn-primary">
-          View Quick Reference Card &rarr;
+          View My Quick Reference Card &rarr;
         </Link>
       </div>
     </main>
@@ -193,14 +196,15 @@ function DimensionCard({ dimension, narrative }: DimensionCardProps) {
     })
 
   const summary = dimension.summary ?? null
+  const displayName = dimDisplayName(dimension.name)
 
   return (
     <div className="dimension-card">
       <div className="dim-header">
-        <div className="dim-name">{dimension.name}</div>
+        <div className="dim-name">{displayName}</div>
         <BandPillRow
           activeBand={dimBand}
-          dimensionName={dimension.name}
+          dimensionName={displayName}
           score={dimension.normalized_score}
         />
       </div>
@@ -590,6 +594,26 @@ const BAND_ORDER: readonly SignalBand[] = [
  * Coherence, Profile Completeness, Identity Clarity, Recency, Continuity,
  * Posting Presence, Topic Consistency) render with their internal names as-is.
  */
+/**
+ * Client-facing display names for the four dimensions (ORPHEUS-78). Same
+ * selective-rename pattern as SUB_DIM_DISPLAY_NAMES below: internal names
+ * stay canonical everywhere upstream (backend models, scoring engine,
+ * narrative keys — `dimension_narratives` is keyed on the internal name);
+ * the swap happens at the card header + band-row aria-label only. Figma
+ * node 5:26 documents "Profile Clarity"; the other three were locked by
+ * Josh 2026-06-12.
+ */
+const DIM_DISPLAY_NAMES: Record<string, string> = {
+  'Profile Signal Clarity': 'Profile Clarity',
+  'Behavioral Signal Strength': 'Signal Strength',
+  'Behavioral Signal Quality': 'Signal Quality',
+  'Profile-Behavior Alignment': 'Alignment',
+}
+
+function dimDisplayName(internalName: string): string {
+  return DIM_DISPLAY_NAMES[internalName] ?? internalName
+}
+
 const SUB_DIM_DISPLAY_NAMES: Record<string, string> = {
   'Experience Description Quality': 'Experience Narrative',
   'History Depth': 'Engagement History',

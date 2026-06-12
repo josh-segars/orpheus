@@ -106,12 +106,20 @@ describe('SignalScorePage', () => {
     expect(img!.src).toContain('wave-3-tuning-stub')
   })
 
-  it('renders all four dimension cards with their names', () => {
+  it('renders all four dimension cards with their shortened display names (ORPHEUS-78)', () => {
     renderSignalScorePage()
-    expect(screen.getByText('Profile Signal Clarity')).toBeInTheDocument()
-    expect(screen.getByText('Behavioral Signal Strength')).toBeInTheDocument()
-    expect(screen.getByText('Behavioral Signal Quality')).toBeInTheDocument()
-    expect(screen.getByText('Profile-Behavior Alignment')).toBeInTheDocument()
+    // Client-facing display names; internal names stay canonical upstream.
+    expect(screen.getByText('Profile Clarity')).toBeInTheDocument()
+    expect(screen.getByText('Signal Strength')).toBeInTheDocument()
+    expect(screen.getByText('Signal Quality')).toBeInTheDocument()
+    expect(screen.getByText('Alignment')).toBeInTheDocument()
+    // The internal names must not leak to the card headers.
+    expect(
+      screen.queryByText('Profile Signal Clarity'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Behavioral Signal Strength'),
+    ).not.toBeInTheDocument()
   })
 
   it('renders a 5-pill band row per dimension with a score-aware aria-label (ORPHEUS-51)', () => {
@@ -131,10 +139,18 @@ describe('SignalScorePage', () => {
     // for each dimension card uses the fixture's `band` value verbatim,
     // not a re-derivation from normalized_score.
     renderSignalScorePage()
+    // ORPHEUS-78: the aria-label carries the client-facing display name,
+    // not the internal dimension name.
+    const displayNames: Record<string, string> = {
+      'Profile Signal Clarity': 'Profile Clarity',
+      'Behavioral Signal Strength': 'Signal Strength',
+      'Behavioral Signal Quality': 'Signal Quality',
+      'Profile-Behavior Alignment': 'Alignment',
+    }
     for (const dim of demoJob.result!.scoring.scored_dimensions.dimensions) {
       const numeric = Math.round(dim.normalized_score * 100)
       const expected = new RegExp(
-        `^${dim.name} band: ${dim.band} — score ${numeric} of 100$`,
+        `^${displayNames[dim.name] ?? dim.name} band: ${dim.band} — score ${numeric} of 100$`,
       )
       expect(
         screen.getByRole('group', { name: expected }),
@@ -142,14 +158,17 @@ describe('SignalScorePage', () => {
     }
   })
 
-  it('exposes the "Return to Groundwork" and primary "View Quick Reference Card" links; the Forward Brief link is retired (ORPHEUS-69; copy renamed in ORPHEUS-76)', () => {
+  it('exposes the secondary "View My Reports" link (ORPHEUS-81) and primary "View My Quick Reference Card" link (ORPHEUS-78); the Forward Brief link is retired (ORPHEUS-69)', () => {
     renderSignalScorePage()
-    expect(
-      screen.getByRole('link', { name: /return to groundwork/i }),
-    ).toBeInTheDocument()
-    // ORPHEUS-76: user-facing copy says "Quick Reference Card"; the route
-    // and code identifiers keep the cheat-sheet name.
-    const cs = screen.getByRole('link', { name: /view quick reference card/i })
+    // ORPHEUS-81: the secondary action targets the reports list, not
+    // Groundwork — multi-report flow.
+    const reports = screen.getByRole('link', { name: /view my reports/i })
+    expect(reports).toHaveAttribute('href', '/reports')
+    // ORPHEUS-76/78: user-facing copy says "View My Quick Reference Card";
+    // the route and code identifiers keep the cheat-sheet name.
+    const cs = screen.getByRole('link', {
+      name: /view my quick reference card/i,
+    })
     expect(cs).toHaveAttribute('href', '/jobs/demo/cheat-sheet')
     expect(
       screen.queryByRole('link', { name: /forward brief/i }),

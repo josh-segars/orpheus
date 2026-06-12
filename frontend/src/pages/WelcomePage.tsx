@@ -70,12 +70,16 @@ export function WelcomePage() {
               signal.
             </p>
           </div>
+          {/* ORPHEUS-78: the standalone Forward Brief deliverable was
+              retired under ORPHEUS-67/69 — this card now describes the
+              Quick Reference Card (internal name: cheat sheet). */}
           <div className="welcome-card-step">
-            <div className="welcome-card-step-title">Forward Brief</div>
+            <div className="welcome-card-step-title">Quick Reference Card</div>
             <p className="welcome-card-step-body">
-              Your <em>Forward Brief</em> translates your report into a
-              prioritized plan with specific steps to ensure your professional
-              presence reflects the credibility you&rsquo;ve earned.
+              Your <em>Quick Reference Card</em> translates your report into
+              a prioritized plan with specific steps to ensure your
+              professional presence reflects the credibility you&rsquo;ve
+              earned.
             </p>
           </div>
         </div>
