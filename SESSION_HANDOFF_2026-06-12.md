@@ -5,7 +5,7 @@ Retires `SESSION_HANDOFF_2026-06-11.md`. Its threads resolved as follows:
 - **Pickup 1 (combined post-deploy live run)** — still owed, now formalized and expanded as **ORPHEUS-82** (covers 74/77/66/temp-0/76 plus this session's 81/78). Partially pre-cleared in-session: the reports list rendered live against real data (band chips, rows, redirect) during the 81 rollout.
 - **Pickup 2 (ORPHEUS-78 verbiage pass)** — shipped this session. Closed in Plane.
 - **Pickup 3 (ORPHEUS-42)** — unchanged, carries forward.
-- Between the handoffs, a **separate session** landed ORPHEUS-79 (Vercel Web Analytics + Speed Insights, `27e39f6`) and ORPHEUS-80 (CLS font fallbacks, `27e81a4`) — both commits are on main but the Plane tickets are still **In Progress** (presumably pending live CLS re-measurement; this session didn't touch them).
+- Between the handoffs, a **separate session** landed ORPHEUS-79 (Vercel Web Analytics + Speed Insights, `27e39f6`) and ORPHEUS-80 (CLS font fallbacks, `27e81a4`). Josh confirmed the live CLS re-measurement resolved at this session's wrap — both closed in Plane 2026-06-12.
 
 Commits this session (all five already pushed by Josh; only this handoff commit is unpushed):
 
@@ -32,7 +32,7 @@ Session shape: ORPHEUS-81 started on Josh's direction ("we will also touch 62, 7
 | ORPHEUS-83 | Andrew advisor status (data repaired) | ⏳ Backlog (medium). Data fixed live; uniqueness-guard migration remains. |
 | ORPHEUS-84 | Admin invite-advisor flow | ⏳ Backlog (medium). Filed. |
 | ORPHEUS-85 | Self-serve client sign-up (house advisor) | ⏳ Backlog (medium). Filed; Decision Log entry due when it ships. |
-| ORPHEUS-79 / 80 | Vercel analytics / CLS | 🔶 In Progress in Plane, commits on main (other session — close when verified). |
+| ORPHEUS-79 / 80 | Vercel analytics / CLS | ✅ **Done.** Commits `27e39f6` / `27e81a4` (parallel session 2026-06-11); Josh confirmed CLS resolved 2026-06-12, both closed at wrap. |
 | ORPHEUS-42 / 45 / 48 / 40 / 41 | Account page / edit action / branding / Stripe / disconnect | ⏸ Backlog. Unchanged. |
 
 ---
@@ -78,13 +78,12 @@ Found: Andrew had **no advisors row** and his auth user had **two** clients rows
 ## Caveats / things that will bite
 
 1. **Backend pytest count unconfirmed** — 271 expected; the handoff test baseline should be corrected if Josh's terminal disagrees.
-2. **ORPHEUS-79/80 are In Progress in Plane with commits already on main** — from a parallel session. Close them there or here once the CLS re-measurement is done; don't double-work them.
-3. **Andrew's advisors row has `practice_name` NULL** — invitation emails and admin labels fall back to his email until set.
-4. **Andrew needs a fresh sign-in/reload** to pick up dual-role (session-roles cache is staleTime Infinity).
-5. **Diagnostic shortcut, hard-won twice now:** a browser "CORS" error on an endpoint whose siblings work is almost always an unhandled 500 (FastAPI 500s skip CORSMiddleware headers). And new endpoint queries must be checked against information_schema — the fixture-invents-the-schema anti-pattern has now bitten three times (59/61/81).
-6. **Free re-runs + (soon) free sign-up = unmetered pipeline cost** — the single-in-flight guard is the only throttle until ORPHEUS-85's gate decision / ORPHEUS-40 Stripe.
-7. **Sandbox quirks unchanged:** no SSH push, `.git/*.lock` mv-workaround before commits, PyPI blocked.
-8. **Untracked-by-intent files unchanged:** survey `.md` + `.gs`, `rubric_consistency_results_2026-06-10_112327.json` (keep/delete call still pending), compliance drafts.
+2. **Andrew's advisors row has `practice_name` NULL** — invitation emails and admin labels fall back to his email until set.
+3. **Andrew needs a fresh sign-in/reload** to pick up dual-role (session-roles cache is staleTime Infinity).
+4. **Diagnostic shortcut, hard-won twice now:** a browser "CORS" error on an endpoint whose siblings work is almost always an unhandled 500 (FastAPI 500s skip CORSMiddleware headers). And new endpoint queries must be checked against information_schema — the fixture-invents-the-schema anti-pattern has now bitten three times (59/61/81).
+5. **Free re-runs + (soon) free sign-up = unmetered pipeline cost** — the single-in-flight guard is the only throttle until ORPHEUS-85's gate decision / ORPHEUS-40 Stripe.
+6. **Sandbox quirks unchanged:** no SSH push, `.git/*.lock` mv-workaround before commits, PyPI blocked.
+7. **Untracked-by-intent files unchanged:** survey `.md` + `.gs`, `rubric_consistency_results_2026-06-10_112327.json` (keep/delete call still pending), compliance drafts.
 
 ---
 
