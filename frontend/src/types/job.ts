@@ -26,12 +26,12 @@ export interface Job {
 /**
  * One row in the client's reports list (GET /jobs, ORPHEUS-81). Mirrors
  * backend JobSummary. `band` is the composite signal band — present only
- * for complete jobs with a scores row.
+ * for complete jobs with a scores row. No updated_at — the jobs table
+ * doesn't carry that column.
  */
 export interface JobSummary {
   id: string
   state: JobState
   created_at: string
-  updated_at: string | null
   band: string | null
 }

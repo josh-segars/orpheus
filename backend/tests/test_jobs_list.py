@@ -132,11 +132,15 @@ def _patch_supabase(fake: FakeSupabase):
 
 
 def _job_row(*, job_id: str, status_value: str) -> dict[str, Any]:
+    # Mirrors the live jobs schema: created_at / started_at / completed_at,
+    # NO updated_at. The first version of this fixture invented an
+    # updated_at column the handler then selected — and 500'd in prod
+    # (ORPHEUS-59/61 anti-pattern: fixtures must match what the DB
+    # actually has, not what the handler wishes it had).
     return {
         "id": job_id,
         "status": status_value,
         "created_at": "2026-06-12T00:00:00+00:00",
-        "updated_at": "2026-06-12T00:00:01+00:00",
     }
 
 

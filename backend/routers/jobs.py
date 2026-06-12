@@ -281,9 +281,13 @@ async def list_jobs(
 
     supabase = get_service_client()
 
+    # NB: column list must match the live schema — jobs has created_at /
+    # started_at / completed_at, NOT updated_at. Selecting a nonexistent
+    # column makes PostgREST 400 and the handler 500 (ORPHEUS-59/61
+    # anti-pattern; bitten again on this endpoint's first deploy).
     jobs_result = (
         supabase.table("jobs")
-        .select("id,status,created_at,updated_at")
+        .select("id,status,created_at")
         .eq("client_id", client_id)
         .order("created_at", desc=True)
         .execute()
@@ -312,7 +316,6 @@ async def list_jobs(
             id=str(r["id"]),
             state=r["status"],
             created_at=r["created_at"],
-            updated_at=r.get("updated_at"),
             band=band_by_job.get(str(r["id"])),
         )
         for r in rows

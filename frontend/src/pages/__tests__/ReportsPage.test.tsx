@@ -26,7 +26,6 @@ const COMPLETE_JOB: JobSummary = {
   id: 'job-complete-1',
   state: 'complete',
   created_at: '2026-06-01T12:00:00+00:00',
-  updated_at: null,
   band: 'Tuned',
 }
 
@@ -34,7 +33,6 @@ const RUNNING_JOB: JobSummary = {
   id: 'job-running-1',
   state: 'running',
   created_at: '2026-06-12T12:00:00+00:00',
-  updated_at: null,
   band: null,
 }
 
@@ -42,7 +40,6 @@ const FAILED_JOB: JobSummary = {
   id: 'job-failed-1',
   state: 'failed',
   created_at: '2026-05-20T12:00:00+00:00',
-  updated_at: null,
   band: null,
 }
 
