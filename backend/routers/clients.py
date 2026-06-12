@@ -463,6 +463,14 @@ async def accept_invitation(
            - Otherwise: 401. A different user trying to claim a token
              already burned by someone else.
       3. Check expiry (only for non-accepted statuses): 401 if past.
+      3b. ORPHEUS-83: if the caller already holds a linked clients row
+          (roles.client_id is not None), 409. One auth user owns at
+          most one clients row — accepting a second invitation must
+          surface a clear state, not silently link a duplicate. This
+          check runs BEFORE the email-mismatch card so users aren't
+          asked to confirm an acceptance that can never complete.
+          Migration 014's partial unique index on clients.user_id is
+          the DB-level backstop.
       4. Compute case-insensitive email mismatch.
            - Mismatch + `confirmed=False`: 200 with
              `requires_confirmation=True` and both emails populated so
@@ -540,6 +548,22 @@ async def accept_invitation(
                 detail="This invitation has expired. Ask your advisor to resend.",
             )
 
+    # ── Already-linked caller check (ORPHEUS-83) ────────────────────────
+    # Pending rows always have user_id NULL, so reaching this point with
+    # roles.client_id set means the caller's linked row is a DIFFERENT
+    # row than the one this token points at. Refuse rather than create
+    # a duplicate; migration 014's unique index backstops races.
+    if roles.client_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Your account is already linked to a client profile, and "
+                "each account can hold only one. Ask the advisor who sent "
+                "this invitation to contact support if you need to move "
+                "your profile."
+            ),
+        )
+
     # ── Email mismatch check ────────────────────────────────────────────
     invitation_email_raw = row.get("email") or ""
     invitation_email_norm = invitation_email_raw.strip().lower()
@@ -559,19 +583,36 @@ async def accept_invitation(
         )
 
     # ── Accept: UPDATE the row ──────────────────────────────────────────
-    update_result = (
-        supabase.table("clients")
-        .update(
-            {
-                "user_id": roles.user_id,
-                "invitation_status": "accepted",
-                # Token + expires_at intentionally preserved; see
-                # implementation note in the docstring.
-            }
+    try:
+        update_result = (
+            supabase.table("clients")
+            .update(
+                {
+                    "user_id": roles.user_id,
+                    "invitation_status": "accepted",
+                    # Token + expires_at intentionally preserved; see
+                    # implementation note in the docstring.
+                }
+            )
+            .eq("id", row_id)
+            .execute()
         )
-        .eq("id", row_id)
-        .execute()
-    )
+    except Exception as exc:  # noqa: BLE001 — narrowed by the 23505 check
+        # Race backstop (ORPHEUS-83): two concurrent acceptances by the
+        # same user can both pass the pre-check above; migration 014's
+        # partial unique index rejects the second UPDATE with a 23505
+        # unique violation. Surface the same 409 as the pre-check
+        # instead of an unhandled 500. Anything else re-raises.
+        code = getattr(exc, "code", None)
+        if code == "23505" or "23505" in str(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Your account is already linked to a client profile, "
+                    "and each account can hold only one."
+                ),
+            ) from exc
+        raise
     if not update_result.data:
         logger.error(
             "Failed to update clients row %s on accept (empty result.data)",

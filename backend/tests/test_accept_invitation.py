@@ -128,6 +128,10 @@ class _Chain:
             response = self._parent.responses.pop(0)
         else:
             response = {"data": []}
+        if "raise" in response:
+            # ORPHEUS-83: lets tests simulate PostgREST-level failures
+            # (e.g. a 23505 unique violation from migration 014's index).
+            raise response["raise"]
         return SimpleNamespace(**response)
 
 
@@ -348,3 +352,116 @@ async def test_accept_replay_by_different_user_returns_401():
     assert exc.value.status_code == 401
     assert "already" in exc.value.detail.lower()
     assert fake.captured_updates == []
+
+
+# --------------------------------------------------------------------------- #
+# Already-linked caller — one clients row per auth user (ORPHEUS-83)
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_accept_already_linked_caller_returns_409():
+    """Pending row, but the caller already holds a linked clients row
+    (roles.client_id set) → 409, NO update.
+
+    Without this guard a second acceptance linked a duplicate clients
+    row — the live dupe state found 2026-06-12 (Andrew's 'Drew' row)."""
+    fake = FakeSupabase(
+        responses=[
+            {"data": [_row()]},  # SELECT by token — pending row
+        ]
+    )
+
+    with _patch_supabase(fake):
+        with pytest.raises(HTTPException) as exc:
+            await clients_router.accept_invitation(
+                request=clients_router.AcceptInvitationRequest(token=TOKEN),
+                roles=_roles(client_id="some-existing-clients-row-uuid"),
+            )
+
+    assert exc.value.status_code == 409
+    assert "already linked" in exc.value.detail.lower()
+    assert fake.captured_updates == []
+
+
+@pytest.mark.asyncio
+async def test_accept_already_linked_takes_precedence_over_mismatch():
+    """Already-linked caller + email mismatch + confirmed=False → 409,
+    NOT the soft-confirmation card.
+
+    Pins the check ordering: users must not be asked to confirm an
+    acceptance that can never complete."""
+    fake = FakeSupabase(
+        responses=[
+            {"data": [_row(email=INVITATION_EMAIL)]},
+        ]
+    )
+
+    with _patch_supabase(fake):
+        with pytest.raises(HTTPException) as exc:
+            await clients_router.accept_invitation(
+                request=clients_router.AcceptInvitationRequest(
+                    token=TOKEN,
+                    confirmed=False,
+                ),
+                roles=_roles(
+                    email=MISMATCH_LINKEDIN_EMAIL,
+                    client_id="some-existing-clients-row-uuid",
+                ),
+            )
+
+    assert exc.value.status_code == 409
+    assert fake.captured_updates == []
+
+
+@pytest.mark.asyncio
+async def test_accept_replay_by_same_linked_user_still_idempotent():
+    """Replay by the same user — who naturally now has roles.client_id
+    populated — must still 200 idempotently, not 409.
+
+    Pins that the replay branch runs BEFORE the already-linked guard:
+    the caller's linked row IS this row, so there's no duplicate."""
+    fake = FakeSupabase(
+        responses=[
+            {"data": [_row(invitation_status="accepted", user_id=USER_ID)]},
+        ]
+    )
+
+    with _patch_supabase(fake):
+        response = await clients_router.accept_invitation(
+            request=clients_router.AcceptInvitationRequest(token=TOKEN),
+            roles=_roles(user_id=USER_ID, client_id=CLIENT_ID),
+        )
+
+    assert response.client_id == CLIENT_ID
+    assert response.requires_confirmation is False
+    assert fake.captured_updates == []
+
+
+@pytest.mark.asyncio
+async def test_accept_unique_violation_on_update_returns_409():
+    """Race backstop: the UPDATE raises a 23505 unique violation (two
+    concurrent acceptances both passed the pre-check; migration 014's
+    index rejected the second) → 409, not an unhandled 500."""
+
+    class FakeUniqueViolation(Exception):
+        code = "23505"
+
+    fake = FakeSupabase(
+        responses=[
+            {"data": [_row()]},                      # SELECT by token
+            {"raise": FakeUniqueViolation(           # UPDATE blows up
+                'duplicate key value violates unique constraint '
+                '"clients_user_id_unique"'
+            )},
+        ]
+    )
+
+    with _patch_supabase(fake):
+        with pytest.raises(HTTPException) as exc:
+            await clients_router.accept_invitation(
+                request=clients_router.AcceptInvitationRequest(token=TOKEN),
+                roles=_roles(),
+            )
+
+    assert exc.value.status_code == 409
+    assert "already linked" in exc.value.detail.lower()
