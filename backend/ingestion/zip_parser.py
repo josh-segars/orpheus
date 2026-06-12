@@ -10,6 +10,7 @@ Verified against actual LinkedIn export from 2026-03-17.
 import csv
 import io
 import logging
+import re
 import zipfile
 from pathlib import Path
 
@@ -60,12 +61,23 @@ def _read_csv_from_zip(
     """Read a CSV file from the ZIP archive and return rows as dicts.
 
     Handles UTF-8 BOM encoding that LinkedIn includes.
-    LinkedIn nests CSVs in a subdirectory or at root — we match by name.
+    LinkedIn nests CSVs in a subdirectory or at root — we match on the
+    basename. Newer exports (observed live 2026-06-12, ORPHEUS-87)
+    append the member ID to per-member files (Shares_181682616.csv,
+    Comments_181682616.csv, ...), so the match tolerates an optional
+    _<digits> suffix. The previous endswith() match could never hit
+    those, which zeroed behavioral scoring (Dims 2/3/4) on any fresh
+    export. Exact-name matches are preferred when both forms exist.
     Returns an empty list if the file is not found.
     """
+    stem = filename.lower()
+    if stem.endswith(".csv"):
+        stem = stem[: -len(".csv")]
+    pattern = re.compile(rf"^{re.escape(stem)}(_\d+)?\.csv$")
+
     matching = [
         name for name in zf.namelist()
-        if name.lower().endswith(filename.lower())
+        if pattern.match(name.lower().rsplit("/", 1)[-1])
         and not name.startswith("__MACOSX")
     ]
 
@@ -73,6 +85,10 @@ def _read_csv_from_zip(
         logger.warning("CSV not found in archive: %s", filename)
         return []
 
+    # Prefer the exact (unsuffixed) name when both forms are present.
+    matching.sort(
+        key=lambda name: name.lower().rsplit("/", 1)[-1] != filename.lower()
+    )
     if len(matching) > 1:
         logger.warning(
             "Multiple matches for %s: %s — using first",
