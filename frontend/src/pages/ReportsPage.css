@@ -2,9 +2,13 @@
    section-header, btn-primary) comes from orpheus-styles.css; only the
    list rows and chips are page-specific. */
 
-.reports-header {
-  display: flex;
-  align-items: flex-end;
+/* Compound selector: the shared .section-header is a flex COLUMN, and
+   with equal specificity the winner depends on bundle order — the first
+   ship rendered title + button stacked and right-aligned. Two classes
+   beat one regardless of order; flex-direction set explicitly. */
+.section-header.reports-header {
+  flex-direction: row;
+  align-items: center;
   justify-content: space-between;
   gap: 20px;
 }

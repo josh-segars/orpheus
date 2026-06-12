@@ -14,9 +14,12 @@
        visual: header row with the run CTA, one bordered row per report,
        band chips in the spectrum pip colors. */
 
-    .reports-header {
-      display: flex;
-      align-items: flex-end;
+    /* Compound selector mirrors ReportsPage.css: the shared
+       .section-header is a flex column; this pins the header back to a
+       vertically-centered row (title left, CTA right). */
+    .section-header.reports-header {
+      flex-direction: row;
+      align-items: center;
       justify-content: space-between;
       gap: 20px;
     }
