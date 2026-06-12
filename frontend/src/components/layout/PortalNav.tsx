@@ -33,8 +33,8 @@ interface LinkedInUserMetadata {
  *   - View My Reports + Manage My Account (new)
  *
  * Items are role-conditional:
- *   - View My Reports → "/" (the SmartIndexRedirect routes a client or
- *     dual-role user to their own latest report). Client/dual-role only.
+ *   - View My Reports → /reports (the reports list, ORPHEUS-81).
+ *     Client/dual-role only.
  *   - Manage My Account → /account placeholder (ORPHEUS-42 deferred).
  *     All roles.
  *   - Log Out → signOut(). All roles.
@@ -158,7 +158,7 @@ export function PortalNav() {
           <div className="nav-account-menu" role="menu" aria-label="Account menu">
             {isClient && (
               <Link
-                to="/"
+                to="/reports"
                 role="menuitem"
                 className="nav-account-item"
                 onClick={() => setOpen(false)}

@@ -34,6 +34,11 @@ export interface GroundworkProgress {
   // Latest in-flight job, if any.
   latestPendingJobId: string | null
   latestCompleteJobId: string | null
+  // True when ANY job row exists regardless of status (ORPHEUS-81) —
+  // drives the smart redirect to the reports list. Distinct from the
+  // two ids above: a client whose latest job failed but who has older
+  // complete reports must still land on the list.
+  hasAnyJob: boolean
 }
 
 interface JobRow {
@@ -84,6 +89,7 @@ export function useGroundworkProgress() {
       if (jobsResult.value.error) throw jobsResult.value.error
 
       const latest = (jobsResult.value.data?.[0] as JobRow | undefined) ?? null
+      const hasAnyJob = latest !== null
       const latestPendingJobId =
         latest && (latest.status === 'pending' || latest.status === 'running')
           ? latest.id
@@ -124,6 +130,7 @@ export function useGroundworkProgress() {
         allComplete,
         latestPendingJobId,
         latestCompleteJobId,
+        hasAnyJob,
       }
     },
     staleTime: 5_000,

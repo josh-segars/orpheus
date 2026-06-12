@@ -18,6 +18,7 @@ import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { NotInvitedPage } from './pages/NotInvitedPage'
 import { QuestionnairePage } from './pages/QuestionnairePage'
+import { ReportsPage } from './pages/ReportsPage'
 import { SignalScorePage } from './pages/SignalScorePage'
 import { WelcomePage } from './pages/WelcomePage'
 import { isAdminEmail } from './hooks/useAdmin'
@@ -78,6 +79,12 @@ export default function App() {
         <Route path="/linkedin/step1" element={<LinkedInStep1Page />} />
         <Route path="/linkedin/step2" element={<LinkedInStep2Page />} />
         <Route path="/questionnaire" element={<QuestionnairePage />} />
+        {/*
+          Reports list (ORPHEUS-81) — the client's landing surface once
+          they have at least one job. One row per report; "Run a New
+          Report" re-enters the Groundwork flow.
+        */}
+        <Route path="/reports" element={<ReportsPage />} />
         {/*
           Account management placeholder (ORPHEUS-71). Target of the
           nav dropdown's "Manage My Account". The real surface is
@@ -267,9 +274,14 @@ function AdminRoute({ children }: { children: ReactNode }) {
  *   advisor-only (no client row) → /advisor/clients (ORPHEUS-39)
  *   no jobs + Welcome unseen     → /welcome
  *   no jobs + Welcome seen       → /groundwork
- *   pending or running job       → /jobs/:id/analysis  (AnalysisPage polls)
- *   complete job                 → /jobs/:id           (Signal Score)
- *   failed job                   → /groundwork         (let the client retry)
+ *   any job (any status)         → /reports            (ORPHEUS-81)
+ *
+ * ORPHEUS-81 reworked the job branches: clients with any report
+ * history land on the reports list rather than being hard-routed to
+ * the latest report or its analysis screen. The list surfaces the
+ * in-flight row, every complete report, and the "Run a New Report"
+ * entry point — including the failed-latest-job case that used to
+ * silently dead-end on /groundwork.
  *
  * The neither-role admin branch only fires for users ProtectedRoute
  * has explicitly admitted via the admin email allowlist (ORPHEUS-53).
@@ -331,12 +343,10 @@ function ClientPortalRedirect() {
     return <Navigate to="/groundwork" replace />
   }
 
-  if (data.latestPendingJobId) {
-    return <Navigate to={`/jobs/${data.latestPendingJobId}/analysis`} replace />
-  }
-
-  if (data.latestCompleteJobId) {
-    return <Navigate to={`/jobs/${data.latestCompleteJobId}`} replace />
+  // Any report history — complete, in flight, or failed — lands on the
+  // reports list (ORPHEUS-81).
+  if (data.hasAnyJob) {
+    return <Navigate to="/reports" replace />
   }
 
   if (!hasSeenWelcome()) {

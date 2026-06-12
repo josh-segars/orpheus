@@ -1,0 +1,102 @@
+/* Reports list page (ORPHEUS-81). Shared chrome (main-interior,
+   section-header, btn-primary) comes from orpheus-styles.css; only the
+   list rows and chips are page-specific. */
+
+.reports-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.reports-in-flight-note {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 15px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.reports-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.report-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 24px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  text-decoration: none;
+}
+
+.report-row-link {
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.report-row-link:hover {
+  border-color: var(--accent);
+  background: var(--accent-tint-soft);
+}
+
+.report-row-date {
+  font-family: 'Source Serif 4', serif;
+  font-size: 19px;
+  color: var(--text-strong);
+  flex: 0 0 auto;
+}
+
+.report-row-action {
+  margin-left: auto;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 15px;
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.report-row-note {
+  margin-left: auto;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* Status / band chips */
+
+.report-status-chip,
+.report-band-chip {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 12px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.report-status-in-progress {
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.report-status-failed {
+  border: 1px solid var(--issue);
+  color: var(--issue);
+}
+
+/* Band chips take their band's spectrum pip color with the dark
+   knockout text — same mapping as the report page band pills
+   (ORPHEUS-70): Dissonant→pip-1 … Resonant→pip-5. */
+
+.report-band-chip {
+  color: #000803;
+}
+
+.report-band-1 { background: var(--pip-1); }
+.report-band-2 { background: var(--pip-2); }
+.report-band-3 { background: var(--pip-3); }
+.report-band-4 { background: var(--pip-4); }
+.report-band-5 { background: var(--pip-5); }
