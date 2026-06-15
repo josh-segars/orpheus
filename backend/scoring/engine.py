@@ -513,14 +513,20 @@ def compute_forward_brief(
     zip_data: ZipData,
     xlsx_data: XlsxData | None,
     ref_date: date,
+    photo_present_override: bool | None = None,
 ) -> ForwardBriefData:
     """Extract Forward Brief structured data from ingested data.
 
     XLSX data is optional — self-serve clients may not provide it,
     and some fields are only available from the analytics export.
+
+    photo_present_override, when not None, sets the visual-professionalism
+    photo flag directly (sourced from the LinkedIn OIDC picture claim at
+    submission time) and wins over the ZIP rich-media heuristic. See
+    ORPHEUS-89.
     """
     quant = _compute_forward_brief_quantitative(zip_data, xlsx_data, ref_date)
-    flags = _compute_qualitative_flags(zip_data)
+    flags = _compute_qualitative_flags(zip_data, photo_present_override)
     return ForwardBriefData(quantitative=quant, qualitative_flags=flags)
 
 
@@ -626,8 +632,19 @@ def _compute_forward_brief_quantitative(
     return ForwardBriefQuantitative(**fields)
 
 
-def _compute_qualitative_flags(zip_data: ZipData) -> QualitativeFlags:
-    """Compute pre-processed qualitative flags."""
+def _compute_qualitative_flags(
+    zip_data: ZipData,
+    photo_present_override: bool | None = None,
+) -> QualitativeFlags:
+    """Compute pre-processed qualitative flags.
+
+    photo_present_override, when not None, wins over the ZIP rich-media
+    heuristic — it carries the LinkedIn OIDC picture-claim signal captured
+    at submission time (ORPHEUS-89). The rich-media heuristic only detects
+    a "You changed your profile photo" event in Rich_Media.csv, which
+    misses members who set their photo outside the export window, so OIDC
+    is the more trustworthy source when available.
+    """
 
     # --- Viewer-actor affinity ---
     # Count engagement targets from comment and reaction URLs
@@ -650,10 +667,13 @@ def _compute_qualitative_flags(zip_data: ZipData) -> QualitativeFlags:
     top_targets = [url for url, _ in top_n] if concentrated else []
 
     # --- Visual professionalism ---
-    photo_present = any(
-        "profile photo" in item.type.lower()
-        for item in zip_data.rich_media
-    )
+    if photo_present_override is not None:
+        photo_present = photo_present_override
+    else:
+        photo_present = any(
+            "profile photo" in item.type.lower()
+            for item in zip_data.rich_media
+        )
 
     # --- Engagement invitation ---
     profile = zip_data.profile
@@ -704,6 +724,7 @@ def run_scoring(
     dim1_rubric_scores: dict[str, int],
     dim4_rubric_scores: dict[str, int],
     ref_date: date | None = None,
+    photo_present_override: bool | None = None,
 ) -> ScoringStageOutput:
     """Run the complete scoring pipeline.
 
@@ -718,6 +739,11 @@ def run_scoring(
             Keys: "Topic Consistency", "Profile-Content Coherence".
             Values: 1–5.
         ref_date: Reference date for trailing windows. Defaults to today.
+        photo_present_override: Profile-photo presence from the LinkedIn
+            OIDC picture claim captured at submission (ORPHEUS-89). When
+            not None it sets the Forward Brief visual-professionalism flag
+            directly, overriding the ZIP rich-media heuristic; None falls
+            back to that heuristic.
 
     Returns:
         ScoringStageOutput with scored_dimensions and forward_brief_data.
@@ -742,7 +768,9 @@ def run_scoring(
     )
 
     # Compute Forward Brief data
-    forward_brief = compute_forward_brief(zip_data, xlsx_data, ref_date)
+    forward_brief = compute_forward_brief(
+        zip_data, xlsx_data, ref_date, photo_present_override
+    )
 
     return ScoringStageOutput(
         scored_dimensions=scored,

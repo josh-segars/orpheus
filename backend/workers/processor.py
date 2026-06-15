@@ -193,12 +193,17 @@ async def stage_scoring(
     dim4_scores: dict[str, int],
     job_id: str,
     supabase,
+    photo_present_override: bool | None = None,
 ) -> ScoringStageOutput:
     """Stage 3: Deterministic scoring — compute all dimensions + Forward Brief.
 
     Combines rubric scores (Dim 1, 4) with quantitative band lookups (Dim 2, 3).
     Computes composite score, band assignment, and Forward Brief data.
     Saves results to the scores table and config_snapshot to the jobs table.
+
+    photo_present_override carries the LinkedIn OIDC picture-claim signal
+    captured at submission (ORPHEUS-89); when not None it overrides the ZIP
+    rich-media photo heuristic in the Forward Brief.
     """
     logger.info(f"[{job_id}] Stage 3: Deterministic scoring")
 
@@ -207,6 +212,7 @@ async def stage_scoring(
         xlsx_data=xlsx_data,
         dim1_rubric_scores=dim1_scores,
         dim4_rubric_scores=dim4_scores,
+        photo_present_override=photo_present_override,
     )
 
     sd = result.scored_dimensions
@@ -425,8 +431,12 @@ async def run_pipeline(supabase, anthropic_client: Anthropic, job: dict):
     )
 
     # Stage 3: Deterministic scoring
+    # oidc_photo_present (ORPHEUS-89) is captured at submission from the
+    # client's LinkedIn OIDC picture claim; None for older/advisor-run jobs,
+    # in which case scoring falls back to the ZIP rich-media heuristic.
     scoring_output = await stage_scoring(
-        zip_data, xlsx_data, dim1_scores, dim4_scores, job_id, supabase
+        zip_data, xlsx_data, dim1_scores, dim4_scores, job_id, supabase,
+        photo_present_override=job.get("oidc_photo_present"),
     )
 
     # Stage 4: Narrative generation (Claude)

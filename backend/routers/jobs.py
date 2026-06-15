@@ -23,7 +23,7 @@ import logging
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
 from backend.auth import SessionRoles, get_current_session_roles
 from backend.db import get_service_client
@@ -55,6 +55,17 @@ _MAX_ANALYTICS_BYTES = 25 * 1024 * 1024  # 25 MB
 async def create_job(
     archive: Annotated[UploadFile, File(description="LinkedIn complete data archive (ZIP).")],
     analytics: Annotated[UploadFile, File(description="LinkedIn Analytics export (XLSX).")],
+    has_profile_photo: Annotated[
+        bool | None,
+        Form(
+            description=(
+                "Whether the client's LinkedIn OIDC session carries a "
+                "profile picture claim (ORPHEUS-89). Captured client-side "
+                "at submission; overrides the ZIP rich-media photo "
+                "heuristic. Omitted/None falls back to the heuristic."
+            ),
+        ),
+    ] = None,
     roles: SessionRoles = Depends(get_current_session_roles),
 ) -> Job:
     """Create a new analysis job from a client's uploaded LinkedIn data.
@@ -154,6 +165,10 @@ async def create_job(
             {
                 "client_id": client_id,
                 "status": "pending",
+                # ORPHEUS-89: OIDC photo-presence signal captured at
+                # submission. None = no signal; worker falls back to the
+                # ZIP rich-media heuristic at scoring time.
+                "oidc_photo_present": has_profile_photo,
             }
         )
         .execute()

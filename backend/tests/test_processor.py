@@ -33,6 +33,7 @@ from backend.models.scoring import (
 from backend.workers.processor import (
     _merge_dim_summaries,
     _merge_sub_dim_narratives,
+    stage_scoring,
 )
 
 
@@ -240,3 +241,50 @@ class TestMergeDimSummaries:
         _merge_dim_summaries(output, {"Profile Signal Clarity": "Wire teaser."})
         dumped = output.scored_dimensions.model_dump_json()
         assert '"summary":"Wire teaser."' in dumped
+
+
+class TestStageScoringPhotoOverride:
+    """ORPHEUS-89: stage_scoring forwards the OIDC photo override into
+    run_scoring → Forward Brief. Supabase writes are stubbed with a
+    MagicMock (the integration write path is exercised live, not here)."""
+
+    _DIM1 = {n: 3 for n in [
+        "Headline Clarity", "About Section Coherence",
+        "Experience Description Quality", "Profile Completeness",
+        "Identity Clarity",
+    ]}
+    _DIM4 = {"Topic Consistency": 3, "Profile-Content Coherence": 3}
+
+    def _run(self, photo_present_override):
+        import asyncio
+        from unittest.mock import MagicMock
+
+        from backend.ingestion.types import ZipData
+
+        return asyncio.run(
+            stage_scoring(
+                zip_data=ZipData(),  # no rich-media → heuristic would be False
+                xlsx_data=None,
+                dim1_scores=self._DIM1,
+                dim4_scores=self._DIM4,
+                job_id="job-1",
+                supabase=MagicMock(),
+                photo_present_override=photo_present_override,
+            )
+        )
+
+    def test_override_true_wins(self):
+        result = self._run(True)
+        assert (
+            result.forward_brief_data.qualitative_flags
+            .visual_professionalism.photo_present
+            is True
+        )
+
+    def test_override_none_falls_back_to_heuristic(self):
+        result = self._run(None)
+        assert (
+            result.forward_brief_data.qualitative_flags
+            .visual_professionalism.photo_present
+            is False
+        )

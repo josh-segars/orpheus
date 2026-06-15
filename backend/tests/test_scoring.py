@@ -673,6 +673,34 @@ class TestForwardBrief:
         fb = compute_forward_brief(zip_data, None, date(2026, 3, 16))
         assert fb.qualitative_flags.visual_professionalism.photo_present is True
 
+    def test_photo_override_true_wins_over_empty_zip(self):
+        # ORPHEUS-89: OIDC says a photo is present even though the ZIP
+        # rich-media history has no "profile photo" event.
+        fb = compute_forward_brief(
+            ZipData(), None, date(2026, 3, 16), photo_present_override=True
+        )
+        assert fb.qualitative_flags.visual_professionalism.photo_present is True
+
+    def test_photo_override_false_wins_over_zip_event(self):
+        # OIDC always wins: an explicit False overrides a rich-media hit.
+        zip_data = ZipData(
+            rich_media=[RichMediaItem(type="You changed your profile photo", date_time_raw="Jan 5, 2024")],
+        )
+        fb = compute_forward_brief(
+            zip_data, None, date(2026, 3, 16), photo_present_override=False
+        )
+        assert fb.qualitative_flags.visual_professionalism.photo_present is False
+
+    def test_photo_override_none_falls_back_to_heuristic(self):
+        # None = no OIDC signal → ZIP rich-media heuristic governs.
+        zip_data = ZipData(
+            rich_media=[RichMediaItem(type="You changed your profile photo", date_time_raw="Jan 5, 2024")],
+        )
+        fb = compute_forward_brief(
+            zip_data, None, date(2026, 3, 16), photo_present_override=None
+        )
+        assert fb.qualitative_flags.visual_professionalism.photo_present is True
+
     def test_cta_detection(self):
         profile = ProfileData(summary="Reach out to discuss how we can work together.")
         zip_data = ZipData(profile=profile)
@@ -707,6 +735,39 @@ class TestRunScoring:
         assert result.scored_dimensions.band in SignalBand
         assert len(result.scored_dimensions.dimensions) == 4
         assert result.forward_brief_data is not None
+
+    def test_photo_present_override_threads_through(self):
+        """ORPHEUS-89: run_scoring forwards the OIDC photo override into the
+        Forward Brief, overriding the (empty here) ZIP rich-media heuristic."""
+        profile, positions = _make_profile()
+        zip_data = ZipData(profile=profile, positions=positions)
+        base_kwargs = dict(
+            zip_data=zip_data,
+            xlsx_data=None,
+            dim1_rubric_scores={n: 3 for n in [
+                "Headline Clarity", "About Section Coherence",
+                "Experience Description Quality", "Profile Completeness",
+                "Identity Clarity",
+            ]},
+            dim4_rubric_scores={
+                "Topic Consistency": 3,
+                "Profile-Content Coherence": 3,
+            },
+            ref_date=date(2026, 3, 16),
+        )
+        # No override → heuristic (no rich-media event) → False.
+        assert (
+            run_scoring(**base_kwargs).forward_brief_data
+            .qualitative_flags.visual_professionalism.photo_present
+            is False
+        )
+        # Override True wins.
+        assert (
+            run_scoring(**base_kwargs, photo_present_override=True)
+            .forward_brief_data.qualitative_flags
+            .visual_professionalism.photo_present
+            is True
+        )
 
     def test_serializes_to_json(self):
         """Output must be JSON-serializable for DB storage."""
