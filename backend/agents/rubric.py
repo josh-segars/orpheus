@@ -19,6 +19,7 @@ Architecture notes (from Andrew's specification):
 import json
 from anthropic import Anthropic
 
+from backend.agents import DEFAULT_MODEL
 from backend.ingestion.types import ZipData
 
 
@@ -345,7 +346,7 @@ def _parse_scores(raw_text: str, expected_keys: set[str]) -> dict[str, int]:
 async def score_dimension_1(
     client: Anthropic,
     zip_data: ZipData,
-    model: str = "claude-sonnet-4-20250514",
+    model: str = DEFAULT_MODEL,
     temperature: float | None = 0.0,
 ) -> dict[str, int]:
     """Apply Dimension 1 rubrics via Claude.
@@ -377,7 +378,7 @@ async def score_dimension_1(
 async def score_dimension_4(
     client: Anthropic,
     zip_data: ZipData,
-    model: str = "claude-sonnet-4-20250514",
+    model: str = DEFAULT_MODEL,
     temperature: float | None = 0.0,
 ) -> dict[str, int]:
     """Apply Dimension 4 rubrics via Claude.
@@ -407,7 +408,7 @@ async def score_dimension_4(
 async def score_rubrics(
     client: Anthropic,
     zip_data: ZipData,
-    model: str = "claude-sonnet-4-20250514",
+    model: str = DEFAULT_MODEL,
     temperature: float | None = 0.0,
 ) -> tuple[dict[str, int], dict[str, int]]:
     """Score both Dimension 1 and Dimension 4 rubrics.

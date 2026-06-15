@@ -38,6 +38,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from anthropic import Anthropic  # noqa: E402
 from supabase import create_client  # noqa: E402
 
+from backend.agents import DEFAULT_MODEL  # noqa: E402
 from backend.agents.rubric import score_dimension_1, score_dimension_4  # noqa: E402
 from backend.ingestion.types import XlsxData, ZipData  # noqa: E402
 from backend.scoring.engine import run_scoring  # noqa: E402
@@ -48,7 +49,9 @@ DEFAULT_JOBS = {
     "andrew-75.75-tuned": "710b14be-c1f4-4d97-8542-c512a031a54f",
 }
 
-PRODUCTION_MODEL = "claude-sonnet-4-20250514"
+# Tracks the pipeline default (backend/agents.DEFAULT_MODEL); override the
+# CLI --model flag to compare a candidate model against the production one.
+PRODUCTION_MODEL = DEFAULT_MODEL
 
 REQUIRED_ENV = ("SUPABASE_URL", "SUPABASE_SERVICE_KEY", "ANTHROPIC_API_KEY")
 

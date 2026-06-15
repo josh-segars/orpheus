@@ -41,6 +41,7 @@ from typing import NamedTuple
 
 from anthropic import Anthropic
 
+from backend.agents import DEFAULT_MODEL
 from backend.models.scoring import ScoringStageOutput
 from backend.models.quality import DataQualityReport, IssueSeverity
 
@@ -1081,7 +1082,7 @@ async def generate_narratives(
     questionnaire: dict,
     narrative_config: dict | None = None,
     quality_report: DataQualityReport | None = None,
-    model: str = "claude-sonnet-4-20250514",
+    model: str = DEFAULT_MODEL,
     max_retries: int = 2,
 ) -> NarrativeResult:
     """Generate all narrative sections for a Signal Score report.
