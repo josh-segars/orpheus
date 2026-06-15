@@ -182,7 +182,7 @@ Both are computed in the **scoring stage** (single stage, not separate). Claude 
 
 **Qualitative flags (pre-processed into structured fields):**
 - Viewer-actor affinity: `concentrated_engagement: bool` + `top_targets: list` — from URL patterns in Comments.csv/Reactions.csv
-- Visual professionalism: `photo_present: bool` — from Rich_Media.csv
+- Visual professionalism: `photo_present: bool` — from the client's LinkedIn OIDC `picture` claim captured at submission (ORPHEUS-89, `jobs.oidc_photo_present`); falls back to the Rich_Media.csv `profile photo` heuristic when no OIDC signal was captured (NULL — older/advisor-run jobs)
 - Engagement invitation: `services_present: bool`, `contact_visible: bool`, `cta_in_about: bool` — from Profile.csv
 
 ### Scoring Stage Output Shape
