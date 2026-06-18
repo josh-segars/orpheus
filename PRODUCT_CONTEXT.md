@@ -282,6 +282,7 @@ Both are computed in the **scoring stage** (single stage, not separate). Claude 
 ### Calibration (April 13, 2026)
 - **Recency proportional floor bypass at 300** — The proportional floor (15–20% of 12mo total) penalizes consistently active users since 60 days is only 16.4% of a year. Skip the floor when total_12mo ≥ 300, where absolute counts are inherently meaningful. PROVISIONAL threshold. [Josh, 2026-04-13]
 - **LinkedIn datetime format** — Shares.csv, Comments.csv, Reactions.csv use `YYYY-MM-DD HH:MM:SS` (with timestamp), not date-only. Parser must try datetime format first. [Josh, 2026-04-13]
+- **Trailing-window reference date anchored to export's latest activity (not `date.today()`)** — all trailing windows (Recency 60d, History Depth / engagement 12mo, Continuity) measure relative to the most recent dated action in the export, resolved by `resolve_ref_date()`, with `date.today()` only as a no-dated-activity fallback. Makes scores reproducible on identical data (re-running a frozen export days later no longer slides the window past the member's latest posts) and records `ref_date` + `ref_date_anchor` into `config_snapshot` for auditability. "Recent" therefore means "recent relative to data capture," not "active as of the run date." Anchor choice routed from Andrew. [Josh, 2026-06-18; ORPHEUS-91]
 
 ### Carried from v1
 - **Deterministic scoring** — Score computation is pure Python, no AI. Claude handles rubric application (Dim 1, Dim 4) and narrative generation only.
