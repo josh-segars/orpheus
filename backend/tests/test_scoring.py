@@ -24,11 +24,14 @@ from backend.scoring.engine import (
     assign_band,
     compute_forward_brief,
     run_scoring,
+    resolve_ref_date,
+    _latest_activity_date,
 )
 from backend.scoring.config import (
     DIM2_HISTORY_DEPTH_BANDS,
     DIM3_QUALITY_BANDS,
     DIM3_ENGAGEMENT_PRESENCE_BANDS,
+    build_config_snapshot,
 )
 from backend.ingestion.types import (
     ZipData, ProfileData, PositionData, ShareItem,
@@ -504,6 +507,83 @@ class TestDimensionBand:
         for d in parsed["scored_dimensions"]["dimensions"]:
             assert "band" in d
             assert d["band"] in valid
+
+
+# ============================================================
+# Recency anchor (ORPHEUS-91)
+# ============================================================
+
+class TestResolveRefDate:
+    """ref_date anchors to the export's latest dated activity, not today,
+    so scores are reproducible on identical data (ORPHEUS-91)."""
+
+    def _recency(self, dim2: DimensionScore) -> SubDimensionScore:
+        return next(s for s in dim2.sub_dimensions if s.name == "Recency")
+
+    def test_returns_latest_activity_across_collections(self):
+        zip_data = ZipData(
+            profile=_make_profile()[0],
+            positions=[],
+            shares=_make_shares(["2025-01-10", "2024-12-20"]),
+            comments=_make_comments(["2025-02-14"]),
+            reactions=_make_reactions(["2025-01-30"]),
+        )
+        # Latest dated action is the 2025-02-14 comment.
+        assert resolve_ref_date(zip_data) == date(2025, 2, 14)
+
+    def test_falls_back_to_today_when_no_dated_activity(self):
+        zip_data = ZipData(profile=_make_profile()[0], positions=[])
+        assert _latest_activity_date(zip_data) is None
+        assert resolve_ref_date(zip_data) == date.today()
+
+    def test_unparseable_dates_ignored(self):
+        zip_data = ZipData(
+            profile=_make_profile()[0],
+            positions=[],
+            shares=_make_shares(["not-a-date", "2025-03-01"]),
+        )
+        assert resolve_ref_date(zip_data) == date(2025, 3, 1)
+
+    def test_recency_reproducible_regardless_of_today(self):
+        """A frozen export with posts long before today still scores recency
+        against its own latest activity — the bug ORPHEUS-91 fixed."""
+        zip_data = ZipData(
+            profile=_make_profile()[0],
+            positions=[],
+            # Latest activity 2025-01-15; two posts inside its trailing 60d.
+            shares=_make_shares(["2025-01-15", "2025-01-10", "2023-01-01"]),
+        )
+        result = run_scoring(
+            zip_data=zip_data,
+            xlsx_data=None,
+            dim1_rubric_scores={n: 3 for n in [
+                "Headline Clarity", "About Section Coherence",
+                "Experience Description Quality", "Profile Completeness",
+                "Identity Clarity",
+            ]},
+            dim4_rubric_scores={"Topic Consistency": 3, "Profile-Content Coherence": 3},
+            ref_date=None,  # exercise the anchor default
+        )
+        dim2 = next(d for d in result.scored_dimensions.dimensions
+                    if d.name == "Behavioral Signal Strength")
+        # Anchored to 2025-01-15 → the Jan 15 + Jan 10 posts fall in the 60d
+        # window; date.today() would have collapsed this to 0.
+        assert self._recency(dim2).raw_value == 2
+
+
+class TestConfigSnapshotRefDate:
+    """build_config_snapshot records the resolved ref_date for auditability
+    (ORPHEUS-91)."""
+
+    def test_ref_date_recorded_when_supplied(self):
+        snap = build_config_snapshot(ref_date=date(2025, 1, 15))
+        assert snap["ref_date"] == "2025-01-15"
+        assert snap["ref_date_anchor"] == "latest_activity"
+
+    def test_ref_date_absent_when_not_supplied(self):
+        snap = build_config_snapshot()
+        assert "ref_date" not in snap
+        assert "ref_date_anchor" not in snap
 
 
 # ============================================================

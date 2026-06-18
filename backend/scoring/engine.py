@@ -63,6 +63,38 @@ def _trailing_window(items_with_dates: list[tuple[date, ...]], days: int, ref_da
     return [item for item in items_with_dates if item[0] >= cutoff]
 
 
+def _latest_activity_date(zip_data: ZipData) -> date | None:
+    """Return the most recent dated outbound/engagement action in the export.
+
+    Scans shares, comments, and reactions — the same dated activity the
+    trailing-window scoring reads — and returns the maximum parsed date, or
+    None if the export has no dated activity at all.
+    """
+    dates: list[date] = []
+    for collection in (zip_data.shares, zip_data.comments, zip_data.reactions):
+        for item in collection:
+            d = _parse_date(item.date)
+            if d is not None:
+                dates.append(d)
+    return max(dates) if dates else None
+
+
+def resolve_ref_date(zip_data: ZipData) -> date:
+    """Resolve the scoring reference date for all trailing windows.
+
+    ORPHEUS-91: anchors to the most recent dated activity in the export
+    (latest_activity) rather than date.today(), so recency is measured
+    relative to when the data was captured, not when the pipeline happened
+    to run. This makes scores reproducible on identical data — re-running the
+    same export on a later day no longer slides the 60-day recency window past
+    the member's latest posts and collapses Recency to 0.
+
+    Falls back to date.today() only when the export carries no dated activity.
+    """
+    latest = _latest_activity_date(zip_data)
+    return latest if latest is not None else date.today()
+
+
 # ============================================================
 # Band lookup
 # ============================================================
@@ -738,7 +770,10 @@ def run_scoring(
         dim4_rubric_scores: Claude-applied rubric scores for Dimension 4.
             Keys: "Topic Consistency", "Profile-Content Coherence".
             Values: 1–5.
-        ref_date: Reference date for trailing windows. Defaults to today.
+        ref_date: Reference date for trailing windows. When None, defaults to
+            the export's latest dated activity via resolve_ref_date()
+            (ORPHEUS-91) — falling back to today only if the export has no
+            dated activity.
         photo_present_override: Profile-photo presence from the LinkedIn
             OIDC picture claim captured at submission (ORPHEUS-89). When
             not None it sets the Forward Brief visual-professionalism flag
@@ -749,7 +784,7 @@ def run_scoring(
         ScoringStageOutput with scored_dimensions and forward_brief_data.
     """
     if ref_date is None:
-        ref_date = date.today()
+        ref_date = resolve_ref_date(zip_data)
 
     # Score all 4 dimensions
     dim1 = build_dimension_1_from_rubrics(dim1_rubric_scores, zip_data)

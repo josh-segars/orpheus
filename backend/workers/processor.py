@@ -27,7 +27,7 @@ from anthropic import Anthropic
 from backend.ingestion.types import ZipData, XlsxData
 from backend.ingestion.zip_parser import parse_zip
 from backend.ingestion.xlsx_parser import parse_xlsx
-from backend.scoring.engine import run_scoring
+from backend.scoring.engine import run_scoring, resolve_ref_date
 from backend.scoring.config import build_config_snapshot
 from backend.agents.rubric import score_rubrics
 from backend.agents.narrative import generate_narratives, NarrativeResult
@@ -207,11 +207,17 @@ async def stage_scoring(
     """
     logger.info(f"[{job_id}] Stage 3: Deterministic scoring")
 
+    # ORPHEUS-91: anchor trailing windows to the export's latest dated
+    # activity (not date.today()) so recency is reproducible on identical data.
+    ref_date = resolve_ref_date(zip_data)
+    logger.info(f"[{job_id}] Scoring ref_date (latest activity): {ref_date.isoformat()}")
+
     result = run_scoring(
         zip_data=zip_data,
         xlsx_data=xlsx_data,
         dim1_rubric_scores=dim1_scores,
         dim4_rubric_scores=dim4_scores,
+        ref_date=ref_date,
         photo_present_override=photo_present_override,
     )
 
@@ -230,8 +236,9 @@ async def stage_scoring(
         "scored_at": datetime.utcnow().isoformat(),
     }, on_conflict="job_id").execute()
 
-    # Save config snapshot to the job for reproducibility
-    snapshot = build_config_snapshot()
+    # Save config snapshot to the job for reproducibility (ORPHEUS-91:
+    # includes the resolved ref_date so the recency window is auditable).
+    snapshot = build_config_snapshot(ref_date=ref_date)
     supabase.table("jobs").update({
         "config_snapshot": snapshot,
     }).eq("id", job_id).execute()

@@ -7,6 +7,8 @@ config_snapshot for reproducibility.
 Recalibration checkpoint: 50–100 profiles.
 """
 
+from datetime import date
+
 # === Dimension weights ===
 # INFERRED + PROVISIONAL — grounded in cold-start literature
 # but LinkedIn does not publish dimension weights.
@@ -133,13 +135,19 @@ AFFINITY_CONCENTRATION_THRESHOLD = 0.25  # 25% of total outbound to top N
 
 # === Serializable config for snapshot ===
 
-def build_config_snapshot(version_label: str = "2026-Q2") -> dict:
+def build_config_snapshot(
+    version_label: str = "2026-Q2", ref_date: date | None = None
+) -> dict:
     """Build a serializable config snapshot for the jobs table.
 
     This captures all PROVISIONAL parameters at the time the job runs,
     ensuring reproducibility even if thresholds change later.
+
+    ORPHEUS-91: when ref_date is supplied (the resolved latest-activity anchor)
+    it is recorded so the trailing-window math is reproducible and auditable —
+    the recency window is no longer a function of the wall-clock run date.
     """
-    return {
+    snapshot: dict = {
         "version_label": version_label,
         "scoring": {
             "dimension_weights": DIMENSION_WEIGHTS,
@@ -171,3 +179,7 @@ def build_config_snapshot(version_label: str = "2026-Q2") -> dict:
             },
         },
     }
+    if ref_date is not None:
+        snapshot["ref_date"] = ref_date.isoformat()
+        snapshot["ref_date_anchor"] = "latest_activity"  # ORPHEUS-91
+    return snapshot
