@@ -9,6 +9,7 @@ import {
 import { signOut, useSession } from '../lib/auth'
 import {
   clearPendingInvitationToken,
+  readInvitationTokenFromUrl,
   readPendingInvitationToken,
 } from '../lib/invitation'
 
@@ -48,7 +49,29 @@ export function InviteCallbackPage() {
   const navigate = useNavigate()
   const { status: sessionStatus } = useSession()
   const acceptMutation = useAcceptInvitation()
-  const [token] = useState<string | null>(() => readPendingInvitationToken())
+  // Resolve the token URL-first (survives cross-context OAuth redirects),
+  // falling back to the sessionStorage stash for same-context flows.
+  // Captured once at mount so the value stays addressable after we strip
+  // it from the URL below. (ORPHEUS-92)
+  const [token] = useState<string | null>(
+    () => readInvitationTokenFromUrl() ?? readPendingInvitationToken(),
+  )
+
+  // Strip the token from the address bar once captured so it doesn't
+  // linger in history / referer. Runs once; the captured `token` state
+  // above is unaffected.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    if (url.searchParams.has('token')) {
+      url.searchParams.delete('token')
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `${url.pathname}${url.search}${url.hash}`,
+      )
+    }
+  }, [])
   // Tracks whether we've already kicked off the initial accept call,
   // so we don't double-fire when react re-renders this component
   // before the first call's state propagates.

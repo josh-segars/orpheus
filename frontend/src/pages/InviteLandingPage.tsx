@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
 import { signInWithLinkedIn } from '../lib/auth'
-import { writePendingInvitationToken } from '../lib/invitation'
+import {
+  INVITATION_TOKEN_QUERY_KEY,
+  writePendingInvitationToken,
+} from '../lib/invitation'
 
 /**
  * /invite/:token — the public landing page reached by clicking the
@@ -35,11 +38,20 @@ export function InviteLandingPage() {
       return
     }
 
+    // Belt-and-suspenders for same-context flows; the URL param below
+    // is the primary carrier post-ORPHEUS-92.
     writePendingInvitationToken(token)
+
+    // Carry the token through the OAuth round trip on the redirect URL
+    // so it survives cross-context redirects (in-app / mobile browsers)
+    // that drop sessionStorage. Supabase's redirect allow-list uses a
+    // `/**` wildcard, which covers the query string. (ORPHEUS-92)
+    const callbackUrl = new URL(`${window.location.origin}/invite/callback`)
+    callbackUrl.searchParams.set(INVITATION_TOKEN_QUERY_KEY, token)
 
     // No await — the redirect IS the success path. Errors bubble up
     // via the .catch below if Supabase can't initiate the OAuth flow.
-    signInWithLinkedIn(`${window.location.origin}/invite/callback`).catch(
+    signInWithLinkedIn(callbackUrl.toString()).catch(
       (err: unknown) => {
         setErrorMessage(
           err instanceof Error
