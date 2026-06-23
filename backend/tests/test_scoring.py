@@ -191,6 +191,28 @@ class TestBandAssignment:
         assert assign_band(80) == SignalBand.RESONANT
         assert assign_band(100) == SignalBand.RESONANT
 
+    def test_fractional_inter_band_gaps(self):
+        # ORPHEUS-95 regression: float composites landing in the one-unit gaps
+        # between the inclusive integer ranges must map to the band below, not
+        # fall through to the Dissonant fallback.
+        assert assign_band(24.5) == SignalBand.DISSONANT
+        assert assign_band(44.5) == SignalBand.UNTUNED
+        assert assign_band(64.5) == SignalBand.TUNING
+        assert assign_band(79.5) == SignalBand.TUNED
+        assert assign_band(79.13) == SignalBand.TUNED  # the live bug (Andrew, 2026-06-23)
+
+    def test_fractional_within_band(self):
+        # Fractional scores comfortably inside a band stay put.
+        assert assign_band(0.5) == SignalBand.DISSONANT
+        assert assign_band(25.5) == SignalBand.UNTUNED
+        assert assign_band(65.01) == SignalBand.TUNED
+        assert assign_band(99.99) == SignalBand.RESONANT
+
+    def test_out_of_range(self):
+        # Above the top band's lower bound stays Resonant; below 0 → Dissonant.
+        assert assign_band(120) == SignalBand.RESONANT
+        assert assign_band(-5) == SignalBand.DISSONANT
+
 
 # ============================================================
 # Dimension 1: rubric input + completeness floor

@@ -522,13 +522,25 @@ def build_dimension_4_from_rubrics(
 
 
 def assign_band(composite: float) -> SignalBand:
-    """Map a composite score (0–100) to a signal strength band."""
-    for name, lo, hi in config.SIGNAL_BANDS:
-        if lo <= composite <= hi:
+    """Map a composite score (0–100) to a signal strength band.
+
+    Bands are treated as half-open lower bounds (ORPHEUS-95): a score belongs
+    to the highest band whose lower bound (``lo``) it meets or exceeds. This
+    makes the boundaries contiguous rather than gapped — the integer ``hi`` in
+    each ``SIGNAL_BANDS`` tuple is documentation only, not a tested ceiling.
+
+    The earlier ``lo <= composite <= hi`` test left one-unit gaps between the
+    inclusive integer ranges: (24, 25), (44, 45), (64, 65), (79, 80). A float
+    composite landing in a gap (e.g. 79.13) matched no band and silently fell
+    through to the Dissonant fallback. Lower-bound matching preserves the
+    documented integer thresholds exactly while closing the gaps, and the top
+    band stays inclusive of 100 (and any value above it).
+    """
+    # Iterate highest band first; return the first whose lower bound is met.
+    for name, lo, _hi in reversed(config.SIGNAL_BANDS):
+        if composite >= lo:
             return SignalBand(name)
-    # Edge case: should not happen if bands cover 0–100
-    if composite > 100:
-        return SignalBand.RESONANT
+    # Below the lowest band's lower bound (e.g. a negative input) → Dissonant.
     return SignalBand.DISSONANT
 
 
