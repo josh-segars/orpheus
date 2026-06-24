@@ -125,6 +125,21 @@ class Settings(BaseSettings):
         ),
     )
 
+    beta_survey_url: str = Field(
+        default="",
+        alias="BETA_SURVEY_URL",
+        description=(
+            "Closed-beta feedback Google Form URL (ORPHEUS-98) — the same "
+            "form as the frontend's VITE_BETA_SURVEY_URL. Used by the "
+            "report-completion email's feedback CTA. The advisory-"
+            "publication send path (admin router) reads it from here; the "
+            "worker's self-serve send path reads BETA_SURVEY_URL straight "
+            "from os.environ (worker keeps its own env reads). When unset, "
+            "the email ships with no feedback block (clean thank-you, no "
+            "dead link). Set on BOTH Railway services."
+        ),
+    )
+
     # --- Validators ------------------------------------------------------- #
 
     @field_validator("supabase_url")

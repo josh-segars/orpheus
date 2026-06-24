@@ -34,7 +34,10 @@ from typing import Any
 from uuid import uuid4
 
 from backend.config import get_settings
-from backend.email.templates import format_invitation_email
+from backend.email.templates import (
+    format_invitation_email,
+    format_report_ready_email,
+)
 
 logger = logging.getLogger("orpheus.email.resend")
 
@@ -101,6 +104,55 @@ def send_invitation_email(
     subject, html_body, text_body = format_invitation_email(
         advisor_name=advisor_name,
         invite_url=invite_url,
+    )
+
+    if _is_sandbox_key(api_key):
+        return _log_sandbox_send(
+            to=to_email,
+            subject=subject,
+            text_body=text_body,
+        )
+
+    payload: dict[str, Any] = {
+        "from": FROM_ADDRESS,
+        "to": [to_email],
+        "subject": subject,
+        "html": html_body,
+        "text": text_body,
+    }
+
+    return _post_to_resend(api_key=api_key, payload=payload)
+
+
+def send_report_ready_email(
+    to_email: str,
+    client_name: str,
+    report_url: str,
+    survey_url: str | None = None,
+) -> str:
+    """Send the report-completion thank-you + feedback email (ORPHEUS-98).
+
+    Same plumbing as send_invitation_email — sandbox keys short-circuit
+    the network call, real keys POST to Resend. The feedback CTA is
+    included only when `survey_url` is set (the template no-ops the block
+    otherwise), so an unconfigured BETA_SURVEY_URL ships a clean
+    thank-you with no dead link.
+
+    Called best-effort from the worker on a client's first published
+    completion; the caller swallows EmailSendError so a send failure never
+    fails or retries the underlying job.
+
+    Raises:
+        EmailSendError: on any non-2xx response, network exception,
+            or JSON decode failure on Resend's response.
+    """
+    settings = get_settings()
+    api_key = settings.resend_api_key
+
+    subject, html_body, text_body = format_report_ready_email(
+        client_name=client_name,
+        report_url=report_url,
+        survey_url=survey_url,
     )
 
     if _is_sandbox_key(api_key):

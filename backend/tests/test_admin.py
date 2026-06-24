@@ -20,7 +20,7 @@ import time
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import jwt
 import pytest
@@ -128,6 +128,7 @@ def _sign_admin_token(private_key, email: str = ADMIN_EMAIL) -> str:
 @dataclass
 class FakeResult:
     data: list[dict] | None
+    count: int | None = None
 
 
 class FakeTable:
@@ -150,6 +151,15 @@ class FakeTable:
         return self
 
     def limit(self, *_a, **_kw):
+        return self
+
+    @property
+    def not_(self):
+        # Supports the `.not_.is_(col, "null")` non-null filter used by the
+        # ORPHEUS-98 first-published-report check.
+        return self
+
+    def is_(self, *_a, **_kw):
         return self
 
     def update(self, payload: dict[str, Any]):
@@ -873,6 +883,155 @@ async def test_patch_admin_narrative_rejects_invalid_status():
 
     assert exc.value.status_code == 400
     assert "draft" in exc.value.detail.lower()
+
+
+# --------------------------------------------------------------------------- #
+# Report-ready email on advisory publication (ORPHEUS-98)
+# --------------------------------------------------------------------------- #
+
+def _published_narrative_row() -> dict[str, Any]:
+    """The narratives row returned by the PATCH update (status→published)."""
+    return {
+        "id": NARR_1_ID,
+        "job_id": JOB_A2_ID,
+        "section": "Profile Signal Clarity",
+        "generated_text": "Original.",
+        "edited_text": None,
+        "status": "published",
+        "published_at": "2026-06-24T12:00:00+00:00",
+        "generated_at": "2026-05-12T00:00:30+00:00",
+    }
+
+
+@pytest.mark.asyncio
+async def test_publish_does_not_email_while_drafts_remain():
+    """If other narratives for the job are still draft, no email fires."""
+    fake = FakeSupabase(
+        queues={
+            "narratives": [
+                FakeResult(data=[{"id": NARR_1_ID}]),          # existence
+                FakeResult(data=[_published_narrative_row()]),  # update
+                FakeResult(data=[{"id": NARR_2_ID}], count=1),  # drafts remain
+            ],
+        }
+    )
+    body = admin_router.UpdateAdminNarrativeRequest(status="published")
+
+    send_mock = MagicMock(return_value="msg_x")
+    with _patch_supabase(fake), patch.object(
+        admin_router, "send_report_ready_email", send_mock
+    ):
+        await admin_router.update_admin_narrative(
+            narrative_id=NARR_1_ID, request=body, _admin=_admin_roles()
+        )
+
+    send_mock.assert_not_called()
+    # No publish stamp written to reports either.
+    assert "reports" not in fake.tables_queried
+
+
+@pytest.mark.asyncio
+async def test_publish_sends_email_on_first_fully_published_report():
+    """Last draft published, first report for the client → send + stamp."""
+    fake = FakeSupabase(
+        queues={
+            "narratives": [
+                FakeResult(data=[{"id": NARR_1_ID}]),          # existence
+                FakeResult(data=[_published_narrative_row()]),  # update
+                FakeResult(data=[], count=0),                   # no drafts left
+            ],
+            "reports": [
+                FakeResult(data=[{"client_id": CLIENT_A_ID, "published_at": None}]),
+                FakeResult(data=[]),  # no prior published report for client
+            ],
+            "clients": [
+                FakeResult(data=[{"email": "karen@example.com", "display_name": "Karen"}]),
+            ],
+        }
+    )
+    body = admin_router.UpdateAdminNarrativeRequest(status="published")
+
+    send_mock = MagicMock(return_value="msg_sent")
+    with _patch_supabase(fake), patch.object(
+        admin_router, "send_report_ready_email", send_mock
+    ):
+        await admin_router.update_admin_narrative(
+            narrative_id=NARR_1_ID, request=body, _admin=_admin_roles()
+        )
+
+    send_mock.assert_called_once()
+    kwargs = send_mock.call_args.kwargs
+    assert kwargs["to_email"] == "karen@example.com"
+    assert kwargs["client_name"] == "Karen"
+    assert kwargs["report_url"] == "https://app.test.local/reports"
+    assert kwargs["survey_url"] is None  # BETA_SURVEY_URL unset in test env
+    # published_at stamped on the report.
+    assert "published_at" in (fake._tables["reports"]._last_update_payload or {})
+
+
+@pytest.mark.asyncio
+async def test_publish_does_not_resend_when_report_already_announced():
+    """A re-save of an already-published report (published_at set) → no email."""
+    fake = FakeSupabase(
+        queues={
+            "narratives": [
+                FakeResult(data=[{"id": NARR_1_ID}]),
+                FakeResult(data=[_published_narrative_row()]),
+                FakeResult(data=[], count=0),
+            ],
+            "reports": [
+                FakeResult(data=[{
+                    "client_id": CLIENT_A_ID,
+                    "published_at": "2026-06-20T00:00:00+00:00",
+                }]),
+            ],
+        }
+    )
+    body = admin_router.UpdateAdminNarrativeRequest(status="published")
+
+    send_mock = MagicMock()
+    with _patch_supabase(fake), patch.object(
+        admin_router, "send_report_ready_email", send_mock
+    ):
+        await admin_router.update_admin_narrative(
+            narrative_id=NARR_1_ID, request=body, _admin=_admin_roles()
+        )
+
+    send_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_publish_suppresses_email_when_not_clients_first_report():
+    """Client already has an earlier published report → stamp but no email."""
+    fake = FakeSupabase(
+        queues={
+            "narratives": [
+                FakeResult(data=[{"id": NARR_1_ID}]),
+                FakeResult(data=[_published_narrative_row()]),
+                FakeResult(data=[], count=0),
+            ],
+            "reports": [
+                FakeResult(data=[{"client_id": CLIENT_A_ID, "published_at": None}]),
+                FakeResult(data=[{  # a prior report already announced
+                    "job_id": JOB_A1_ID,
+                    "published_at": "2026-06-01T00:00:00+00:00",
+                }]),
+            ],
+        }
+    )
+    body = admin_router.UpdateAdminNarrativeRequest(status="published")
+
+    send_mock = MagicMock()
+    with _patch_supabase(fake), patch.object(
+        admin_router, "send_report_ready_email", send_mock
+    ):
+        await admin_router.update_admin_narrative(
+            narrative_id=NARR_1_ID, request=body, _admin=_admin_roles()
+        )
+
+    send_mock.assert_not_called()
+    # ...but THIS report still gets its published_at stamp.
+    assert "published_at" in (fake._tables["reports"]._last_update_payload or {})
 
 
 @pytest.mark.asyncio

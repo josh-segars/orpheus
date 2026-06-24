@@ -217,3 +217,89 @@ def test_sandbox_mode_skips_network_returns_fake_id(monkeypatch):
     assert message_id.startswith("test_msg_")
     # Hex-formatted uuid4: 32 chars after the prefix.
     assert len(message_id) == len("test_msg_") + 32
+
+
+# --------------------------------------------------------------------------- #
+# Report-ready email (ORPHEUS-98)
+# --------------------------------------------------------------------------- #
+
+CLIENT_NAME = "Jordan Rivera"
+REPORT_URL = "https://app.example.com/reports"
+SURVEY_URL = "https://forms.gle/exampleBetaForm"
+
+
+def test_send_report_ready_email_happy_path(monkeypatch):
+    """Real API key → POSTs to Resend with report + survey content."""
+    _apply_env(monkeypatch, resend_key="re_real_key_value")
+
+    fake_response = _fake_urlopen_response(
+        status=200,
+        body={"id": "msg_report_1"},
+    )
+
+    with patch.object(
+        resend_client.urllib.request,
+        "urlopen",
+        return_value=fake_response,
+    ) as fake_urlopen:
+        message_id = resend_client.send_report_ready_email(
+            to_email=TO_EMAIL,
+            client_name=CLIENT_NAME,
+            report_url=REPORT_URL,
+            survey_url=SURVEY_URL,
+        )
+
+    assert message_id == "msg_report_1"
+    fake_urlopen.assert_called_once()
+    request = fake_urlopen.call_args.args[0]
+    assert request.full_url == resend_client.RESEND_ENDPOINT
+    assert request.get_method() == "POST"
+    # Same WAF-safe UA contract as the invitation send (ORPHEUS-55).
+    ua_header = request.headers.get("User-agent") or request.headers.get(
+        "User-Agent"
+    )
+    assert ua_header is not None and "orpheus-social" in ua_header
+
+    body = json.loads(request.data.decode("utf-8"))
+    assert body["from"] == resend_client.FROM_ADDRESS
+    assert body["to"] == [TO_EMAIL]
+    assert CLIENT_NAME in body["html"]
+    assert REPORT_URL in body["html"]
+    assert SURVEY_URL in body["html"]
+
+
+def test_send_report_ready_email_sandbox_skips_network(monkeypatch):
+    """A test_-prefixed key short-circuits before the HTTP call."""
+    _apply_env(monkeypatch, resend_key="test_ci_value")
+
+    with patch.object(
+        resend_client.urllib.request,
+        "urlopen",
+        side_effect=AssertionError("network must not be touched in sandbox mode"),
+    ):
+        message_id = resend_client.send_report_ready_email(
+            to_email=TO_EMAIL,
+            client_name=CLIENT_NAME,
+            report_url=REPORT_URL,
+            survey_url=SURVEY_URL,
+        )
+
+    assert message_id.startswith("test_msg_")
+
+
+def test_send_report_ready_email_network_exception_raises(monkeypatch):
+    """Network failures raise EmailSendError (caller swallows it best-effort)."""
+    _apply_env(monkeypatch, resend_key="re_real_key_value")
+
+    with patch.object(
+        resend_client.urllib.request,
+        "urlopen",
+        side_effect=urllib.error.URLError("Name or service not known"),
+    ):
+        with pytest.raises(resend_client.EmailSendError):
+            resend_client.send_report_ready_email(
+                to_email=TO_EMAIL,
+                client_name=CLIENT_NAME,
+                report_url=REPORT_URL,
+                survey_url=SURVEY_URL,
+            )

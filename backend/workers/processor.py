@@ -33,6 +33,10 @@ from backend.agents.rubric import score_rubrics
 from backend.agents.narrative import generate_narratives, NarrativeResult
 from backend.models.scoring import ScoringStageOutput
 from backend.models.quality import DataQualityReport
+from backend.email.resend_client import (
+    send_report_ready_email,
+    EmailSendError,
+)
 
 logger = logging.getLogger("orpheus.worker")
 
@@ -386,6 +390,109 @@ def _merge_dim_summaries(
 
 
 # ============================================================
+# Report-ready feedback email (ORPHEUS-98)
+# ============================================================
+
+def _is_first_complete_job(supabase, client_id: str, job_id: str) -> bool:
+    """True when `job_id` is the client's only complete job.
+
+    Called after the current job has been marked complete, so a count of
+    exactly 1 means this is the client's first finished report. Gating on
+    first-completion keeps re-runs (ORPHEUS-81) from re-emailing the
+    client on every iteration.
+    """
+    result = (
+        supabase.table("jobs")
+        .select("id", count="exact")
+        .eq("client_id", client_id)
+        .eq("status", "complete")
+        .execute()
+    )
+    count = getattr(result, "count", None)
+    if count is None:  # defensive — some client versions omit the count
+        count = len(result.data or [])
+    return count <= 1
+
+
+def _maybe_send_report_ready_email(
+    supabase,
+    *,
+    client_row: dict,
+    client_id: str,
+    job_id: str,
+    is_advisory: bool,
+) -> None:
+    """Best-effort report-completion thank-you + feedback email (ORPHEUS-98).
+
+    Gated to the self-serve / published path: advisory clients get `draft`
+    narratives an advisor reviews before the client can see anything, so
+    pipeline completion is NOT their "ready" moment — their trigger is
+    publication, which has no clean hook yet (see ORPHEUS-98 open
+    questions). Also gated to the client's first complete job so re-runs
+    don't re-spam.
+
+    Never raises: a send failure (or any lookup hiccup) is logged and
+    swallowed so it can't fail or retry the underlying job. The report is
+    already complete and persisted by the time this runs.
+    """
+    if is_advisory:
+        logger.info(
+            f"[{job_id}] Skipping report-ready email — advisory client "
+            f"(report is draft until the advisor publishes)"
+        )
+        return
+
+    try:
+        if not _is_first_complete_job(supabase, client_id, job_id):
+            logger.info(
+                f"[{job_id}] Skipping report-ready email — not the "
+                f"client's first complete report"
+            )
+            return
+
+        to_email = client_row.get("email")
+        if not to_email:
+            logger.warning(
+                f"[{job_id}] Skipping report-ready email — no email on the "
+                f"clients row"
+            )
+            return
+
+        # display_name is NOT NULL on the clients row, but fall back to the
+        # email local-part defensively so we never greet a client "Hi None".
+        client_name = client_row.get("display_name") or to_email.split("@")[0]
+
+        app_base_url = os.environ.get("APP_BASE_URL", "").rstrip("/")
+        if not app_base_url:
+            logger.warning(
+                f"[{job_id}] Skipping report-ready email — APP_BASE_URL not set"
+            )
+            return
+        report_url = f"{app_base_url}/reports"
+
+        # Optional — the template no-ops the feedback CTA when unset, so an
+        # unconfigured survey URL still ships a clean thank-you.
+        survey_url = os.environ.get("BETA_SURVEY_URL") or None
+
+        message_id = send_report_ready_email(
+            to_email=to_email,
+            client_name=client_name,
+            report_url=report_url,
+            survey_url=survey_url,
+        )
+        logger.info(
+            f"[{job_id}] Report-ready email sent to {to_email} "
+            f"(resend id={message_id}, survey={'yes' if survey_url else 'no'})"
+        )
+    except EmailSendError as e:
+        logger.warning(f"[{job_id}] Report-ready email send failed: {e}")
+    except Exception as e:  # noqa: BLE001 — email must never break the job
+        logger.warning(
+            f"[{job_id}] Report-ready email skipped on unexpected error: {e}"
+        )
+
+
+# ============================================================
 # Full pipeline orchestrator
 # ============================================================
 
@@ -481,6 +588,17 @@ async def run_pipeline(supabase, anthropic_client: Anthropic, job: dict):
         "branding_snapshot": branding,
         "published_at": datetime.utcnow().isoformat() if not is_advisory else None,
     }, on_conflict="job_id").execute()
+
+    # ORPHEUS-98: report-completion thank-you + feedback email. Best-effort
+    # and gated (self-serve/published, first completion only) — runs last so
+    # a send failure can't affect the already-persisted report.
+    _maybe_send_report_ready_email(
+        supabase,
+        client_row=client_row,
+        client_id=client_id,
+        job_id=job_id,
+        is_advisory=is_advisory,
+    )
 
     sd = scoring_output.scored_dimensions
     logger.info(

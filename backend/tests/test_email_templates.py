@@ -12,7 +12,9 @@ from __future__ import annotations
 
 from backend.email.templates import (
     INVITATION_EMAIL_SUBJECT,
+    REPORT_READY_EMAIL_SUBJECT,
     format_invitation_email,
+    format_report_ready_email,
 )
 
 
@@ -55,3 +57,72 @@ def test_format_invitation_email_embeds_invite_url_in_both_bodies():
     # And the HTML must wrap it as a link, not just display the URL —
     # otherwise email clients won't make it clickable.
     assert f'href="{url}"' in html
+
+
+# --------------------------------------------------------------------------- #
+# Report-ready email (ORPHEUS-98)
+# --------------------------------------------------------------------------- #
+
+REPORT_URL = "https://app.orpheussocial.com/reports"
+SURVEY_URL = "https://forms.gle/exampleBetaForm"
+
+
+def test_format_report_ready_email_returns_three_non_empty_strings():
+    """Contract: returns (subject, html, text). All three non-empty strings."""
+    subject, html, text = format_report_ready_email(
+        client_name="Jordan Rivera",
+        report_url=REPORT_URL,
+    )
+
+    assert isinstance(subject, str) and subject
+    assert isinstance(html, str) and html
+    assert isinstance(text, str) and text
+    assert subject == REPORT_READY_EMAIL_SUBJECT
+
+
+def test_format_report_ready_email_greets_client_and_links_report():
+    """Client name greets the body; report URL appears in both bodies, href in HTML."""
+    _, html, text = format_report_ready_email(
+        client_name="Jordan Rivera",
+        report_url=REPORT_URL,
+    )
+
+    assert "Jordan Rivera" in html
+    assert "Jordan Rivera" in text
+    assert REPORT_URL in html
+    assert REPORT_URL in text
+    assert f'href="{REPORT_URL}"' in html
+
+
+def test_format_report_ready_email_includes_feedback_cta_when_survey_set():
+    """When survey_url is set, the feedback CTA renders in both bodies."""
+    _, html, text = format_report_ready_email(
+        client_name="Jordan Rivera",
+        report_url=REPORT_URL,
+        survey_url=SURVEY_URL,
+    )
+
+    assert SURVEY_URL in html
+    assert f'href="{SURVEY_URL}"' in html
+    assert SURVEY_URL in text
+
+
+def test_format_report_ready_email_omits_feedback_cta_when_survey_unset():
+    """When survey_url is None, no feedback block / no dead link is rendered.
+
+    Mirrors the frontend's render-only-when-set pattern for the survey
+    button — an unconfigured BETA_SURVEY_URL must ship a clean thank-you,
+    never an empty or broken CTA.
+    """
+    _, html, text = format_report_ready_email(
+        client_name="Jordan Rivera",
+        report_url=REPORT_URL,
+        survey_url=None,
+    )
+
+    # The thank-you still renders...
+    assert "Jordan Rivera" in html
+    assert REPORT_URL in html
+    # ...but nothing feedback-related leaks in.
+    assert "feedback" not in html.lower()
+    assert "feedback" not in text.lower()

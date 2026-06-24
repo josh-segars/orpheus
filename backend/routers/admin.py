@@ -36,13 +36,19 @@ generic auth + db modules).
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from backend.auth import SessionRoles, get_current_admin
+from backend.config import get_settings
 from backend.db import get_service_client
+from backend.email.resend_client import (
+    EmailSendError,
+    send_report_ready_email,
+)
 
 logger = logging.getLogger("orpheus.admin")
 
@@ -544,7 +550,163 @@ async def update_admin_narrative(
         sorted(update_fields.keys()),
     )
 
+    # ORPHEUS-98: when a status flip publishes the *last* draft narrative
+    # for a job, the report just became viewable by the client — fire the
+    # report-ready email. Best-effort; never affects the PATCH response.
+    if update_fields.get("status") == "published":
+        _maybe_send_report_ready_on_publish(
+            supabase, update_result.data[0]
+        )
+
     return _narrative_from_row(update_result.data[0])
+
+
+# --------------------------------------------------------------------------- #
+# Report-ready email on advisory publication (ORPHEUS-98)
+# --------------------------------------------------------------------------- #
+
+def _maybe_send_report_ready_on_publish(supabase, narrative_row: dict[str, Any]) -> None:
+    """Send the report-ready email when an advisory report becomes viewable.
+
+    The only publish mechanism today is per-narrative status flips through
+    this admin editor, so "the report is ready" is the moment the *last*
+    draft narrative for the job flips to published. We detect that by
+    checking that no `draft` narratives remain for the job.
+
+    Idempotency + "first report only" both ride `reports.published_at`:
+
+      * It's NULL for advisory reports until we set it here, so a NULL
+        value means "not yet announced" — we set it and send.
+      * It's already set by the worker for self-serve reports (whose
+        narratives are never draft), so this path no-ops for them — no
+        double-send with the worker's completion email.
+      * A returning client whose earlier report already has a non-NULL
+        published_at still gets THIS report's published_at stamped, but
+        the email is suppressed — the feedback ask is once per client.
+
+    Never raises: any failure is logged and swallowed. The publish itself
+    has already succeeded and is the caller's actual job.
+    """
+    job_id = narrative_row.get("job_id")
+    if not job_id:
+        return
+
+    try:
+        # Are any drafts left for this job? If so, the report isn't fully
+        # published — wait for the last one.
+        remaining_drafts = (
+            supabase.table("narratives")
+            .select("id", count="exact")
+            .eq("job_id", job_id)
+            .eq("status", "draft")
+            .execute()
+        )
+        draft_count = getattr(remaining_drafts, "count", None)
+        if draft_count is None:
+            draft_count = len(remaining_drafts.data or [])
+        if draft_count > 0:
+            return
+
+        # Find the report row for this job.
+        report_result = (
+            supabase.table("reports")
+            .select("client_id, published_at")
+            .eq("job_id", job_id)
+            .limit(1)
+            .execute()
+        )
+        if not report_result.data:
+            logger.warning(
+                "[%s] Report-ready email skipped — no reports row", job_id
+            )
+            return
+        report = report_result.data[0]
+
+        # Dedup: already announced → nothing to do.
+        if report.get("published_at"):
+            return
+
+        client_id = report["client_id"]
+
+        # Is this the client's first report to reach published? Look for any
+        # OTHER report of theirs already stamped.
+        prior = (
+            supabase.table("reports")
+            .select("job_id, published_at")
+            .eq("client_id", client_id)
+            .not_.is_("published_at", "null")
+            .limit(1)
+            .execute()
+        )
+        is_first_published = not prior.data
+
+        now = datetime.utcnow().isoformat()
+
+        # Stamp published_at regardless, so re-saves don't re-trigger.
+        supabase.table("reports").update(
+            {"published_at": now}
+        ).eq("job_id", job_id).execute()
+
+        if not is_first_published:
+            logger.info(
+                "[%s] Report-ready email suppressed — not the client's "
+                "first published report (published_at stamped)",
+                job_id,
+            )
+            return
+
+        # Resolve recipient from the clients row.
+        client_result = (
+            supabase.table("clients")
+            .select("email, display_name")
+            .eq("id", client_id)
+            .limit(1)
+            .execute()
+        )
+        if not client_result.data:
+            logger.warning(
+                "[%s] Report-ready email skipped — clients row %s missing",
+                job_id,
+                client_id,
+            )
+            return
+        client_row = client_result.data[0]
+
+        to_email = client_row.get("email")
+        if not to_email:
+            logger.warning(
+                "[%s] Report-ready email skipped — no email on clients row",
+                job_id,
+            )
+            return
+        client_name = client_row.get("display_name") or to_email.split("@")[0]
+
+        settings = get_settings()
+        app_base_url = settings.app_base_url.rstrip("/")
+        report_url = f"{app_base_url}/reports"
+        survey_url = settings.beta_survey_url or None
+
+        message_id = send_report_ready_email(
+            to_email=to_email,
+            client_name=client_name,
+            report_url=report_url,
+            survey_url=survey_url,
+        )
+        logger.info(
+            "[%s] Report-ready email sent to %s (resend id=%s, survey=%s)",
+            job_id,
+            to_email,
+            message_id,
+            "yes" if survey_url else "no",
+        )
+    except EmailSendError as e:
+        logger.warning("[%s] Report-ready email send failed: %s", job_id, e)
+    except Exception as e:  # noqa: BLE001 — must never break the publish
+        logger.warning(
+            "[%s] Report-ready email skipped on unexpected error: %s",
+            job_id,
+            e,
+        )
 
 
 # --------------------------------------------------------------------------- #

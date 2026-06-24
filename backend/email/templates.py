@@ -58,3 +58,78 @@ def format_invitation_email(
     )
 
     return subject, html_body, text_body
+
+
+REPORT_READY_EMAIL_SUBJECT = "Your Orpheus report is ready — and we'd love your take"
+
+
+def format_report_ready_email(
+    *,
+    client_name: str,
+    report_url: str,
+    survey_url: str | None = None,
+) -> tuple[str, str, str]:
+    """Return (subject, html_body, text_body) for the report-completion email.
+
+    Sent once per client on first successful report completion (ORPHEUS-81
+    means "every successful report" would also fire on re-runs — the
+    first-completion guard belongs at the worker call site, not here).
+
+    Voice is second-person direct to match the platform narrative default
+    (ORPHEUS-77). Same minimal-HTML posture as the invitation email so it
+    renders consistently across Gmail / Outlook / Apple Mail without
+    per-client tweaks, and the text body mirrors the HTML line for line.
+
+    `survey_url` is optional and the feedback block renders only when it's
+    set — mirrors the frontend's render-only-when-set pattern for
+    VITE_BETA_SURVEY_URL, so a non-beta send shows no dead feedback link.
+    The worker sources it from a backend env mirror of that form URL.
+
+    No unsubscribe / ToS / Privacy footer in v1 — pending the consent
+    review (a feedback solicitation reads closer to marketing than the
+    clearly-transactional invitation email). Add the footer here before
+    this goes to real beta users.
+    """
+    subject = REPORT_READY_EMAIL_SUBJECT
+
+    feedback_html = ""
+    feedback_text = ""
+    if survey_url:
+        feedback_html = (
+            f"<p>If you have two minutes, we'd be grateful for your "
+            f"honest read:</p>"
+            f'<p><a href="{survey_url}">Share your feedback &rarr;</a></p>'
+        )
+        feedback_text = (
+            f"If you have two minutes, we'd be grateful for your honest "
+            f"read:\n"
+            f"{survey_url}\n\n"
+        )
+
+    html_body = (
+        f"<p>Hi {client_name},</p>"
+        f"<p>Your Orpheus report is ready to view.</p>"
+        f'<p><a href="{report_url}">View your report &rarr;</a></p>'
+        f"<p>You're one of a small group seeing this before anyone else, "
+        f"and that's the whole point &mdash; your reaction is what shapes "
+        f"where Orpheus goes next. What landed? What felt off? What did "
+        f"you wish it told you?</p>"
+        f"{feedback_html}"
+        f"<p>Thank you for being here early.</p>"
+        f"<p>&mdash; The Orpheus Social team</p>"
+    )
+
+    text_body = (
+        f"Hi {client_name},\n\n"
+        f"Your Orpheus report is ready to view.\n"
+        f"{report_url}\n\n"
+        f"You're one of a small group seeing this before anyone else, "
+        f"and that's the whole point - your reaction is what shapes where "
+        f"Orpheus goes next. What landed? What felt off? What did you wish "
+        f"it told you?\n\n"
+        f"{feedback_text}"
+        f"Thank you for being here early.\n\n"
+        f"- The Orpheus Social team"
+    )
+
+    return subject, html_body, text_body

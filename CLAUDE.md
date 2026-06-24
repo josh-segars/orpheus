@@ -541,6 +541,7 @@ ADMIN_EMAILS=                                            # CSV; consumed by ORPH
 FRONTEND_ORIGINS=http://localhost:5173                   # CSV; CORS allowlist
 SUPABASE_JWT_AUDIENCE=authenticated                      # JWT aud claim
 INVITATION_EXPIRY_DAYS=14                                # ORPHEUS-38; soft expiry on issued invitations
+BETA_SURVEY_URL=                                         # ORPHEUS-98; beta feedback Google Form — backend mirror of VITE_BETA_SURVEY_URL. Read by config.Settings (admin advisory-publish send) + worker os.environ (self-serve completion send). Report-ready email omits the feedback CTA when unset. Set on BOTH Railway services (backend + worker).
 
 # For Supabase CLI env interpolation (local dev only — not read by backend)
 SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID=
