@@ -569,9 +569,24 @@ async def run_pipeline(supabase, anthropic_client: Anthropic, job: dict):
     # agent-generated only.
     _merge_sub_dim_narratives(scoring_output, narrative_result.sub_dimensions)
     _merge_dim_summaries(scoring_output, narrative_result.summaries)
-    supabase.table("scores").update({
+
+    # ORPHEUS-96: the Profile Signals "call to action" row is sourced from the
+    # narrative agent's read of the verbatim About (reliable across phrasings)
+    # rather than the brittle keyword heuristic. Overwrite the forward-brief
+    # flag in place and re-persist forward_brief_data so GET /jobs/{id} serves
+    # the corrected value. None (agent omitted it) leaves the heuristic value
+    # untouched.
+    update_payload = {
         "dimensions": json.loads(scoring_output.scored_dimensions.model_dump_json()),
-    }).eq("job_id", job_id).execute()
+    }
+    if narrative_result.cta_present is not None:
+        scoring_output.forward_brief_data.qualitative_flags.engagement_invitation.cta_in_about = (
+            narrative_result.cta_present
+        )
+        update_payload["forward_brief_data"] = json.loads(
+            scoring_output.forward_brief_data.model_dump_json()
+        )
+    supabase.table("scores").update(update_payload).eq("job_id", job_id).execute()
 
     # Mark job complete
     await update_job_status(supabase, job_id, "complete")

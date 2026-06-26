@@ -77,6 +77,13 @@ class NarrativeResult(NamedTuple):
     summaries: dict[str, str]
     sub_dimensions: dict[tuple[str, str], dict]
     cheat_sheet: dict | None
+    # ORPHEUS-96: the agent's read of whether the verbatim About contains a
+    # call to action. Replaces the brittle keyword heuristic as the source for
+    # the Profile Signals "call to action" row — the worker overwrites
+    # forward_brief_data.qualitative_flags.engagement_invitation.cta_in_about
+    # with this value before persisting. None when the agent omits it (best
+    # effort; the worker leaves the heuristic value untouched in that case).
+    cta_present: bool | None = None
 
 
 # ============================================================
@@ -366,14 +373,17 @@ Return a JSON object with exactly this structure:
       {{"value": "...", "label": "..."}},
       {{"value": "...", "label": "..."}}
     ]
-  }}
+  }},
+  "cta_present": true
 }}
 
 The sections array must contain exactly 4 entries — one per dimension, no forward_brief entry. `summary` (1–2 sentences, up to ~40 words) and `narrative` (up to ~400 words, continuous prose, no Markdown headers) are both required and non-empty on every entry.
 
 The sub_dimensions array must contain exactly 13 entries — one per sub-dimension across all four dimensions. The (dimension, sub_dimension) pair on each entry must exactly match the input sub-dimension names (case- and punctuation-exact). `summary` is required on every entry. `best_practices` is required on entries whose score is 0, 1, 2, or 3 — omit the key entirely on entries whose score is 4 or 5 (do not include it with empty string or null). `improvements` is required on entries whose score is 0, 1, 2, 3, or 4 — omit the key entirely on entries whose score is 5.
 
-The cheat_sheet object is required. priorities must contain exactly 5 entries. rhythm must contain exactly 3 entries with `cadence` values "Every Day", "Every Week", "Every Month" in that order. milestones must contain 3 or 4 entries. All string fields are non-empty."""
+The cheat_sheet object is required. priorities must contain exactly 5 entries. rhythm must contain exactly 3 entries with `cadence` values "Every Day", "Every Week", "Every Month" in that order. milestones must contain 3 or 4 entries. All string fields are non-empty.
+
+`cta_present` is a required top-level boolean. Judge it ONLY from the verbatim About section in the Profile Content: set it to true if the About contains a call to action — an explicit invitation for the reader to take a next step (connect, reach out, visit a site, start a conversation, get in touch, book a call) — and false otherwise. Judge the actual text, not any hint or score. A warm closing invitation such as "I'd welcome a conversation" or "if you're ever in town, let's grab coffee" counts as a call to action."""
 
 
 # ============================================================
@@ -484,23 +494,13 @@ def _format_forward_brief_data(scoring_output: ScoringStageOutput) -> str:
     vp = flags.visual_professionalism
     parts.append(f"Profile photo: {'present' if vp.photo_present else 'absent'}")
 
-    # ORPHEUS-96: services_present is unknowable from the ZIP (hardcoded
-    # False in the scoring engine), so it is no longer surfaced here — it
-    # would otherwise read as "absent" for every client. contact_visible and
-    # cta_in_about are kept but flagged explicitly as heuristic hints: they
-    # are computed by imperfect automated matching and the verbatim Profile
-    # Content section is ground truth (see system-prompt rule on flags). The
-    # agent is instructed to let the profile text override these when they
-    # disagree.
-    ei = flags.engagement_invitation
-    parts.append(
-        f"Contact info detected (heuristic — verify against profile text): "
-        f"{'yes' if ei.contact_visible else 'no'}"
-    )
-    parts.append(
-        f"Call-to-action detected in About (heuristic — verify against "
-        f"profile text): {'yes' if ei.cta_in_about else 'no'}"
-    )
+    # ORPHEUS-96: the engagement_invitation flags are no longer surfaced as
+    # forward-brief hints. services_present is unknowable from the ZIP
+    # (hardcoded False); contact_visible is being retired as a signal
+    # (every member has a profile URL + account email). The call-to-action
+    # signal is now determined directly by the agent from the verbatim About
+    # in the Profile Content section and returned as `cta_present` — feeding a
+    # heuristic guess here would be redundant and circular.
 
     return "\n".join(parts)
 
@@ -945,11 +945,18 @@ def _parse_narrative_response(
 
     cheat_sheet = _parse_cheat_sheet_payload(data.get("cheat_sheet"))
 
+    # ORPHEUS-96: best-effort — a missing or non-bool cta_present yields None,
+    # in which case the worker leaves the heuristic flag untouched rather than
+    # failing the parse (keeps legacy / partial fixtures green).
+    cta_raw = data.get("cta_present")
+    cta_present = cta_raw if isinstance(cta_raw, bool) else None
+
     return NarrativeResult(
         sections=sections,
         summaries=summaries,
         sub_dimensions=sub_dimensions,
         cheat_sheet=cheat_sheet,
+        cta_present=cta_present,
     )
 
 

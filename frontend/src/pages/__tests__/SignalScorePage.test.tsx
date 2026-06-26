@@ -212,10 +212,10 @@ describe('SignalScorePage', () => {
     expect(
       screen.getByText('Engagement spread across your network'),
     ).toBeInTheDocument()
-    // ORPHEUS-96: the brittle engagement_invitation rows (CTA / services /
-    // contact) are no longer surfaced — they misfire on normal profiles and
-    // would contradict the now-text-grounded narrative.
-    expect(screen.queryByText('Call to action in About')).not.toBeInTheDocument()
+    // ORPHEUS-96: CTA row stays (now sourced from the agent's read of the
+    // verbatim About), but the services + contact rows were dropped —
+    // services is unknowable from the ZIP and contact is true for everyone.
+    expect(screen.getByText('Call to action in About')).toBeInTheDocument()
     expect(screen.queryByText('Services section listed')).not.toBeInTheDocument()
     expect(screen.queryByText('Contact info visible')).not.toBeInTheDocument()
   })

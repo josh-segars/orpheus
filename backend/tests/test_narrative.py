@@ -199,6 +199,42 @@ class TestParseResponse:
         # fixture omits it, parser returns None rather than raising so
         # pre-60 callers still work.
         assert result.cheat_sheet is None
+        # ORPHEUS-96: legacy fixture omits cta_present → None (best-effort).
+        assert result.cta_present is None
+
+    def test_cta_present_parsed_true(self):
+        data = {
+            "sections": [
+                {"section": s, "summary": "S.", "narrative": "Text."}
+                for s in EXPECTED_SECTIONS
+            ],
+            "cta_present": True,
+        }
+        result = _parse_narrative_response(json.dumps(data))
+        assert result.cta_present is True
+
+    def test_cta_present_parsed_false(self):
+        data = {
+            "sections": [
+                {"section": s, "summary": "S.", "narrative": "Text."}
+                for s in EXPECTED_SECTIONS
+            ],
+            "cta_present": False,
+        }
+        result = _parse_narrative_response(json.dumps(data))
+        assert result.cta_present is False
+
+    def test_cta_present_non_bool_is_none(self):
+        # A non-bool (e.g. a string) is treated as absent rather than raising.
+        data = {
+            "sections": [
+                {"section": s, "summary": "S.", "narrative": "Text."}
+                for s in EXPECTED_SECTIONS
+            ],
+            "cta_present": "yes",
+        }
+        result = _parse_narrative_response(json.dumps(data))
+        assert result.cta_present is None
 
     def test_with_code_fences(self):
         raw = "```json\n" + _make_valid_response() + "\n```"
@@ -443,9 +479,11 @@ class TestFormatForwardBriefData:
         text = _format_forward_brief_data(output)
         assert "distributed" in text  # not concentrated
         assert "present" in text  # photo present
-        # ORPHEUS-96: CTA is now surfaced as a heuristic hint, not a fact.
-        assert "Call-to-action detected in About" in text
-        assert "verify against profile text): yes" in text
+        # ORPHEUS-96: CTA/contact are no longer surfaced as forward-brief
+        # hints — the agent determines the CTA from the verbatim About text
+        # directly (returned as cta_present), and contact was retired.
+        assert "Call-to-action detected" not in text
+        assert "Contact info detected" not in text
 
     def test_services_present_no_longer_surfaced(self):
         # ORPHEUS-96: services_present is unknowable from the ZIP (hardcoded
