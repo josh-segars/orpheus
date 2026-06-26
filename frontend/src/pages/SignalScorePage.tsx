@@ -461,22 +461,19 @@ function MetricsBlock({ data }: { data: ForwardBriefData }) {
       segments: q.audience_geography.slice(0, 5),
     })
 
+  // ORPHEUS-96: the engagement_invitation flags (cta_in_about, services_present,
+  // contact_visible) are derived by brittle heuristics — services_present is
+  // hardcoded false in the scoring engine (unknowable from the ZIP), and the
+  // CTA/contact detectors are keyword matchers that misfire on normal prose.
+  // Unlike the narrative (which now receives the verbatim profile text and can
+  // override a wrong flag), this block only has the boolean, so a wrong value
+  // would render a red ✗ that contradicts the corrected narrative. Until the
+  // signals are reliable (repaired heuristics, or OIDC-style enrichment like
+  // photo_present in ORPHEUS-89), only the two trustworthy flags are shown.
   const signals: { label: string; on: boolean }[] = [
     {
       label: 'Profile photo present',
       on: flags.visual_professionalism.photo_present,
-    },
-    {
-      label: 'Call to action in About',
-      on: flags.engagement_invitation.cta_in_about,
-    },
-    {
-      label: 'Services section listed',
-      on: flags.engagement_invitation.services_present,
-    },
-    {
-      label: 'Contact info visible',
-      on: flags.engagement_invitation.contact_visible,
     },
     {
       label: 'Engagement spread across your network',

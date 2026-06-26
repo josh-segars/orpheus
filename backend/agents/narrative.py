@@ -42,6 +42,7 @@ from typing import NamedTuple
 from anthropic import Anthropic
 
 from backend.agents import DEFAULT_MODEL
+from backend.ingestion.types import ZipData
 from backend.models.scoring import ScoringStageOutput
 from backend.models.quality import DataQualityReport, IssueSeverity
 
@@ -200,13 +201,14 @@ You are NOT scoring. All scores are final before you see them. Your job is inter
 
 ## Core rules
 
-1. Never invent data. Every claim must trace to a specific score, metric, or questionnaire answer in your input.
+1. Never invent data. Every claim must trace to a specific score, metric, verbatim profile content, or questionnaire answer in your input. Crucially, any claim about *specific profile content* — headline wording, what the About section does or doesn't contain, the presence or absence of a call to action, contact details, or a services offering — must trace to the verbatim Profile Content section, NOT to a score and NOT to a questionnaire answer.
 2. Never recite scores. The reader does not see numeric scores or band labels. Describe what the scores mean in plain language.
-3. Be specific. Reference actual profile content, post topics, audience segments, or metric values — not generic observations that could apply to anyone.
-4. Observations, not judgments. Describe what the data shows. Do not moralize about what the client "should" be doing.
-5. No marketing language. No "unlock your potential," "maximize your impact," or "elevate your brand."
-6. When the completeness floor was applied (completeness_floor_applied: true), explicitly acknowledge that missing structural fields limit the overall profile signal, regardless of quality elsewhere.
-7. Return ONLY valid JSON matching the required output format. No commentary outside the JSON.
+3. Be specific, and ground specifics in what you can actually see. Reference actual headline wording, About contents, post topics, audience segments, or metric values — not generic observations that could apply to anyone. Do NOT assert the presence or absence of a specific profile element unless you can verify it directly in the verbatim Profile Content section. If a detail is not in the provided text, do not claim it is missing — you may simply not have it.
+4. The verbatim Profile Content section is ground truth. The Forward Brief data includes heuristic boolean hints (e.g. whether a call to action or contact info was detected) computed by imperfect automated matching. When a hint disagrees with what the verbatim Profile Content actually shows, the profile text wins — describe what the text shows, not what the hint says. For example, if the call-to-action hint reads "no" but the About section ends with a clear invitation to connect, treat the call to action as present.
+5. Observations, not judgments. Describe what the data shows. Do not moralize about what the client "should" be doing.
+6. No marketing language. No "unlock your potential," "maximize your impact," or "elevate your brand."
+7. When the completeness floor was applied (completeness_floor_applied: true), explicitly acknowledge that missing structural fields limit the overall profile signal, regardless of quality elsewhere.
+8. Return ONLY valid JSON matching the required output format. No commentary outside the JSON.
 
 ## Score-to-narrative direction
 
@@ -297,6 +299,8 @@ The questionnaire is a 9-question intake the client completes before the diagnos
 - **Q9** is a wildcard. If the client provided substantive context, acknowledge it explicitly somewhere appropriate. If they wrote "Nothing to add" or similar, ignore it.
 
 Treat the questionnaire as a brief from the client, not as constraints. If the data contradicts what the client said about themselves, name the gap honestly without moralizing.
+
+Crucially, questionnaire answers describe the client's stated goals and self-perception — they are NOT observations about the profile. Never present a questionnaire-derived statement as an observed profile fact. For example, if the client says they are pursuing consulting or speaking work, do not infer from that alone that "your About section lacks a call to action" or "your headline doesn't position you for advisory work" — those are claims about profile content, and they may only be made if the verbatim Profile Content section actually supports them. Use the questionnaire to frame *where the client wants to go*; use the verbatim Profile Content and the scores to describe *what is observed*.
 
 {voice_instructions}
 
@@ -480,10 +484,132 @@ def _format_forward_brief_data(scoring_output: ScoringStageOutput) -> str:
     vp = flags.visual_professionalism
     parts.append(f"Profile photo: {'present' if vp.photo_present else 'absent'}")
 
+    # ORPHEUS-96: services_present is unknowable from the ZIP (hardcoded
+    # False in the scoring engine), so it is no longer surfaced here — it
+    # would otherwise read as "absent" for every client. contact_visible and
+    # cta_in_about are kept but flagged explicitly as heuristic hints: they
+    # are computed by imperfect automated matching and the verbatim Profile
+    # Content section is ground truth (see system-prompt rule on flags). The
+    # agent is instructed to let the profile text override these when they
+    # disagree.
     ei = flags.engagement_invitation
-    parts.append(f"Services section: {'present' if ei.services_present else 'absent'}")
-    parts.append(f"Contact info visible: {'yes' if ei.contact_visible else 'no'}")
-    parts.append(f"CTA in About: {'yes' if ei.cta_in_about else 'no'}")
+    parts.append(
+        f"Contact info detected (heuristic — verify against profile text): "
+        f"{'yes' if ei.contact_visible else 'no'}"
+    )
+    parts.append(
+        f"Call-to-action detected in About (heuristic — verify against "
+        f"profile text): {'yes' if ei.cta_in_about else 'no'}"
+    )
+
+    return "\n".join(parts)
+
+
+def _format_profile_excerpt(
+    zip_data: ZipData,
+    max_posts: int = 40,
+    max_comments: int = 25,
+) -> str:
+    """Render the client's actual profile + content text for the prompt.
+
+    ORPHEUS-96: the narrative agent previously received only scores, numeric
+    metrics, and boolean flags — never the profile text. So any claim about
+    specific profile content (headline wording, About contents, presence of a
+    call to action or contact details) was ungrounded by construction, and a
+    brittle qualitative flag (e.g. cta_in_about computed by keyword match)
+    could be restated as a confident — sometimes false — finding. This excerpt
+    gives the agent the same verbatim profile + content the rubric stage
+    scored, so observed-text claims are grounded and the agent can override a
+    wrong flag.
+
+    Deliberately fuller than the Forward Brief metrics: full About, every
+    position with its description, the skills list, and a larger recent
+    post/comment sample than the rubric uses. About and per-item snippets are
+    length-capped, and posts/comments are count-capped, only to bound
+    pathological inputs — a prolific poster can't balloon the prompt.
+    """
+    profile = zip_data.profile
+    parts: list[str] = ["=== PROFILE (verbatim) ==="]
+
+    headline = profile.headline.strip()
+    parts.append(f"HEADLINE: {headline}" if headline else "HEADLINE: [not provided]")
+
+    about = profile.summary.strip()
+    if about:
+        # Generous cap purely to bound pathological inputs; real About
+        # sections run well under this.
+        display = about[:3000] + " […truncated]" if len(about) > 3000 else about
+        parts.append(f"ABOUT SECTION:\n{display}")
+    else:
+        parts.append("ABOUT SECTION: [not provided]")
+
+    industry = profile.industry.strip()
+    if industry:
+        parts.append(f"INDUSTRY: {industry}")
+    location = profile.geo_location.strip()
+    if location:
+        parts.append(f"LOCATION: {location}")
+    websites = profile.websites.strip()
+    parts.append(
+        f"WEBSITES / CONTACT LINKS: {websites}"
+        if websites
+        else "WEBSITES / CONTACT LINKS: [none listed]"
+    )
+
+    # Experience — every position with its full description.
+    if zip_data.positions:
+        parts.append("EXPERIENCE:")
+        for i, pos in enumerate(zip_data.positions):
+            title = pos.title or "[no title]"
+            company = pos.company_name or "[no company]"
+            dates = ""
+            if pos.started_on:
+                dates = f" ({pos.started_on}"
+                dates += f" – {pos.finished_on})" if pos.finished_on else " – present)"
+            desc = pos.description.strip() if pos.description else "[no description]"
+            parts.append(f"  {i + 1}. {title} at {company}{dates}")
+            parts.append(f"     {desc}")
+    else:
+        parts.append("EXPERIENCE: [no positions listed]")
+
+    if zip_data.skills:
+        parts.append(f"SKILLS: {', '.join(zip_data.skills[:40])}")
+        if len(zip_data.skills) > 40:
+            parts.append(f"  ({len(zip_data.skills)} skills total)")
+    else:
+        parts.append("SKILLS: [none listed]")
+
+    # Content sample — larger than the rubric's, for topic-consistency and
+    # profile-content alignment grounding.
+    posts = sorted(zip_data.shares, key=lambda s: s.date, reverse=True)
+    posts_with_text = [p for p in posts if p.share_commentary.strip()]
+    parts.append("")
+    parts.append(
+        f"=== RECENT POSTS (most recent first; showing up to {max_posts} of "
+        f"{len(posts_with_text)} with text) ==="
+    )
+    if posts_with_text:
+        for i, post in enumerate(posts_with_text[:max_posts]):
+            text = post.share_commentary.strip()
+            display = text[:400] + "…" if len(text) > 400 else text
+            parts.append(f"Post {i + 1} ({post.date}): {display}")
+    else:
+        parts.append("[No original posts with text found in the export window]")
+
+    comments = sorted(zip_data.comments, key=lambda c: c.date, reverse=True)
+    comments_with_text = [c for c in comments if c.message.strip()]
+    parts.append("")
+    parts.append(
+        f"=== RECENT COMMENTS (most recent first; showing up to {max_comments} "
+        f"of {len(comments_with_text)} with text) ==="
+    )
+    if comments_with_text:
+        for i, comment in enumerate(comments_with_text[:max_comments]):
+            text = comment.message.strip()
+            display = text[:250] + "…" if len(text) > 250 else text
+            parts.append(f"Comment {i + 1} ({comment.date}): {display}")
+    else:
+        parts.append("[No comments with text found in the export window]")
 
     return "\n".join(parts)
 
@@ -663,7 +789,7 @@ def _format_quality_report(quality_report: DataQualityReport | None) -> str:
     return "\n".join(parts)
 
 
-USER_PROMPT_TEMPLATE = """Generate narrative text for the following Signal Score report. Use the scored dimensions, Forward Brief data, and questionnaire answers to produce grounded, specific narratives.
+USER_PROMPT_TEMPLATE = """Generate narrative text for the following Signal Score report. Use the scored dimensions, Forward Brief data, the verbatim profile content, and questionnaire answers to produce grounded, specific narratives.
 
 ## Scored Dimensions
 
@@ -672,6 +798,12 @@ USER_PROMPT_TEMPLATE = """Generate narrative text for the following Signal Score
 ## Forward Brief Data
 
 {forward_brief_data}
+
+## Profile Content (verbatim — observed ground truth)
+
+This is the client's actual profile and content text — the same material the rubric scoring stage read. Any claim you make about specific profile content (headline wording, what the About section contains, whether there is a call to action or contact info, post topics) must be grounded here. Where this text disagrees with a heuristic hint in the Forward Brief data above, this text wins.
+
+{profile_excerpt}
 
 ## Client Context (Questionnaire)
 
@@ -1080,6 +1212,7 @@ async def generate_narratives(
     client: Anthropic,
     scoring_output: ScoringStageOutput,
     questionnaire: dict,
+    zip_data: ZipData | None = None,
     narrative_config: dict | None = None,
     quality_report: DataQualityReport | None = None,
     model: str = DEFAULT_MODEL,
@@ -1100,6 +1233,11 @@ async def generate_narratives(
             can cross-reference Claude's sub-dim entries against the actual
             score-list and enforce the conditional slot curve.
         questionnaire: Client's questionnaire responses as a dict.
+        zip_data: Parsed LinkedIn ZIP (ORPHEUS-96). When provided, the verbatim
+            profile + content excerpt is included in the prompt so the agent
+            can ground profile-content claims in observed text and override
+            unreliable qualitative flags. Optional for backward compatibility;
+            when None the prompt notes the profile content is unavailable.
         narrative_config: Optional advisor-level configuration overrides.
             Keys: voice, recommendation_style, system_mechanics,
             practice_focus, custom_instructions.
@@ -1121,9 +1259,17 @@ async def generate_narratives(
     if quality_section:
         quality_section = f"\n## Data Quality Notes\n\n{quality_section}\n"
 
+    profile_excerpt = (
+        _format_profile_excerpt(zip_data)
+        if zip_data is not None
+        else "[Profile content not provided — ground profile-content claims "
+        "conservatively in the scores only.]"
+    )
+
     user_message = USER_PROMPT_TEMPLATE.format(
         scored_dimensions=_format_scored_dimensions(scoring_output),
         forward_brief_data=_format_forward_brief_data(scoring_output),
+        profile_excerpt=profile_excerpt,
         questionnaire=_format_questionnaire(questionnaire),
         quality_section=quality_section,
     )

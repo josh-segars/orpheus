@@ -209,7 +209,15 @@ describe('SignalScorePage', () => {
     // Boolean flags render as the Profile Signals checklist.
     expect(screen.getByText('Profile Signals')).toBeInTheDocument()
     expect(screen.getByText('Profile photo present')).toBeInTheDocument()
-    expect(screen.getByText('Call to action in About')).toBeInTheDocument()
+    expect(
+      screen.getByText('Engagement spread across your network'),
+    ).toBeInTheDocument()
+    // ORPHEUS-96: the brittle engagement_invitation rows (CTA / services /
+    // contact) are no longer surfaced — they misfire on normal profiles and
+    // would contradict the now-text-grounded narrative.
+    expect(screen.queryByText('Call to action in About')).not.toBeInTheDocument()
+    expect(screen.queryByText('Services section listed')).not.toBeInTheDocument()
+    expect(screen.queryByText('Contact info visible')).not.toBeInTheDocument()
   })
 
   it('expands a sub-dimension row when its trigger is clicked, revealing Summary / Best Practices / Improvements', async () => {

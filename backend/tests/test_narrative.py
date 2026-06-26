@@ -14,13 +14,22 @@ from backend.agents.narrative import (
     MECHANICS_INSTRUCTIONS,
     FOCUS_INSTRUCTIONS,
     EXPECTED_SECTIONS,
+    USER_PROMPT_TEMPLATE,
     NarrativeResult,
     _build_system_prompt,
     _parse_narrative_response,
     _format_scored_dimensions,
     _format_forward_brief_data,
+    _format_profile_excerpt,
     _format_questionnaire,
     _format_quality_report,
+)
+from backend.ingestion.types import (
+    ZipData,
+    ProfileData,
+    PositionData,
+    ShareItem,
+    CommentItem,
 )
 from backend.models.quality import (
     DataQualityReport,
@@ -434,7 +443,22 @@ class TestFormatForwardBriefData:
         text = _format_forward_brief_data(output)
         assert "distributed" in text  # not concentrated
         assert "present" in text  # photo present
-        assert "CTA in About: yes" in text
+        # ORPHEUS-96: CTA is now surfaced as a heuristic hint, not a fact.
+        assert "Call-to-action detected in About" in text
+        assert "verify against profile text): yes" in text
+
+    def test_services_present_no_longer_surfaced(self):
+        # ORPHEUS-96: services_present is unknowable from the ZIP (hardcoded
+        # False in the engine), so it must not be surfaced to the narrative
+        # agent — it would otherwise assert "absent" for every client.
+        output = _make_scoring_output()
+        text = _format_forward_brief_data(output)
+        # The services_present flag line must be gone. Guard against the
+        # specific flag phrasing only — a bare "Services" substring would
+        # collide with audience industries like "Financial Services".
+        assert "Services section" not in text
+        assert "Services section:" not in text
+        assert "services_present" not in text
 
     def test_handles_missing_optional_fields(self):
         output = ScoringStageOutput(
@@ -454,6 +478,104 @@ class TestFormatForwardBriefData:
         # Should not crash, should still contain qualitative flags
         assert "absent" in text  # photo absent
         assert "QUALITATIVE FLAGS" in text
+
+
+class TestFormatProfileExcerpt:
+    """ORPHEUS-96: the verbatim profile + content excerpt threaded into the
+    narrative prompt so the agent can ground profile-content claims in
+    observed text rather than restating a brittle flag."""
+
+    def _zip(self) -> ZipData:
+        return ZipData(
+            profile=ProfileData(
+                headline="Founder, ess3.ai | Former Senior Diplomat",
+                summary=(
+                    "I'm a former diplomat turned founder. If any of that "
+                    "resonates, I'd welcome a conversation. Or, if you're ever "
+                    "in Portugal, a meal."
+                ),
+                industry="Software Development",
+                geo_location="Portugal",
+                websites="https://ess3.ai",
+            ),
+            positions=[
+                PositionData(
+                    company_name="ess3.ai",
+                    title="Founder",
+                    description="Building AI-powered software around real problems.",
+                    started_on="2023",
+                ),
+            ],
+            skills=["AI Strategy", "Diplomacy", "Product"],
+            shares=[
+                ShareItem(
+                    date="2026-05-01",
+                    share_commentary="A post about applied AI and trust.",
+                ),
+                ShareItem(
+                    date="2026-04-01",
+                    share_commentary="A post about communication and credibility.",
+                ),
+            ],
+            comments=[
+                CommentItem(date="2026-05-02", message="Great point on signal clarity."),
+            ],
+        )
+
+    def test_includes_verbatim_headline_and_about(self):
+        text = _format_profile_excerpt(self._zip())
+        assert "Founder, ess3.ai | Former Senior Diplomat" in text
+        # The conversational CTA is present verbatim so the agent can see it
+        # rather than relying on the (wrong) cta_in_about heuristic.
+        assert "I'd welcome a conversation" in text
+
+    def test_includes_positions_skills_and_websites(self):
+        text = _format_profile_excerpt(self._zip())
+        assert "Founder at ess3.ai" in text
+        assert "Building AI-powered software" in text
+        assert "AI Strategy" in text
+        assert "https://ess3.ai" in text
+
+    def test_includes_post_and_comment_sample(self):
+        text = _format_profile_excerpt(self._zip())
+        assert "applied AI and trust" in text
+        assert "signal clarity" in text
+
+    def test_caps_post_sample_count(self):
+        z = self._zip()
+        z.shares = [
+            ShareItem(date=f"2026-01-{i:02d}", share_commentary=f"post number {i}")
+            for i in range(1, 60)
+        ]
+        text = _format_profile_excerpt(z, max_posts=40)
+        # Most recent 40 shown (sorted by date desc); the oldest are excluded.
+        assert "post number 59" in text  # most recent
+        assert "post number 1" not in text  # oldest, beyond the cap
+
+    def test_handles_empty_profile(self):
+        text = _format_profile_excerpt(ZipData())
+        assert "HEADLINE: [not provided]" in text
+        assert "[No original posts with text found" in text
+
+
+class TestProfileExcerptWiredIntoPrompt:
+    """The excerpt + grounding instructions are present in the prompt
+    templates (the API call itself is not exercised in unit tests)."""
+
+    def test_user_template_has_profile_section(self):
+        assert "Profile Content (verbatim" in USER_PROMPT_TEMPLATE
+        assert "{profile_excerpt}" in USER_PROMPT_TEMPLATE
+
+    def test_system_prompt_has_text_wins_rule(self):
+        prompt = _build_system_prompt()
+        # The flag-override rule must be present so the agent prefers observed
+        # text over a brittle heuristic flag (the ORPHEUS-96 fix).
+        assert "the profile text wins" in prompt
+        assert "verbatim Profile Content" in prompt
+
+    def test_system_prompt_frames_questionnaire_as_goals(self):
+        prompt = _build_system_prompt()
+        assert "are NOT observations about the profile" in prompt
 
 
 class TestFormatQuestionnaire:

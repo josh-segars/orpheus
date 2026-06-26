@@ -254,6 +254,7 @@ async def stage_narrative_generation(
     anthropic_client: Anthropic,
     scoring_output: ScoringStageOutput,
     questionnaire: dict,
+    zip_data: ZipData,
     narrative_config: dict | None,
     quality_report: DataQualityReport,
     job_id: str,
@@ -289,6 +290,7 @@ async def stage_narrative_generation(
         client=anthropic_client,
         scoring_output=scoring_output,
         questionnaire=questionnaire,
+        zip_data=zip_data,
         narrative_config=narrative_config,
         quality_report=quality_report,
     )
@@ -555,7 +557,7 @@ async def run_pipeline(supabase, anthropic_client: Anthropic, job: dict):
 
     # Stage 4: Narrative generation (Claude)
     narrative_result = await stage_narrative_generation(
-        anthropic_client, scoring_output, questionnaire,
+        anthropic_client, scoring_output, questionnaire, zip_data,
         narrative_config, quality_report, job_id, supabase, is_advisory
     )
 
