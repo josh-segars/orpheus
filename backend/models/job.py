@@ -30,3 +30,9 @@ class JobSummary(BaseModel):
     state: str  # pending | running | complete | failed
     created_at: datetime
     band: Optional[str] = None
+    # ORPHEUS-88: true when the report was produced on incomplete/degraded
+    # data (allowed-through EMPTY_DATA critical or data-limitation warnings).
+    # Denormalized onto the job row by the worker at completion so the
+    # reports list can chip it without reading quality_report. Null/false
+    # for pre-ORPHEUS-88 jobs and non-complete jobs.
+    data_limited: bool = False

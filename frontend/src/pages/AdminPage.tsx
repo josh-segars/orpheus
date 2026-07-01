@@ -196,11 +196,21 @@ function ClientsTable({
             </td>
             <td>
               {client.latest_job ? (
-                <span
-                  className={`admin-chip admin-chip-job-${client.latest_job.status}`}
-                >
-                  {client.latest_job.status}
-                </span>
+                <>
+                  <span
+                    className={`admin-chip admin-chip-job-${client.latest_job.status}`}
+                  >
+                    {client.latest_job.status}
+                  </span>
+                  {client.latest_job.data_limited && (
+                    <span
+                      className="admin-chip admin-chip-limited"
+                      title="Completed on incomplete data (ORPHEUS-88)"
+                    >
+                      limited data
+                    </span>
+                  )}
+                </>
               ) : (
                 <span className="admin-chip admin-chip-job-none">none</span>
               )}
@@ -290,6 +300,14 @@ function JobsTable({
               <span className={`admin-chip admin-chip-job-${job.status}`}>
                 {job.status}
               </span>
+              {job.data_limited && (
+                <span
+                  className="admin-chip admin-chip-limited"
+                  title="Completed on incomplete data (ORPHEUS-88)"
+                >
+                  limited data
+                </span>
+              )}
               {job.error_message && (
                 <span
                   className="admin-job-error"

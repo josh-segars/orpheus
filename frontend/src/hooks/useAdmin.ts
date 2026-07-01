@@ -57,6 +57,7 @@ export interface AdminJobSummary {
   id: string
   status: string
   created_at: string | null
+  data_limited?: boolean // ORPHEUS-88
 }
 
 export interface AdminClient {
@@ -94,6 +95,7 @@ export interface AdminJob {
   started_at: string | null
   completed_at: string | null
   error_message: string | null
+  data_limited?: boolean // ORPHEUS-88
   narratives: AdminNarrativeMeta[]
 }
 

@@ -445,7 +445,11 @@ async def test_complete_job_assembles_payload():
     }
     assert "forward_brief" not in narr
     assert narr["cheat_sheet"] is None
-    assert fake.tables_queried == ["jobs", "scores", "narratives"]
+    # ORPHEUS-88: the payload now also carries a `quality` block, read from
+    # ingested_data on this single-job path. No ingested_data response is
+    # queued here, so the fake returns empty → not data-limited.
+    assert result.result["quality"] == {"data_limited": False, "notices": []}
+    assert fake.tables_queried == ["jobs", "scores", "narratives", "ingested_data"]
 
 
 @pytest.mark.asyncio
@@ -815,3 +819,115 @@ async def test_complete_job_cheat_sheet_edited_text_currently_falls_back():
     # because edited_text takes precedence per the admin-overlay rule.
     assert result.result is not None
     assert result.result["narratives"]["cheat_sheet"] is None
+
+
+# --------------------------------------------------------------------------- #
+# Data-limited quality summary — ORPHEUS-88
+# --------------------------------------------------------------------------- #
+#
+# `_build_result_payload` reads ingested_data.quality_report on the single-job
+# path and surfaces `{data_limited, notices}` under a `quality` key for the
+# client report banner. The classification reuses DataQualityReport's helpers
+# so the banner can never disagree with the denormalized jobs.data_limited
+# flag the worker writes. Any read failure degrades to not-limited (no banner).
+
+
+def _minimal_dim_narratives() -> list[dict[str, Any]]:
+    return [
+        _narrative_row(
+            section="Profile Signal Clarity", generated_text="Profile narrative."
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_complete_job_quality_summary_flags_data_limited():
+    """An EMPTY_DATA critical (zero behavioral activity on an otherwise-
+    complete archive) is allowed through the POST /jobs gate and marks the
+    completed report data-limited, with the notice surfaced for the banner."""
+    quality_report = {
+        "issues": [
+            {
+                "severity": "critical",
+                "category": "empty_data",
+                "source": "ZIP archive",
+                "message": (
+                    "No behavioral data found (zero posts, comments, and "
+                    "reactions) — Dimensions 2, 3, and 4 cannot be scored "
+                    "meaningfully"
+                ),
+                "impact": "Dim 2, Dim 3, Dim 4",
+            },
+            # A MISSING_FIELD warning must NOT count as a data limitation —
+            # it's a legitimate profile-completeness score input.
+            {
+                "severity": "warning",
+                "category": "missing_field",
+                "source": "Profile.csv",
+                "message": "About section is empty",
+                "impact": "Dim 1",
+            },
+        ]
+    }
+    fake = FakeSupabase(
+        responses=[
+            {
+                "data": [
+                    _job_row(
+                        job_id=JOB_1_ID,
+                        client_id=CLIENT_1_ID,
+                        status_value="complete",
+                    )
+                ]
+            },
+            {"data": [_score_row(job_id=JOB_1_ID)]},
+            {"data": _minimal_dim_narratives()},
+            {"data": [{"quality_report": quality_report}]},
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_client_roles(CLIENT_1_ID),
+        )
+
+    assert result.result is not None
+    quality = result.result["quality"]
+    assert quality["data_limited"] is True
+    # Only the data-limitation issue's message surfaces; the MISSING_FIELD
+    # warning is excluded.
+    assert len(quality["notices"]) == 1
+    assert "No behavioral data found" in quality["notices"][0]
+    assert fake.tables_queried == ["jobs", "scores", "narratives", "ingested_data"]
+
+
+@pytest.mark.asyncio
+async def test_complete_job_quality_summary_missing_row_defaults_not_limited():
+    """No ingested_data row (or unparseable report) → not data-limited, no
+    banner. The report still renders; we just don't show the notice."""
+    fake = FakeSupabase(
+        responses=[
+            {
+                "data": [
+                    _job_row(
+                        job_id=JOB_1_ID,
+                        client_id=CLIENT_1_ID,
+                        status_value="complete",
+                    )
+                ]
+            },
+            {"data": [_score_row(job_id=JOB_1_ID)]},
+            {"data": _minimal_dim_narratives()},
+            {"data": []},  # ingested_data miss
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_client_roles(CLIENT_1_ID),
+        )
+
+    assert result.result is not None
+    assert result.result["quality"] == {"data_limited": False, "notices": []}

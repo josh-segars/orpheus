@@ -118,6 +118,9 @@ class JobSummary(BaseModel):
 
     id: str
     status: str
+    # ORPHEUS-88: chip a completed report that rests on limited data so the
+    # advisor knows before opening it. Denormalized jobs.data_limited flag.
+    data_limited: bool = False
 
 
 class ClientListItem(BaseModel):
@@ -210,7 +213,7 @@ async def list_clients(
         client_ids = [str(r["id"]) for r in rows]
         jobs_result = (
             supabase.table("jobs")
-            .select("id, client_id, status, created_at")
+            .select("id, client_id, status, created_at, data_limited")
             .in_("client_id", client_ids)
             .order("created_at", desc=True)
             .execute()
@@ -235,7 +238,11 @@ async def list_clients(
                 invitation_status=row["invitation_status"],
                 is_self=(row.get("user_id") == roles.user_id),
                 latest_job=(
-                    JobSummary(id=str(latest["id"]), status=latest["status"])
+                    JobSummary(
+                        id=str(latest["id"]),
+                        status=latest["status"],
+                        data_limited=bool(latest.get("data_limited")),
+                    )
                     if latest is not None
                     else None
                 ),

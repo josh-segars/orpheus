@@ -79,6 +79,23 @@ describe('ReportsPage', () => {
     ).toBe(false)
   })
 
+  it('chips a complete row that is data-limited, and omits the chip otherwise (ORPHEUS-88)', () => {
+    const LIMITED_JOB: JobSummary = {
+      id: 'job-limited-1',
+      state: 'complete',
+      created_at: '2026-06-05T12:00:00+00:00',
+      band: 'Untuned',
+      data_limited: true,
+    }
+    mockJobs([LIMITED_JOB, COMPLETE_JOB])
+    renderPage()
+
+    // Exactly one "Limited data" chip — on the data-limited row, not the
+    // healthy COMPLETE_JOB.
+    const chips = screen.getAllByText(/limited data/i)
+    expect(chips).toHaveLength(1)
+  })
+
   it('shows "Run a New Report" → /groundwork when no job is in flight', () => {
     mockJobs([COMPLETE_JOB, FAILED_JOB])
     renderPage()

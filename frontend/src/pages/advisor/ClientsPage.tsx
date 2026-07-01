@@ -420,10 +420,22 @@ function JobChip({ latest }: JobChipProps) {
           ? 'Report ready'
           : 'Job failed'
   return (
-    <span
-      className={`advisor-chip advisor-chip-job advisor-chip-job-${latest.status}`}
-    >
-      {label}
-    </span>
+    <>
+      <span
+        className={`advisor-chip advisor-chip-job advisor-chip-job-${latest.status}`}
+      >
+        {label}
+      </span>
+      {/* ORPHEUS-88: flag a completed report that rested on limited data so
+          the advisor knows before opening it. */}
+      {latest.status === 'complete' && latest.data_limited && (
+        <span
+          className="advisor-chip advisor-chip-limited"
+          title="This report was generated from incomplete data."
+        >
+          Limited data
+        </span>
+      )}
+    </>
   )
 }

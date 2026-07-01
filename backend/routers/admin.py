@@ -77,6 +77,7 @@ class AdminJobSummary(BaseModel):
     id: str
     status: str
     created_at: str | None
+    data_limited: bool = False  # ORPHEUS-88
 
 
 class AdminClient(BaseModel):
@@ -131,6 +132,7 @@ class AdminJob(BaseModel):
     started_at: str | None
     completed_at: str | None
     error_message: str | None
+    data_limited: bool = False  # ORPHEUS-88
     narratives: list[AdminNarrativeMeta]
 
 
@@ -223,7 +225,7 @@ async def list_admin_clients(
         client_ids = [str(r["id"]) for r in rows]
         jobs_result = (
             supabase.table("jobs")
-            .select("id, client_id, status, created_at")
+            .select("id, client_id, status, created_at, data_limited")
             .in_("client_id", client_ids)
             .order("created_at", desc=True)
             .execute()
@@ -300,6 +302,7 @@ async def list_admin_clients(
                         id=str(latest["id"]),
                         status=latest["status"],
                         created_at=_iso_or_none(latest.get("created_at")),
+                        data_limited=bool(latest.get("data_limited")),
                     )
                     if latest is not None
                     else None
@@ -348,7 +351,7 @@ async def list_admin_jobs(
 
     jobs_query = supabase.table("jobs").select(
         "id, client_id, status, version_label, created_at, "
-        "started_at, completed_at, error_message"
+        "started_at, completed_at, error_message, data_limited"
     )
     if client_id:
         jobs_query = jobs_query.eq("client_id", client_id)
@@ -423,6 +426,7 @@ async def list_admin_jobs(
                 started_at=_iso_or_none(j.get("started_at")),
                 completed_at=_iso_or_none(j.get("completed_at")),
                 error_message=j.get("error_message"),
+                data_limited=bool(j.get("data_limited")),
                 narratives=narratives_by_job.get(jid, []),
             )
         )

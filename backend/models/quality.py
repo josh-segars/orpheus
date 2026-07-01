@@ -28,6 +28,44 @@ class IssueCategory(str, Enum):
     FORMAT_UNEXPECTED = "format_unexpected"  # File layout differs from expected structure
 
 
+# --------------------------------------------------------------------------- #
+# Quality-gate classification (ORPHEUS-88)
+# --------------------------------------------------------------------------- #
+#
+# Two independent classifications drive the ORPHEUS-88 quality gate:
+#
+#   * BLOCKING — a CRITICAL issue whose category means the *archive itself*
+#     is unusable (a core CSV is absent). This is the Basic-archive /
+#     corrupt-upload case: it's a data artifact, not a measurement, so the
+#     job is rejected at POST /jobs with actionable guidance rather than
+#     scored into a confident-looking report. Only MISSING_FILE criticals
+#     block — a Complete archive from a genuinely inactive member trips the
+#     EMPTY_DATA critical (zero behavioral rows) but is a *valid* low-signal
+#     measurement and must be allowed through.
+#
+#   * DATA-LIMITED — any CRITICAL or WARNING whose category means the data
+#     backing the report is incomplete or degraded (missing optional files,
+#     empty/sparse behavioral data, dropped rows, short date span). This is
+#     surfaced as a client-facing report banner + an advisor/admin chip so
+#     nobody mistakes a limited-data report for an authoritative one.
+#     MISSING_FIELD warnings (empty headline/about/industry/positions) are
+#     deliberately *excluded* — those are legitimate profile-completeness
+#     inputs the score is *supposed* to reflect, not a data limitation.
+#     INFO issues never surface.
+
+# CRITICAL issues in these categories block job creation at POST /jobs.
+BLOCKING_CATEGORIES: set[IssueCategory] = {IssueCategory.MISSING_FILE}
+
+# CRITICAL/WARNING issues in these categories mark a completed report as
+# data-limited (banner + chip). Excludes MISSING_FIELD and INFO-only noise.
+DATA_LIMITATION_CATEGORIES: set[IssueCategory] = {
+    IssueCategory.MISSING_FILE,
+    IssueCategory.EMPTY_DATA,
+    IssueCategory.PARSE_FAILURE,
+    IssueCategory.DATE_RANGE,
+}
+
+
 class QualityIssue(BaseModel):
     """A single data quality finding."""
     severity: IssueSeverity
@@ -74,6 +112,53 @@ class DataQualityReport(BaseModel):
     @property
     def issue_count(self) -> int:
         return len(self.issues)
+
+    # ---- ORPHEUS-88 quality-gate helpers ---------------------------------
+
+    def blocking_issues(self) -> list[QualityIssue]:
+        """CRITICAL issues that make the archive unusable (missing core CSV).
+
+        These reject the job at POST /jobs — a Basic archive or a corrupt
+        upload, not a measurement. An EMPTY_DATA critical (zero behavioral
+        rows on an otherwise-complete archive) is NOT blocking: it's a
+        valid low-signal report for a genuinely inactive member.
+        """
+        return [
+            i for i in self.issues
+            if i.severity == IssueSeverity.CRITICAL
+            and i.category in BLOCKING_CATEGORIES
+        ]
+
+    @property
+    def has_blocking_issue(self) -> bool:
+        return bool(self.blocking_issues())
+
+    def data_limitation_issues(self) -> list[QualityIssue]:
+        """CRITICAL/WARNING issues that mean the report rests on limited data.
+
+        Drives the client-facing report banner and the advisor/admin chip.
+        Excludes MISSING_FIELD (a legitimate profile-completeness score
+        input) and INFO (noise).
+        """
+        return [
+            i for i in self.issues
+            if i.severity in (IssueSeverity.CRITICAL, IssueSeverity.WARNING)
+            and i.category in DATA_LIMITATION_CATEGORIES
+        ]
+
+    @property
+    def is_data_limited(self) -> bool:
+        return bool(self.data_limitation_issues())
+
+    def data_limitation_notices(self) -> list[str]:
+        """Human-readable messages for the data-limited banner, dedup'd."""
+        seen: set[str] = set()
+        notices: list[str] = []
+        for i in self.data_limitation_issues():
+            if i.message not in seen:
+                seen.add(i.message)
+                notices.append(i.message)
+        return notices
 
     def summary(self) -> str:
         """One-line summary for logging."""

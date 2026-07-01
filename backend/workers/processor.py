@@ -588,6 +588,17 @@ async def run_pipeline(supabase, anthropic_client: Anthropic, job: dict):
         )
     supabase.table("scores").update(update_payload).eq("job_id", job_id).execute()
 
+    # ORPHEUS-88: denormalize the data-limited flag onto the job row so the
+    # reports list, advisor roster, and admin views can chip a limited-data
+    # report cheaply (no per-row quality_report JSONB read). The full notice
+    # text is served on the single-job GET /jobs/{id} path from
+    # ingested_data.quality_report. Blocking (missing-file) criticals never
+    # reach the worker — they're rejected at POST /jobs — so this reflects
+    # allowed-through EMPTY_DATA criticals + data-limitation warnings.
+    supabase.table("jobs").update(
+        {"data_limited": quality_report.is_data_limited}
+    ).eq("id", job_id).execute()
+
     # Mark job complete
     await update_job_status(supabase, job_id, "complete")
 

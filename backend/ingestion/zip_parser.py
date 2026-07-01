@@ -299,6 +299,54 @@ def _parse_reactions(rows: list[dict[str, str]]) -> list[ReactionItem]:
     return reactions
 
 
+def parse_archive_filename(
+    filename: str | None,
+) -> tuple[str | None, "date | None"]:
+    """Extract (archive_type, export_date) from a LinkedIn archive filename.
+
+    ORPHEUS-101: the LinkedIn export ZIP is named
+    ``Complete_LinkedInDataExport_MM-DD-YYYY.zip`` (or ``Basic_…``), which
+    carries both the Basic-vs-Complete flag and the export date directly —
+    a cleaner signal than inferring either from the ZIP contents.
+
+    Returns:
+        (archive_type, export_date) where
+          - archive_type is "basic", "complete", or None (prefix absent /
+            the file was renamed);
+          - export_date is a date parsed from the MM-DD-YYYY token, or None
+            (no token / unparseable).
+
+    Both fields are independently optional: the filename is user-renameable,
+    so its absence is normal and the caller falls back to content-based
+    checks. Case-insensitive; tolerant of a missing/other extension and of
+    surrounding path components.
+    """
+    from datetime import date, datetime
+
+    if not filename:
+        return None, None
+    # Strip any path and extension, normalize case.
+    stem = Path(filename).name
+    lower = stem.lower()
+
+    archive_type: str | None = None
+    if lower.startswith("basic_"):
+        archive_type = "basic"
+    elif lower.startswith("complete_"):
+        archive_type = "complete"
+
+    export_date: date | None = None
+    # MM-DD-YYYY anywhere in the name (e.g. ..._06-19-2026.zip).
+    m = re.search(r"(\d{1,2})-(\d{1,2})-(\d{4})", stem)
+    if m:
+        try:
+            export_date = datetime.strptime(m.group(0), "%m-%d-%Y").date()
+        except ValueError:
+            export_date = None
+
+    return archive_type, export_date
+
+
 def _check_date_parseable(date_str: str) -> bool:
     """Check if a date string is parseable by the scoring engine."""
     if not date_str or not date_str.strip():

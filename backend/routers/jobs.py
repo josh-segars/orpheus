@@ -20,16 +20,17 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
 from backend.auth import SessionRoles, get_current_session_roles
 from backend.db import get_service_client
-from backend.ingestion.xlsx_parser import parse_xlsx
-from backend.ingestion.zip_parser import parse_zip
+from backend.ingestion.xlsx_parser import latest_analytics_date, parse_xlsx
+from backend.ingestion.zip_parser import parse_archive_filename, parse_zip
 from backend.models.job import Job, JobSummary
+from backend.models.quality import DataQualityReport
 
 logger = logging.getLogger("orpheus.jobs")
 
@@ -49,6 +50,12 @@ _ANALYTICS_FILENAME = "analytics.xlsx"
 # archives push past them.
 _MAX_ARCHIVE_BYTES = 200 * 1024 * 1024  # 200 MB
 _MAX_ANALYTICS_BYTES = 25 * 1024 * 1024  # 25 MB
+
+# ORPHEUS-100: reject an upload whose analytics data ends more than this many
+# days before today — the client is re-uploading a stale export and the
+# report would be built on an old snapshot. LinkedIn analytics refreshes
+# continuously, so a fresh export ends within a day of today.
+_STALE_ARCHIVE_DAYS = 14
 
 
 @router.post("", response_model=Job, status_code=status.HTTP_201_CREATED)
@@ -156,6 +163,102 @@ async def create_job(
                 "delivered it from the Analytics → Export flow."
             ),
         ) from exc
+
+    # ── 2a. Filename signals (ORPHEUS-101) ─────────────────────────────
+    # The LinkedIn archive filename (Complete_LinkedInDataExport_MM-DD-YYYY
+    # .zip / Basic_…) carries the Basic-vs-Complete flag and the export date
+    # directly. It's the primary signal; the content-based gates below stay
+    # as the backstop for renamed files. Both fields are optional — a
+    # renamed upload yields (None, None) and falls through to content.
+
+    archive_type, filename_date = parse_archive_filename(archive.filename)
+
+    _BASIC_ARCHIVE_DETAIL = (
+        "This looks like LinkedIn's Basic data export — it leaves out your "
+        "posts, comments, and reactions, which we need to measure your "
+        "activity. Please request the Complete archive instead: "
+        "Settings → Data privacy → Get a copy of your data → "
+        "“Download larger data archive” (the option that can take up to 24 "
+        "hours). Upload that ZIP once it arrives."
+    )
+
+    if archive_type == "basic":
+        logger.info(
+            "Rejected job for client %s at filename gate: Basic archive "
+            "(%s)",
+            client_id,
+            archive.filename,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_BASIC_ARCHIVE_DETAIL,
+        )
+
+    # ── 2b. Quality gate (ORPHEUS-88) ──────────────────────────────────
+    # A Basic archive (or a corrupt one) parses fine but is missing the
+    # core CSVs — scoring it produces a confident-looking report on data
+    # that isn't a measurement. Reject those here with actionable guidance
+    # rather than let the worker deliver an authoritative-looking result.
+    # This is the content backstop for the filename check above (catches a
+    # renamed Basic archive). Only MISSING_FILE criticals block: a Complete
+    # archive from a genuinely inactive member trips the EMPTY_DATA critical
+    # instead and is allowed through as a valid low-signal report.
+
+    if quality_report.has_blocking_issue:
+        blocking_sources = {i.source for i in quality_report.blocking_issues()}
+        if "Shares.csv" in blocking_sources:
+            detail = _BASIC_ARCHIVE_DETAIL
+        else:
+            detail = (
+                "Your archive is missing core profile data, so we can't "
+                "score it. Please re-download the Complete archive from "
+                "Settings → Data privacy → Get a copy of your data "
+                "→ “Download larger data archive” and upload "
+                "the unmodified ZIP."
+            )
+        logger.info(
+            "Rejected job for client %s at quality gate: %s",
+            client_id,
+            quality_report.summary(),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=detail,
+        )
+
+    # ── 2c. Freshness gate (ORPHEUS-100 + ORPHEUS-101) ─────────────────
+    # Testers re-upload old exports; the report would then reflect a stale
+    # snapshot. Recency signal, in priority order:
+    #   1. the archive filename's export date (ORPHEUS-101) — LinkedIn's own
+    #      export/request stamp, the most direct "when was this downloaded";
+    #   2. the analytics XLSX's newest dated row (ORPHEUS-100) — a good proxy
+    #      since "Past 365 days" analytics refresh continuously (unlike the
+    #      ZIP's activity dates, which are old for an inactive member even in
+    #      a fresh export; ORPHEUS-91).
+    # Skip entirely when neither is available (renamed file + brand-new
+    # account with an empty analytics export).
+
+    export_date = filename_date or latest_analytics_date(xlsx_data)
+    if export_date is not None:
+        age_days = (datetime.now(timezone.utc).date() - export_date).days
+        if age_days > _STALE_ARCHIVE_DAYS:
+            logger.info(
+                "Rejected job for client %s at freshness gate: analytics "
+                "ends %s (%d days old)",
+                client_id,
+                export_date.isoformat(),
+                age_days,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "This export looks out of date — its most recent data is "
+                    f"from {export_date.strftime('%B %-d, %Y')}, more than two "
+                    "weeks ago. Please download fresh copies of both files "
+                    "from LinkedIn and upload those so your report reflects "
+                    "your current activity."
+                ),
+            )
 
     # ── 3. Mint the job row ────────────────────────────────────────────
 
@@ -302,7 +405,7 @@ async def list_jobs(
     # anti-pattern; bitten again on this endpoint's first deploy).
     jobs_result = (
         supabase.table("jobs")
-        .select("id,status,created_at")
+        .select("id,status,created_at,data_limited")
         .eq("client_id", client_id)
         .order("created_at", desc=True)
         .execute()
@@ -332,6 +435,7 @@ async def list_jobs(
             state=r["status"],
             created_at=r["created_at"],
             band=band_by_job.get(str(r["id"])),
+            data_limited=bool(r.get("data_limited")),
         )
         for r in rows
     ]
@@ -609,4 +713,49 @@ def _build_result_payload(supabase, job_id: str) -> dict | None:
             "dimension_narratives": dimension_narratives,
             "cheat_sheet": cheat_sheet,
         },
+        # ORPHEUS-88: data-limited notice for the client report banner.
+        # Read from the stored quality_report on this single-job path (one
+        # extra read is fine here; the list/roster surfaces use the cheap
+        # denormalized jobs.data_limited flag instead). Absent/unparseable
+        # → data_limited: false with no notices (graceful, never 500s).
+        "quality": _build_quality_summary(supabase, job_id),
     }
+
+
+def _build_quality_summary(supabase, job_id: str) -> dict:
+    """Summarize a completed job's data-quality report for the client banner.
+
+    Returns `{data_limited: bool, notices: list[str]}`. Reads the stored
+    ingested_data.quality_report JSONB and reuses the DataQualityReport
+    classification helpers so the banner and the denormalized
+    jobs.data_limited flag can never disagree on the definition. Any
+    failure (missing row, unparseable JSONB) degrades to not-limited —
+    the report still renders; we just don't show the banner.
+    """
+    default = {"data_limited": False, "notices": []}
+    try:
+        row = (
+            supabase.table("ingested_data")
+            .select("quality_report")
+            .eq("job_id", job_id)
+            .limit(1)
+            .execute()
+        )
+        if not row.data:
+            return default
+        raw = row.data[0].get("quality_report")
+        if not raw:
+            return default
+        report = DataQualityReport.model_validate(raw)
+        return {
+            "data_limited": report.is_data_limited,
+            "notices": report.data_limitation_notices(),
+        }
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(
+            "Job %s quality_report summary failed (%s); "
+            "serving no banner.",
+            job_id,
+            exc,
+        )
+        return default

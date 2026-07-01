@@ -87,6 +87,14 @@ function ReportRow({ job }: { job: JobSummary }) {
             {job.band}
           </span>
         )}
+        {job.data_limited && (
+          <span
+            className="report-status-chip report-limited-chip"
+            title="This report was generated from incomplete data."
+          >
+            Limited data
+          </span>
+        )}
         <span className="report-row-action">View report &rsaquo;</span>
       </Link>
     )

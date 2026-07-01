@@ -18,7 +18,9 @@ from __future__ import annotations
 import io
 import zipfile
 
-from backend.ingestion.zip_parser import _read_csv_from_zip
+from datetime import date
+
+from backend.ingestion.zip_parser import _read_csv_from_zip, parse_archive_filename
 
 MEMBER_ID = "181682616"
 CSV_BODY = "Date,ShareLink,ShareCommentary\n2026-06-01,https://x,Hello\n"
@@ -102,3 +104,60 @@ def test_longer_basename_does_not_match():
 def test_missing_file_returns_empty():
     zf = _zip_with("Connections.csv")
     assert _read_csv_from_zip(zf, "Shares.csv") == []
+
+
+# --------------------------------------------------------------------------- #
+# parse_archive_filename — ORPHEUS-101
+# --------------------------------------------------------------------------- #
+#
+# Real format (Josh, 2026-07-01): Complete_LinkedInDataExport_06-19-2026.zip.
+# Both fields independently optional; the filename is user-renameable.
+
+
+def test_filename_complete_with_date():
+    assert parse_archive_filename(
+        "Complete_LinkedInDataExport_06-19-2026.zip"
+    ) == ("complete", date(2026, 6, 19))
+
+
+def test_filename_basic_with_date():
+    assert parse_archive_filename(
+        "Basic_LinkedInDataExport_01-02-2026.zip"
+    ) == ("basic", date(2026, 1, 2))
+
+
+def test_filename_case_insensitive_prefix():
+    t, d = parse_archive_filename("complete_linkedindataexport_06-19-2026.zip")
+    assert t == "complete"
+    assert d == date(2026, 6, 19)
+
+
+def test_filename_nested_path_uses_basename():
+    t, d = parse_archive_filename(
+        "/Users/x/Downloads/Complete_LinkedInDataExport_06-19-2026.zip"
+    )
+    assert t == "complete"
+    assert d == date(2026, 6, 19)
+
+
+def test_filename_renamed_yields_no_signals():
+    assert parse_archive_filename("my linkedin data.zip") == (None, None)
+
+
+def test_filename_complete_without_date():
+    assert parse_archive_filename("Complete_LinkedInDataExport.zip") == (
+        "complete",
+        None,
+    )
+
+
+def test_filename_invalid_date_ignored():
+    # 13-40 isn't a real month/day → date is None, type still resolves.
+    assert parse_archive_filename(
+        "Complete_LinkedInDataExport_13-40-2026.zip"
+    ) == ("complete", None)
+
+
+def test_filename_none_or_empty():
+    assert parse_archive_filename(None) == (None, None)
+    assert parse_archive_filename("") == (None, None)

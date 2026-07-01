@@ -21,7 +21,12 @@ export interface AdvisorClient {
   email: string
   invitation_status: 'pending' | 'accepted' | 'expired'
   is_self: boolean
-  latest_job: { id: string; status: 'pending' | 'running' | 'complete' | 'failed' } | null
+  latest_job: {
+    id: string
+    status: 'pending' | 'running' | 'complete' | 'failed'
+    // ORPHEUS-88: completed on incomplete/degraded data — chip the roster row.
+    data_limited?: boolean
+  } | null
 }
 
 /**

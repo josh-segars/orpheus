@@ -163,6 +163,13 @@
   color: var(--text-muted);
 }
 
+/* ORPHEUS-88: limited-data chip (internal operator signal). */
+.admin-chip-limited {
+  color: var(--issue);
+  border-color: var(--issue);
+  margin-left: 4px;
+}
+
 .admin-job-error {
   display: inline-block;
   margin-left: 8px;

@@ -7,9 +7,20 @@ import type { Narratives, ScoringStageOutput } from './scoring'
 
 export type JobState = 'pending' | 'running' | 'complete' | 'failed'
 
+/**
+ * ORPHEUS-88: data-limited notice for the report banner. `notices` are the
+ * human-readable quality messages behind the flag. Absent on pre-88 jobs —
+ * treat a missing block as not-limited.
+ */
+export interface ReportQuality {
+  data_limited: boolean
+  notices: string[]
+}
+
 export interface JobResultPayload {
   scoring: ScoringStageOutput
   narratives: Narratives
+  quality?: ReportQuality
 }
 
 export interface Job {
@@ -34,4 +45,6 @@ export interface JobSummary {
   state: JobState
   created_at: string
   band: string | null
+  /** ORPHEUS-88: completed on incomplete/degraded data. Chip on the list. */
+  data_limited?: boolean
 }

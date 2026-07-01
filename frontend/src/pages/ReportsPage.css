@@ -91,6 +91,15 @@
   color: var(--issue);
 }
 
+/* ORPHEUS-88: limited-data chip on a completed report that rested on
+   incomplete/degraded data. Uses the issue tone but with a tinted fill
+   so it reads as a caution alongside the band chip, not a failure. */
+.report-limited-chip {
+  border: 1px solid var(--issue);
+  background: rgba(191, 41, 35, 0.08);
+  color: var(--issue);
+}
+
 /* Band chips take their band's spectrum pip color with the dark
    knockout text — same mapping as the report page band pills
    (ORPHEUS-70): Dissonant→pip-1 … Resonant→pip-5. */

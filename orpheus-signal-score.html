@@ -92,6 +92,39 @@
       margin-bottom: 4px;
     }
 
+    /* ── Data-limited banner (ORPHEUS-88) ──────────────────── */
+    .quality-banner {
+      border: 1px solid var(--issue);
+      border-left-width: 4px;
+      border-radius: 10px;
+      background-color: rgba(191, 41, 35, 0.08);
+      padding: 16px 20px;
+      margin-bottom: 4px;
+    }
+    .quality-banner-heading {
+      font-family: 'Source Sans 3', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      color: var(--text-strong);
+      margin-bottom: 6px;
+    }
+    .quality-banner-body {
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--text-body);
+      margin: 0;
+    }
+    .quality-banner-list {
+      margin: 10px 0 0;
+      padding-left: 20px;
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .quality-banner-list li {
+      margin-bottom: 4px;
+    }
+
     /* ── Dimensions grid ────────────────────────────────────── */
     .dimensions-grid {
       display: grid;
@@ -491,6 +524,22 @@
           Tuning<span class="sr-only"> — composite score 58 of 100</span>
         </h1>
       </div>
+    </section>
+
+    <!-- Data-limited banner (ORPHEUS-88) — renders only when the report
+         rested on incomplete/degraded data. Shown here as the design
+         reference; a healthy report omits it. -->
+    <section class="quality-banner" role="note" aria-label="Data limitations">
+      <div class="quality-banner-heading">This report is based on limited data</div>
+      <p class="quality-banner-body">
+        We generated your report from the LinkedIn data you provided, but some
+        of it was incomplete — so parts of your signal may be understated.
+        Running a new report with a complete data export (and after more
+        LinkedIn activity) will give you a fuller picture.
+      </p>
+      <ul class="quality-banner-list">
+        <li>No behavioral data found (zero posts, comments, and reactions) — Dimensions 2, 3, and 4 cannot be scored meaningfully</li>
+      </ul>
     </section>
 
     <div class="section-header signal-section-header">

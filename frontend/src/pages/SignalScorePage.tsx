@@ -126,6 +126,15 @@ export function SignalScorePage() {
         </div>
       </section>
 
+      {/* Data-limited banner (ORPHEUS-88) — renders when the report rested
+          on incomplete/degraded LinkedIn data (e.g. no behavioral activity
+          in the export, or optional files missing). A Basic/corrupt archive
+          is rejected upstream at POST /jobs, so this only fires for reports
+          that are genuine but low-confidence. */}
+      {job.result.quality?.data_limited && (
+        <QualityBanner notices={job.result.quality.notices} />
+      )}
+
       {/* Dimensions */}
       <div className="section-header signal-section-header">
         <div className="section-eyebrow">Dimensions</div>
@@ -165,6 +174,36 @@ export function SignalScorePage() {
 }
 
 // --- Pieces ---------------------------------------------------------------
+
+/**
+ * Data-limited notice banner (ORPHEUS-88). Shown above the dimensions when
+ * the report was produced on incomplete or degraded LinkedIn data. Frames
+ * the report as still-useful-but-lower-confidence and points at the fix
+ * (re-run with the Complete archive / after more activity). The specific
+ * quality messages are listed so the client knows exactly what was limited.
+ */
+function QualityBanner({ notices }: { notices: string[] }) {
+  return (
+    <section className="quality-banner" role="note" aria-label="Data limitations">
+      <div className="quality-banner-heading">
+        This report is based on limited data
+      </div>
+      <p className="quality-banner-body">
+        We generated your report from the LinkedIn data you provided, but some
+        of it was incomplete — so parts of your signal may be understated.
+        Running a new report with a complete data export (and after more
+        LinkedIn activity) will give you a fuller picture.
+      </p>
+      {notices.length > 0 && (
+        <ul className="quality-banner-list">
+          {notices.map((n, i) => (
+            <li key={i}>{n}</li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
 
 interface DimensionCardProps {
   dimension: DimensionScore

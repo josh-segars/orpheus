@@ -131,16 +131,20 @@ def _patch_supabase(fake: FakeSupabase):
     return patch.object(jobs_router, "get_service_client", return_value=fake)
 
 
-def _job_row(*, job_id: str, status_value: str) -> dict[str, Any]:
+def _job_row(
+    *, job_id: str, status_value: str, data_limited: bool = False
+) -> dict[str, Any]:
     # Mirrors the live jobs schema: created_at / started_at / completed_at,
     # NO updated_at. The first version of this fixture invented an
     # updated_at column the handler then selected — and 500'd in prod
     # (ORPHEUS-59/61 anti-pattern: fixtures must match what the DB
     # actually has, not what the handler wishes it had).
+    # data_limited: ORPHEUS-88 denormalized flag on the job row.
     return {
         "id": job_id,
         "status": status_value,
         "created_at": "2026-06-12T00:00:00+00:00",
+        "data_limited": data_limited,
     }
 
 
@@ -157,7 +161,11 @@ async def test_list_jobs_joins_band_onto_complete_rows():
             {
                 "data": [
                     _job_row(job_id=JOB_RUNNING_ID, status_value="running"),
-                    _job_row(job_id=JOB_COMPLETE_ID, status_value="complete"),
+                    _job_row(
+                        job_id=JOB_COMPLETE_ID,
+                        status_value="complete",
+                        data_limited=True,
+                    ),
                     _job_row(job_id=JOB_FAILED_ID, status_value="failed"),
                 ]
             },
@@ -176,6 +184,8 @@ async def test_list_jobs_joins_band_onto_complete_rows():
     ]
     assert [r.band for r in result] == [None, "Tuned", None]
     assert [r.state for r in result] == ["running", "complete", "failed"]
+    # ORPHEUS-88: the denormalized data_limited flag rides each summary row.
+    assert [r.data_limited for r in result] == [False, True, False]
     assert fake.tables_queried == ["jobs", "scores"]
 
 

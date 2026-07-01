@@ -371,6 +371,13 @@
   color: var(--issue);
 }
 
+/* ORPHEUS-88: limited-data chip sits beside a "Report ready" chip when the
+   completed report rested on incomplete/degraded data. */
+.advisor-chip-limited {
+  background: rgba(191, 41, 35, 0.12);
+  color: var(--issue);
+}
+
 /* ── Row action buttons ──────────────────────────────────────── */
 .advisor-row-action {
   display: inline-flex;

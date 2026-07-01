@@ -11,7 +11,7 @@ Dependencies: openpyxl (in requirements.txt)
 
 import io
 import logging
-from datetime import datetime
+from datetime import date, datetime
 
 import openpyxl
 
@@ -226,6 +226,63 @@ def _parse_demographics(ws) -> DemographicsData:
         locations=locations,
         industries=industries,
     )
+
+
+def _parse_iso_date(value: str) -> date | None:
+    """Parse a 'YYYY-MM-DD' string (as emitted by _parse_date_cell)."""
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value.strip(), "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_period_end(period: str) -> date | None:
+    """Extract the end date from a DISCOVERY period string.
+
+    Format is 'M/D/YYYY - M/D/YYYY' (e.g. '3/17/2025 - 3/16/2026'); the
+    second date is the export's coverage end, which for LinkedIn's
+    continuously-refreshed analytics is ~the export date. Returns None if
+    the string doesn't split/parse.
+    """
+    if not period or " - " not in period:
+        return None
+    tail = period.rsplit(" - ", 1)[-1].strip()
+    try:
+        return datetime.strptime(tail, "%m/%d/%Y").date()
+    except (ValueError, TypeError):
+        return None
+
+
+def latest_analytics_date(xlsx_data: XlsxData) -> date | None:
+    """Newest date the analytics export covers — an export-freshness signal.
+
+    ORPHEUS-100: used by the POST /jobs freshness gate to reject stale
+    uploads. LinkedIn's analytics ("Past 365 days") refreshes continuously
+    — impressions and followers accrue daily regardless of whether the
+    member posts — so the newest ENGAGEMENT/FOLLOWERS daily-row date tracks
+    *export time*, unlike the ZIP's behavioral-activity dates (which are old
+    for an inactive member even in a fresh export — the ORPHEUS-91 pitfall).
+
+    Takes the max across the ENGAGEMENT and FOLLOWERS daily series, falling
+    back to the DISCOVERY period-end string when the daily rows carry no
+    parseable dates. Returns None when nothing is parseable (e.g. a
+    brand-new account with an empty analytics export) — the caller then
+    skips the freshness check rather than guessing.
+    """
+    candidates: list[date] = []
+    for row in xlsx_data.engagement:
+        d = _parse_iso_date(row.date)
+        if d is not None:
+            candidates.append(d)
+    for row in xlsx_data.followers.rows:
+        d = _parse_iso_date(row.date)
+        if d is not None:
+            candidates.append(d)
+    if candidates:
+        return max(candidates)
+    return _parse_period_end(xlsx_data.discovery.period)
 
 
 def parse_xlsx(xlsx_bytes: bytes) -> XlsxData:
