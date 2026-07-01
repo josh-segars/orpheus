@@ -190,7 +190,7 @@ async def create_job(
             archive.filename,
         )
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=_BASIC_ARCHIVE_DETAIL,
         )
 
@@ -222,7 +222,7 @@ async def create_job(
             quality_report.summary(),
         )
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=detail,
         )
 
@@ -250,7 +250,7 @@ async def create_job(
                 age_days,
             )
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=(
                     "This export looks out of date — its most recent data is "
                     f"from {export_date.strftime('%B %-d, %Y')}, more than two "
