@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orpheus Social — Tune your professional signal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,500;0,8..60,700;0,8..60,900;1,8..60,700;1,8..60,900&family=Source+Sans+3:ital,wght@0,400;0,600;1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="orpheus-styles.css">
+  <style>
+    /* Marketing landing page (ORPHEUS-8). Mirror of frontend LandingPage.css —
+       keep the two in sync per the prototype-is-visual-source-of-truth contract. */
+    .landing { width: 100%; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
+    .landing-nav-actions { display: flex; align-items: center; gap: 22px; }
+    .landing-nav-signin { font-family: 'Source Sans 3', sans-serif; font-size: 15px; font-weight: 600; color: var(--text-strong); text-decoration: none; white-space: nowrap; }
+    .landing-nav-signin:hover { color: var(--accent); }
+    .landing-main { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 96px; padding: 40px 20px 120px; }
+    .landing-hero { width: 100%; max-width: 820px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 22px; padding-top: 48px; }
+    .landing-hero-title { font-family: 'Source Serif 4', serif; font-size: 68px; font-weight: 900; font-variation-settings: 'opsz' 60; color: var(--text-strong); line-height: 1.02; margin: 0; }
+    .landing-hero-title em { font-style: italic; color: var(--accent); }
+    .landing-hero-title-lead { display: inline-block; font-size: 40px; font-weight: 400; font-variation-settings: 'opsz' 40; line-height: 1.1; }
+    .landing-hero-sub { font-family: 'Source Sans 3', sans-serif; font-size: 19px; font-weight: 400; color: var(--text-muted); line-height: 1.6; max-width: 640px; margin: 0; }
+    .landing-hero-actions { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-top: 10px; }
+    .hero-anim { position: relative; width: 100%; display: flex; justify-content: center; align-items: center; margin-top: 72px; min-height: 520px; overflow: visible; }
+    .hero-anim-glow { position: absolute; top: 50%; left: 50%; width: 1200px; max-width: 96vw; height: 760px; transform: translate(-50%, -50%); z-index: 0; background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(0,163,236,0.3), rgba(37,205,101,0.14) 46%, rgba(191,41,120,0.16) 68%, rgba(0,8,14,0) 84%); filter: blur(44px); opacity: 0.4; pointer-events: none; }
+    .hero-anim-ambient { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 980px; max-width: 94vw; height: 680px; border-radius: 50%; background-image: url(assets/images/animation-screen.jpg); background-repeat: no-repeat; background-size: cover; background-position: 50% 0%; filter: blur(66px) saturate(1.7) brightness(1.1); opacity: 0.45; z-index: 0; pointer-events: none; }
+    .hero-anim-stage { perspective: 2800px; perspective-origin: 50% 50%; transform: scale(0.8); }
+    .hero-laptop { position: relative; width: 0; height: 0; transform-style: preserve-3d; }
+    .hero-laptop-static { transform: translateY(56px) rotateX(3deg) rotateY(0deg) scale(1.06); }
+    .hero-screen-panel { position: absolute; left: -268px; top: -160px; width: 536px; height: 320px; transform-style: preserve-3d; }
+    .hero-screen-back { position: absolute; left: 50%; top: 50%; width: 536px; height: 320px; transform: translate(-50%,-50%) translateZ(-3px); background: linear-gradient(160deg,#0d1822,#060e15); border: 1px solid #2b3742; border-radius: 14px; box-shadow: 0 18px 44px rgba(0,0,0,0.4); }
+    .hero-screen-edge { position: absolute; left: 50%; top: 50%; border-radius: 3px; }
+    .hero-screen-edge-l { width: 6px; height: 292px; transform: translate(-50%,-50%) rotateY(-90deg) translateZ(268px); background: linear-gradient(90deg,#3a4753,#161f28); }
+    .hero-screen-edge-r { width: 6px; height: 292px; transform: translate(-50%,-50%) rotateY(90deg) translateZ(268px); background: linear-gradient(90deg,#161f28,#3a4753); }
+    .hero-screen-edge-t { width: 508px; height: 6px; transform: translate(-50%,-50%) rotateX(90deg) translateZ(160px); background: linear-gradient(180deg,#3f4c58,#1a242d); }
+    .hero-screen-edge-b { width: 508px; height: 6px; transform: translate(-50%,-50%) rotateX(-90deg) translateZ(160px); background: linear-gradient(180deg,#1a242d,#2f3a44); }
+    .hero-screen-front { position: absolute; left: 50%; top: 50%; width: 536px; height: 320px; transform: translate(-50%,-50%) translateZ(3px); transform-style: preserve-3d; background: linear-gradient(155deg,#1a2836,#0b151e 55%,#050d15); border: 1px solid #4d5c69; border-radius: 14px; padding: 16px 16px 26px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), inset 0 -1px 0 rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.04); backface-visibility: hidden; }
+    .hero-screen-cam { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); width: 7px; height: 7px; border-radius: 50%; background: #233340; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06); }
+    .hero-screen-brand { position: absolute; left: 0; right: 0; bottom: 7px; text-align: center; font-family: 'Source Serif 4', serif; font-size: 10px; font-weight: 900; letter-spacing: 0.5px; color: rgba(145,167,175,0.5); }
+    .hero-screen-window { position: absolute; inset: 16px 16px 26px; overflow: hidden; border-radius: 4px; background: var(--bg-page); border: 1px solid #364048; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.7), inset 0 0 22px rgba(0,0,0,0.55); }
+    .hero-screen-img { position: absolute; top: 0; left: 0; width: 100%; height: auto; display: block; }
+    .hero-screen-gloss { position: absolute; inset: 16px 16px 26px; border-radius: 4px; pointer-events: none; background: linear-gradient(118deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.03) 18%, rgba(255,255,255,0) 40%); }
+    .landing-section { width: 100%; max-width: 1000px; display: flex; flex-direction: column; gap: 28px; }
+    .landing-body { font-family: 'Source Serif 4', serif; font-size: 21px; font-weight: 400; font-variation-settings: 'opsz' 20; color: var(--text-strong); line-height: 1.6; max-width: 760px; margin: 0; }
+    .landing-body em { font-style: italic; color: var(--accent); font-weight: 600; }
+    .landing-fineprint { font-family: 'Source Sans 3', sans-serif; font-size: 14px; color: var(--text-muted); line-height: 1.6; max-width: 720px; margin: 0; }
+    .landing-dimensions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .landing-dimension { border: 1px solid var(--border); border-radius: 10px; padding: 22px 24px; display: flex; flex-direction: column; gap: 8px; }
+    .landing-dimension-name { font-family: 'Source Serif 4', serif; font-size: 20px; font-weight: 700; font-variation-settings: 'opsz' 20; color: var(--text-strong); }
+    .landing-dimension-blurb { font-family: 'Source Sans 3', sans-serif; font-size: 15px; color: var(--text-muted); line-height: 1.55; margin: 0; }
+    .landing-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .landing-step { border: 1px solid var(--border); border-radius: 10px; padding: 26px 24px; display: flex; flex-direction: column; gap: 12px; }
+    .landing-step-num { width: 34px; height: 34px; border-radius: 50%; background-color: var(--accent-tint-soft); color: var(--accent); border: 1px solid var(--accent); display: flex; align-items: center; justify-content: center; font-family: 'Source Sans 3', sans-serif; font-size: 15px; font-weight: 600; }
+    .landing-step-title { font-family: 'Source Serif 4', serif; font-size: 20px; font-weight: 700; font-variation-settings: 'opsz' 20; color: var(--text-strong); }
+    .landing-step-body { font-family: 'Source Sans 3', sans-serif; font-size: 15px; color: var(--text-muted); line-height: 1.6; margin: 0; }
+    .landing-pricing-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; align-items: stretch; }
+    .landing-pricing-card { border: 1px solid var(--border); border-radius: 10px; padding: 40px; display: flex; flex-direction: column; align-items: flex-start; gap: 18px; background-color: var(--surface-elevated); }
+    .landing-pricing-tag { font-family: 'Source Sans 3', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); border: 1px solid var(--accent); border-radius: 10px; padding: 5px 12px; }
+    .landing-pricing-lead { font-family: 'Source Serif 4', serif; font-size: 22px; font-weight: 400; color: var(--text-strong); line-height: 1.5; margin: 0; }
+    .landing-pricing-body { font-family: 'Source Sans 3', sans-serif; font-size: 16px; color: var(--text-muted); line-height: 1.65; margin: 0; }
+    .landing-waitlist { max-width: 640px; }
+    .landing-waitlist-form { display: flex; flex-direction: column; gap: 18px; }
+    .landing-waitlist-names { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .landing-waitlist-field { display: flex; flex-direction: column; gap: 6px; }
+    .landing-waitlist-label { font-family: 'Source Sans 3', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+    .landing-waitlist-input { width: 100%; min-width: 0; font-family: 'Source Sans 3', sans-serif; font-size: 16px; color: var(--text-strong); background-color: var(--surface-elevated); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
+    .landing-waitlist-input::placeholder { color: var(--text-muted); }
+    .landing-waitlist-input:focus { outline: none; border-color: var(--accent); }
+    .landing-waitlist-interest { border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+    .landing-waitlist-interest .landing-waitlist-label { padding: 0; margin-bottom: 2px; }
+    .landing-checkbox { display: flex; align-items: center; gap: 10px; font-family: 'Source Sans 3', sans-serif; font-size: 16px; color: var(--text-strong); cursor: pointer; }
+    .landing-checkbox input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+    .landing-waitlist-submit { align-self: flex-start; padding: 12px 28px; cursor: pointer; }
+    .landing-waitlist-note { font-family: 'Source Sans 3', sans-serif; font-size: 13px; color: var(--text-muted); margin: 4px 0 0; }
+    @media (max-width: 720px) {
+      .landing-hero-title { font-size: 46px; }
+      .hero-anim { min-height: 360px; margin-top: 44px; }
+      .landing-dimensions, .landing-steps, .landing-pricing-cards, .landing-waitlist-names { grid-template-columns: 1fr; }
+      .landing-main { gap: 72px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="landing">
+
+    <nav class="nav landing-nav">
+      <div class="wordmark">
+        <span class="wordmark-orpheus">Orpheus</span>
+        <span class="wordmark-social">Social</span>
+      </div>
+      <div class="landing-nav-actions">
+        <a class="landing-nav-signin" href="https://app.orpheussocial.com/login">Sign in</a>
+        <a class="btn-primary" href="#waitlist">Express Interest</a>
+      </div>
+    </nav>
+
+    <main class="landing-main">
+
+      <section class="landing-hero">
+        <span class="section-eyebrow">Presence, authentically interpreted</span>
+        <h1 class="landing-hero-title"><span class="landing-hero-title-lead">Experience Speaks</span><br>Make Yours <em>Sing</em></h1>
+        <p class="landing-hero-sub">Orpheus Social understands how your online presence is interpreted and shows you exactly how to make it resonate. Not vanity metrics or vague analytics. A clear diagnostic and a plan.</p>
+        <div class="landing-hero-actions">
+          <a class="btn-primary" href="#waitlist">Express Interest</a>
+          <a class="btn-secondary" href="#about">See how it works</a>
+        </div>
+
+        <!-- Hero animation (faithful port of Claude Design "Signal Hero"). The
+             React app scroll-links the panel's rotation + scrolls the on-screen
+             report; the JS-free prototype shows the settled centered pose. -->
+        <div class="hero-anim" aria-hidden="true">
+          <div class="hero-anim-glow"></div>
+          <div class="hero-anim-ambient"></div>
+          <div class="hero-anim-stage">
+            <div class="hero-laptop hero-laptop-static">
+              <div class="hero-screen-panel">
+                <div class="hero-screen-back"></div>
+                <div class="hero-screen-edge hero-screen-edge-l"></div>
+                <div class="hero-screen-edge hero-screen-edge-r"></div>
+                <div class="hero-screen-edge hero-screen-edge-t"></div>
+                <div class="hero-screen-edge hero-screen-edge-b"></div>
+                <div class="hero-screen-front">
+                  <span class="hero-screen-cam"></span>
+                  <div class="hero-screen-window">
+                    <img class="hero-screen-img" src="assets/images/animation-screen.jpg" alt="">
+                  </div>
+                  <div class="hero-screen-gloss"></div>
+                  <span class="hero-screen-brand">Orpheus</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="landing-section" id="about">
+        <div class="section-header">
+          <span class="section-eyebrow">What it is</span>
+          <h2 class="section-title">A diagnostic for how you come across</h2>
+        </div>
+        <p class="landing-body">Your online presence is constantly being read by the systems that decide what to surface and by the people those systems reach. Orpheus Social analyzes your profile and activity and tells you how strong and coherent your presence is, on a scale from <em>dissonant</em> to <em>resonant</em>. Then it hands you a specific plan to help match your goals with the patterns and behaviors that drive resonance.</p>
+        <div class="landing-dimensions">
+          <div class="landing-dimension"><div class="landing-dimension-name">Profile Clarity</div><p class="landing-dimension-blurb">Does your profile give a clear, accurate read of who you are and what you do?</p></div>
+          <div class="landing-dimension"><div class="landing-dimension-name">Signal Strength</div><p class="landing-dimension-blurb">Have you built enough recent, consistent activity to register at all?</p></div>
+          <div class="landing-dimension"><div class="landing-dimension-name">Signal Quality</div><p class="landing-dimension-blurb">Are you doing the kinds of things that actually carry weight, not just noise?</p></div>
+          <div class="landing-dimension"><div class="landing-dimension-name">Alignment</div><p class="landing-dimension-blurb">Does what you post line up with the professional identity your profile claims?</p></div>
+        </div>
+        <p class="landing-fineprint">Orpheus Social is a diagnostic and a coaching tool designed to help you take meaningful action to improve your overall online presence. Outcomes will vary based on your goals, your current presence, and the effort you put in.</p>
+      </section>
+
+      <section class="landing-section" id="how">
+        <div class="section-header">
+          <span class="section-eyebrow">How it works</span>
+          <h2 class="section-title">Three steps, one clear picture</h2>
+        </div>
+        <div class="landing-steps">
+          <div class="landing-step"><div class="landing-step-num">1</div><div class="landing-step-title">Groundwork</div><p class="landing-step-body">Answer a short questionnaire and share an export of your LinkedIn profile. That is everything we need to begin.</p></div>
+          <div class="landing-step"><div class="landing-step-num">2</div><div class="landing-step-title">Your Report</div><p class="landing-step-body">We measure how your professional presence is being interpreted across four dimensions — a precise picture of where you stand.</p></div>
+          <div class="landing-step"><div class="landing-step-num">3</div><div class="landing-step-title">Quick Reference Card</div><p class="landing-step-body">Your report becomes a prioritized, specific plan: the exact moves that make your presence reflect the credibility you have earned.</p></div>
+        </div>
+      </section>
+
+      <section class="landing-section" id="pricing">
+        <div class="section-header">
+          <span class="section-eyebrow">Pricing</span>
+          <h2 class="section-title">Currently in closed beta</h2>
+        </div>
+        <div class="landing-pricing-cards">
+          <div class="landing-pricing-card">
+            <span class="landing-pricing-tag">Invitation only</span>
+            <p class="landing-pricing-lead">Closed Beta</p>
+            <p class="landing-pricing-body">We are onboarding a small group of members and refining the experience with them directly. Plans and pricing will be announced as we open up more broadly — join the waitlist and we will reach out with an invitation and early details.</p>
+          </div>
+          <div class="landing-pricing-card">
+            <span class="landing-pricing-tag">Pre-release &middot; 4 weeks</span>
+            <p class="landing-pricing-lead">Live Workshop</p>
+            <p class="landing-pricing-body">A four-week live program for a small group of individuals with similar backgrounds, looking for personal, hands-on guidance to improve their online presence together. Currently pre-release — express your interest and we will share the details as it takes shape.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="landing-section landing-waitlist" id="waitlist">
+        <div class="section-header">
+          <span class="section-eyebrow">Get early access</span>
+          <h2 class="section-title">Express Interest</h2>
+        </div>
+        <form class="landing-waitlist-form" onsubmit="return false;">
+          <div class="landing-waitlist-names">
+            <div class="landing-waitlist-field">
+              <label class="landing-waitlist-label" for="waitlist-first-name">First Name</label>
+              <input id="waitlist-first-name" class="landing-waitlist-input" type="text" autocomplete="given-name">
+            </div>
+            <div class="landing-waitlist-field">
+              <label class="landing-waitlist-label" for="waitlist-last-name">Last Name</label>
+              <input id="waitlist-last-name" class="landing-waitlist-input" type="text" autocomplete="family-name">
+            </div>
+          </div>
+          <div class="landing-waitlist-field">
+            <label class="landing-waitlist-label" for="waitlist-email">Email Address</label>
+            <input id="waitlist-email" class="landing-waitlist-input" type="email" placeholder="you@company.com" autocomplete="email">
+          </div>
+          <fieldset class="landing-waitlist-interest">
+            <legend class="landing-waitlist-label">I&rsquo;m interested in</legend>
+            <label class="landing-checkbox"><input type="checkbox"> <span>Beta Access</span></label>
+            <label class="landing-checkbox"><input type="checkbox"> <span>Live Workshop</span></label>
+          </fieldset>
+          <button type="submit" class="btn-primary landing-waitlist-submit">Express Interest</button>
+          <p class="landing-waitlist-note">We&rsquo;ll only use your details to contact you about Orpheus Social.</p>
+        </form>
+      </section>
+
+    </main>
+
+    <footer class="footer landing-footer">
+      <div class="wordmark-sm">
+        <span class="wordmark-sm-orpheus">Orpheus</span>
+        <span class="wordmark-sm-social">Social</span>
+      </div>
+      <div class="footer-links">
+        <a href="https://app.orpheussocial.com/login">Sign in</a>
+        <a href="#">Terms of Service</a>
+        <a href="#">Confidentiality</a>
+        <span>Copyright &copy; 2026 All Rights Reserved.</span>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- Hero animation driver (ported from Claude Design "Signal Hero"). The
+       React app runs the equivalent in a useEffect; the marketing prototype
+       needs this small script since the animation is inherently JS-driven.
+       Scroll-linked: the source's 0→1 timeline is driven by the panel's
+       transit through the viewport, matching production. -->
+  <script>
+  (function () {
+    var wrap = document.querySelector('.hero-anim');
+    var laptop = document.querySelector('.hero-laptop');
+    if (!wrap || !laptop) return;
+    var glow = document.querySelector('.hero-anim-glow');
+    var ambient = document.querySelector('.hero-anim-ambient');
+    var img = document.querySelector('.hero-screen-img');
+    var RANGE = 50, HOLD = 0.2;
+    function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
+    // Quintic smootherstep — zero 1st AND 2nd derivative at both ends.
+    function ease(x) { x = clamp(x, 0, 1); return x * x * x * (x * (x * 6 - 15) + 10); }
+    function render(p) {
+      var a0 = 0.5 - HOLD / 2, a1 = 0.5 + HOLD / 2, angle;
+      if (p < a0) angle = RANGE * (1 - ease(p / a0));
+      else if (p > a1) angle = -RANGE * ease((p - a1) / (1 - a1));
+      else angle = 0;
+      var c = 1 - Math.abs(angle) / RANGE;
+      var scale = 0.9 + c * 0.16, tilt = 5 - c * 2, ty = 14 - c * 28;
+      laptop.style.transform = 'translateY(' + ty + 'px) rotateX(' + tilt + 'deg) rotateY(' + angle + 'deg) scale(' + scale + ')';
+      var frac = ease(p);
+      if (glow) glow.style.opacity = 0.28 + 0.28 * c;
+      if (ambient) { ambient.style.opacity = 0.34 + 0.28 * c; ambient.style.backgroundPositionY = (frac * 100) + '%'; }
+      if (img && img.offsetHeight) {
+        var parent = img.parentElement;
+        var maxScroll = img.offsetHeight - (parent ? parent.clientHeight : 0);
+        if (maxScroll > 0) img.style.transform = 'translateY(' + (-maxScroll * frac) + 'px)';
+      }
+    }
+    var stage = document.querySelector('.hero-anim-stage');
+    var PANEL_W = 536;
+    function layout() {
+      if (!stage) return;
+      var w = wrap.clientWidth || PANEL_W;
+      var s = clamp((0.9 * w) / PANEL_W, 0.4, 1.6);
+      stage.style.transform = 'scale(' + s + ')';
+    }
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { layout(); render(0.5); return; }
+    var DISTANCE = 800, raf = 0;
+    function update() {
+      raf = 0;
+      var y = window.scrollY || document.documentElement.scrollTop || 0;
+      var p = clamp(y / DISTANCE, 0, 1);
+      render(p);
+    }
+    function onScroll() { if (!raf) raf = requestAnimationFrame(update); }
+    function onResize() { layout(); onScroll(); }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize);
+    if (img && !img.complete) img.addEventListener('load', onScroll, { once: true });
+    layout();
+    update();
+  })();
+  </script>
+</body>
+</html>

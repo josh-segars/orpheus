@@ -6,7 +6,9 @@ import { LinkedInUploadProvider } from './contexts/LinkedInUploadContext'
 import { useGroundworkProgress } from './hooks/useGroundworkProgress'
 import { useSessionRoles } from './hooks/useSessionRoles'
 import { useSession } from './lib/auth'
+import { isMarketingHost } from './lib/host'
 import { hasSeenWelcome } from './lib/welcomeFlag'
+import { LandingPage } from './pages/LandingPage'
 import { AccountPage } from './pages/AccountPage'
 import { AdminPage } from './pages/AdminPage'
 import { AnalysisPage } from './pages/AnalysisPage'
@@ -28,10 +30,29 @@ import { LinkedInStep2Page } from './pages/linkedin/Step2Page'
 import { SignalMeterPlayground } from './pages/design/SignalMeterPlayground'
 
 export default function App() {
+  // Hostname branch (ORPHEUS-8): the www / apex host serves the public
+  // marketing landing page from this same bundle; app.* serves the portal.
+  // No auth, no portal shell — a completely separate route tree so none of
+  // the ProtectedRoute machinery runs for marketing visitors.
+  if (isMarketingHost()) {
+    return (
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    )
+  }
+
   return (
     <Routes>
       {/* Dev-only design playground — no portal shell, no auth gate */}
       <Route path="/design/signal-meter" element={<SignalMeterPlayground />} />
+
+      {/* Local preview of the www marketing landing page (ORPHEUS-8). On the
+          real www / apex host the landing page renders at "/" via the
+          isMarketingHost branch above; this path lets it be viewed on
+          localhost / preview deploys without spoofing a hostname. */}
+      <Route path="/site" element={<LandingPage />} />
 
       {/* Public auth route — its own shell */}
       <Route path="/login" element={<LoginPage />} />

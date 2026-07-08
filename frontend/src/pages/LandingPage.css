@@ -1,0 +1,571 @@
+/* Marketing landing page (ORPHEUS-8).
+   Layout + page-specific styles only; colors, fonts, nav/footer/wordmark and
+   the .btn-* / .section-* patterns come from the shared orpheus-styles.css. */
+
+.landing {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+/* Nav: wordmark left, actions right (no absolutely-centered survey link here,
+   so the shared .nav space-between is exactly what we want). */
+.landing-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+.landing-nav-signin {
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-strong);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.landing-nav-signin:hover {
+  color: var(--accent);
+}
+
+.landing-main {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 96px;
+  padding: 40px 20px 120px;
+}
+
+/* ── Hero ─────────────────────────────────────────────────────── */
+.landing-hero {
+  width: 100%;
+  max-width: 820px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 22px;
+  padding-top: 48px;
+}
+.landing-hero-title {
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
+  font-size: 68px;
+  font-weight: 900;
+  font-variation-settings: 'opsz' 60;
+  color: var(--text-strong);
+  line-height: 1.02;
+  margin: 0;
+}
+.landing-hero-title em {
+  font-style: italic;
+  color: var(--accent);
+}
+/* First line — smaller and regular weight, against the bold second line. */
+.landing-hero-title-lead {
+  display: inline-block;
+  font-size: 40px;
+  font-weight: 400;
+  font-variation-settings: 'opsz' 40;
+  line-height: 1.1;
+}
+.landing-hero-sub {
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
+  font-size: 19px;
+  font-weight: 400;
+  color: var(--text-muted);
+  line-height: 1.6;
+  max-width: 640px;
+  margin: 0;
+}
+.landing-hero-actions {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+/* ── Hero animation: 3D signal screen (faithful port of Claude Design
+   "Signal Hero"). A floating display panel (the source hides the keyboard
+   base by default) with real edge geometry, showing the actual report
+   screenshot which scrolls top→bottom as the panel rotates through view.
+   Geometry + motion constants mirror the source; only the driver changes
+   (element viewport-transit instead of a 340vh scroll track). ── */
+.hero-anim {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center; /* center the 0-height stage vertically in min-height */
+  /* Match the ~96px gap the hero has to the next section, so the animation
+     isn't resting on the CTAs (hero flex-gap contributes the rest). */
+  margin-top: 72px;
+  min-height: 520px;
+  /* No clipping — the glow is meant to bleed past this box. */
+  overflow: visible;
+}
+.hero-anim-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1200px;
+  max-width: 96vw;
+  height: 760px;
+  transform: translate(-50%, -50%);
+  z-index: 0;
+  background: radial-gradient(
+    ellipse 50% 50% at 50% 50%,
+    rgba(0, 163, 236, 0.3),
+    rgba(37, 205, 101, 0.14) 46%,
+    rgba(191, 41, 120, 0.16) 68%,
+    rgba(0, 8, 14, 0) 84%
+  );
+  filter: blur(44px);
+  opacity: 0.4;
+  pointer-events: none;
+}
+/* Ambient backlight — a blurred, saturated copy of the on-screen report,
+   scrolled in sync (background-position-y set in JS) so the glow color
+   reflects whatever region is currently on screen. */
+.hero-anim-ambient {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 980px;
+  max-width: 94vw;
+  height: 680px;
+  border-radius: 50%;
+  background-repeat: no-repeat;
+  /* cover fills the (centered) blob so the color wash stays centered on the
+     panel; background-position-y (set in JS) still scrolls which band shows. */
+  background-size: cover;
+  background-position: 50% 0%;
+  filter: blur(66px) saturate(1.7) brightness(1.1);
+  opacity: 0.45;
+  z-index: 0;
+  pointer-events: none;
+}
+.hero-anim-stage {
+  perspective: 2800px;
+  perspective-origin: 50% 50%;
+  transform: scale(0.8);
+}
+/* 0×0 anchor; JS overwrites this transform each frame (rAF). */
+.hero-laptop {
+  position: relative;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+  transform: translateY(96px) rotateX(5deg) rotateY(42deg) scale(0.9);
+  will-change: transform;
+}
+.hero-screen-panel {
+  position: absolute;
+  left: -268px;
+  top: -160px;
+  width: 536px;
+  height: 320px;
+  transform-style: preserve-3d;
+}
+.hero-screen-back {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 536px;
+  height: 320px;
+  transform: translate(-50%, -50%) translateZ(-3px);
+  background: linear-gradient(160deg, #0d1822, #060e15);
+  border: 1px solid #2b3742;
+  border-radius: 14px;
+  /* Lighter than the source's 0 34px 66px/0.7 — that heavy shadow painted a
+     dark ring over the backlight glow. */
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.4);
+}
+.hero-screen-edge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 3px;
+}
+.hero-screen-edge-l {
+  width: 6px;
+  height: 292px;
+  transform: translate(-50%, -50%) rotateY(-90deg) translateZ(268px);
+  background: linear-gradient(90deg, #3a4753, #161f28);
+}
+.hero-screen-edge-r {
+  width: 6px;
+  height: 292px;
+  transform: translate(-50%, -50%) rotateY(90deg) translateZ(268px);
+  background: linear-gradient(90deg, #161f28, #3a4753);
+}
+.hero-screen-edge-t {
+  width: 508px;
+  height: 6px;
+  transform: translate(-50%, -50%) rotateX(90deg) translateZ(160px);
+  background: linear-gradient(180deg, #3f4c58, #1a242d);
+}
+.hero-screen-edge-b {
+  width: 508px;
+  height: 6px;
+  transform: translate(-50%, -50%) rotateX(-90deg) translateZ(160px);
+  background: linear-gradient(180deg, #1a242d, #2f3a44);
+}
+.hero-screen-front {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 536px;
+  height: 320px;
+  transform: translate(-50%, -50%) translateZ(3px);
+  transform-style: preserve-3d;
+  background: linear-gradient(155deg, #1a2836, #0b151e 55%, #050d15);
+  border: 1px solid #4d5c69;
+  border-radius: 14px;
+  padding: 16px 16px 26px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  backface-visibility: hidden;
+}
+.hero-screen-cam {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #233340;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.hero-screen-brand {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 7px;
+  text-align: center;
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  color: rgba(145, 167, 175, 0.5);
+}
+.hero-screen-window {
+  position: absolute;
+  inset: 16px 16px 26px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--bg-page);
+  border: 1px solid #364048;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.7),
+    inset 0 0 22px rgba(0, 0, 0, 0.55);
+}
+.hero-screen-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: auto;
+  display: block;
+  will-change: transform;
+}
+.hero-screen-gloss {
+  position: absolute;
+  inset: 16px 16px 26px;
+  border-radius: 4px;
+  pointer-events: none;
+  background: linear-gradient(
+    118deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.03) 18%,
+    rgba(255, 255, 255, 0) 40%
+  );
+}
+
+/* ── Generic section wrapper ──────────────────────────────────── */
+.landing-section {
+  width: 100%;
+  max-width: 1000px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.landing-body {
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
+  font-size: 21px;
+  font-weight: 400;
+  font-variation-settings: 'opsz' 20;
+  color: var(--text-strong);
+  line-height: 1.6;
+  max-width: 760px;
+  margin: 0;
+}
+.landing-body em {
+  font-style: italic;
+  color: var(--accent);
+  font-weight: 600;
+}
+.landing-fineprint {
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  max-width: 720px;
+  margin: 0;
+}
+
+/* ── Dimensions grid (About) ──────────────────────────────────── */
+.landing-dimensions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+.landing-dimension {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.landing-dimension-name {
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
+  font-size: 20px;
+  font-weight: 700;
+  font-variation-settings: 'opsz' 20;
+  color: var(--text-strong);
+}
+.landing-dimension-blurb {
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
+  font-size: 15px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* ── Steps (How it works) ─────────────────────────────────────── */
+.landing-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+.landing-step {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 26px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.landing-step-num {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background-color: var(--accent-tint-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+}
+.landing-step-title {
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
+  font-size: 20px;
+  font-weight: 700;
+  font-variation-settings: 'opsz' 20;
+  color: var(--text-strong);
+}
+.landing-step-body {
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
+  font-size: 15px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ── Pricing (closed-beta framing) ────────────────────────────── */
+.landing-pricing-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+.landing-pricing-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  background-color: var(--surface-elevated);
+}
+.landing-pricing-tag {
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 5px 12px;
+}
+.landing-pricing-lead {
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
+  font-size: 22px;
+  font-weight: 400;
+  color: var(--text-strong);
+  line-height: 1.5;
+  margin: 0;
+}
+.landing-pricing-body {
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
+  font-size: 16px;
+  color: var(--text-muted);
+  line-height: 1.65;
+  margin: 0;
+}
+
+/* ── Waitlist ─────────────────────────────────────────────────── */
+.landing-waitlist {
+  max-width: 640px;
+}
+.landing-waitlist-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.landing-waitlist-names {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.landing-waitlist-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.landing-waitlist-label {
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.landing-waitlist-input {
+  width: 100%;
+  min-width: 0;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
+  font-size: 16px;
+  color: var(--text-strong);
+  background-color: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+.landing-waitlist-input::placeholder {
+  color: var(--text-muted);
+}
+.landing-waitlist-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.landing-waitlist-input[aria-invalid='true'] {
+  border-color: var(--issue);
+}
+.landing-waitlist-interest {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.landing-waitlist-interest .landing-waitlist-label {
+  padding: 0;
+  margin-bottom: 2px;
+}
+.landing-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
+  font-size: 16px;
+  color: var(--text-strong);
+  cursor: pointer;
+}
+.landing-checkbox input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.landing-waitlist-submit {
+  align-self: flex-start;
+  padding: 12px 28px;
+  cursor: pointer;
+}
+.landing-waitlist-note {
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 4px 0 0;
+}
+.landing-waitlist-error {
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
+  font-size: 14px;
+  color: var(--issue);
+  margin: 0;
+}
+.landing-waitlist-success {
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 28px;
+  background-color: var(--accent-tint-soft);
+}
+.landing-waitlist-success-title {
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-strong);
+  margin: 0 0 8px;
+}
+.landing-waitlist-success-body {
+  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
+  font-size: 16px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ── Responsive ───────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .landing-hero-title {
+    font-size: 46px;
+  }
+  .hero-anim {
+    min-height: 360px;
+    margin-top: 44px;
+  }
+  .landing-dimensions,
+  .landing-steps,
+  .landing-pricing-cards,
+  .landing-waitlist-names {
+    grid-template-columns: 1fr;
+  }
+  .landing-main {
+    gap: 72px;
+  }
+}
