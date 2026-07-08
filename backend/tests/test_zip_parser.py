@@ -20,7 +20,12 @@ import zipfile
 
 from datetime import date
 
-from backend.ingestion.zip_parser import _read_csv_from_zip, parse_archive_filename
+from backend.ingestion.zip_parser import (
+    _read_csv_from_zip,
+    parse_archive_filename,
+    parse_zip,
+)
+from backend.models.quality import IssueCategory
 
 MEMBER_ID = "181682616"
 CSV_BODY = "Date,ShareLink,ShareCommentary\n2026-06-01,https://x,Hello\n"
@@ -104,6 +109,94 @@ def test_longer_basename_does_not_match():
 def test_missing_file_returns_empty():
     zf = _zip_with("Connections.csv")
     assert _read_csv_from_zip(zf, "Shares.csv") == []
+
+
+# --------------------------------------------------------------------------- #
+# Missing-file detection must be suffix-tolerant too (regression)
+# --------------------------------------------------------------------------- #
+#
+# ORPHEUS-87 taught the *read* path the _<memberid> suffix but left the
+# missing-file *detection* in parse_zip on an exact-name compare. After
+# ORPHEUS-88 made a MISSING_FILE critical a hard upload block, a valid
+# Complete archive with suffixed CSVs was rejected at upload as if it were
+# a Basic archive. These pin the detection path against a realistic
+# archive.
+
+_PROFILE_CSV = (
+    "First Name,Last Name,Headline,Summary,Industry,Geo Location\n"
+    "Ada,Lovelace,Engineer,About me text,Software,London\n"
+)
+_POSITIONS_CSV = (
+    "Company Name,Title,Description,Location,Started On,Finished On\n"
+    "Acme,Engineer,Built things,London,Jan 2020,\n"
+)
+_SKILLS_CSV = "Name\nPython\n"
+_RICH_MEDIA_CSV = "Date/Time,Media Description,Media Link\n"
+_SHARES_CSV = (
+    "Date,ShareLink,ShareCommentary,SharedUrl,Visibility\n"
+    "2026-06-01 09:00:00,https://x,Hello world,,PUBLIC\n"
+)
+_COMMENTS_CSV = "Date,Link,Message\n2026-06-01 09:00:00,https://x,Nice post\n"
+_REACTIONS_CSV = "Date,Type,Link\n2026-06-01 09:00:00,LIKE,https://x\n"
+
+
+def _complete_archive_zip_bytes(member_id: str | None) -> bytes:
+    """Build a realistic Complete archive as raw bytes.
+
+    When ``member_id`` is set, the three behavioral CSVs carry the
+    ``_<memberid>`` suffix (the modern export shape); otherwise they use
+    the classic exact names.
+    """
+    suffix = f"_{member_id}" if member_id else ""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("Profile.csv", _PROFILE_CSV)
+        zf.writestr("Positions.csv", _POSITIONS_CSV)
+        zf.writestr("Skills.csv", _SKILLS_CSV)
+        zf.writestr("Rich_Media.csv", _RICH_MEDIA_CSV)
+        zf.writestr(f"Shares{suffix}.csv", _SHARES_CSV)
+        zf.writestr(f"Comments{suffix}.csv", _COMMENTS_CSV)
+        zf.writestr(f"Reactions{suffix}.csv", _REACTIONS_CSV)
+    return buf.getvalue()
+
+
+def test_suffixed_complete_archive_has_no_missing_file_criticals():
+    """A modern Complete export must not report Shares/Comments/Reactions
+    as missing, and must not produce any blocking (MISSING_FILE) issue."""
+    _, report = parse_zip(_complete_archive_zip_bytes(MEMBER_ID))
+
+    missing = [i.source for i in report.issues if i.category == IssueCategory.MISSING_FILE]
+    assert missing == [], f"unexpected missing-file flags: {missing}"
+    assert report.has_blocking_issue is False
+    # Behavioral data actually parsed through the read path.
+    assert report.total_shares == 1
+    assert report.total_comments == 1
+    assert report.total_reactions == 1
+
+
+def test_suffixed_and_classic_archives_agree_on_missing_files():
+    """The detection path must treat suffixed and classic naming the same."""
+    _, suffixed = parse_zip(_complete_archive_zip_bytes(MEMBER_ID))
+    _, classic = parse_zip(_complete_archive_zip_bytes(None))
+
+    def missing_files(r):
+        return sorted(i.source for i in r.issues if i.category == IssueCategory.MISSING_FILE)
+
+    assert missing_files(suffixed) == missing_files(classic) == []
+
+
+def test_genuinely_missing_shares_still_flags_and_blocks():
+    """The fix must not mask a real Basic archive (no Shares at all)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("Profile.csv", _PROFILE_CSV)
+        zf.writestr("Positions.csv", _POSITIONS_CSV)
+        zf.writestr("Skills.csv", _SKILLS_CSV)
+    _, report = parse_zip(buf.getvalue())
+
+    missing = {i.source for i in report.issues if i.category == IssueCategory.MISSING_FILE}
+    assert "Shares.csv" in missing
+    assert report.has_blocking_issue is True
 
 
 # --------------------------------------------------------------------------- #

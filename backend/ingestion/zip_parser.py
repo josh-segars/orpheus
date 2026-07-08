@@ -55,30 +55,53 @@ def _normalize_header(header: str) -> str:
     return header.strip().lower().replace(" ", "_").replace("/", "_")
 
 
+def _csv_name_matches(zip_name: str, filename: str) -> bool:
+    """True if a ZIP entry matches the requested CSV name on its basename.
+
+    LinkedIn nests CSVs in a subdirectory or at root, so we match on the
+    basename. Newer exports (observed live 2026-06-12, ORPHEUS-87) append
+    the member ID to per-member files (Shares_181682616.csv,
+    Comments_181682616.csv, ...), so the match tolerates an optional
+    _<digits> suffix. __MACOSX metadata entries are never a match.
+
+    This is the single source of truth for CSV-name matching — both the
+    read path (_read_csv_from_zip) and the missing-file detection in
+    parse_zip use it, so the two can't drift apart. (They did: ORPHEUS-87
+    taught the read path the suffix but left the missing-file check on an
+    exact-name compare, so a valid Complete archive with suffixed CSVs was
+    flagged as missing Shares.csv and — after ORPHEUS-88 made MISSING_FILE
+    a hard block — rejected at upload as if it were a Basic archive.)
+    """
+    if zip_name.startswith("__MACOSX"):
+        return False
+    stem = filename.lower()
+    if stem.endswith(".csv"):
+        stem = stem[: -len(".csv")]
+    pattern = re.compile(rf"^{re.escape(stem)}(_\d+)?\.csv$")
+    return bool(pattern.match(zip_name.lower().rsplit("/", 1)[-1]))
+
+
+def _csv_present(csv_files: list[str], filename: str) -> bool:
+    """True if the archive contains a CSV matching ``filename``.
+
+    Suffix-tolerant (see _csv_name_matches) so member-ID-suffixed exports
+    aren't mistaken for missing files.
+    """
+    return any(_csv_name_matches(name, filename) for name in csv_files)
+
+
 def _read_csv_from_zip(
     zf: zipfile.ZipFile, filename: str
 ) -> list[dict[str, str]]:
     """Read a CSV file from the ZIP archive and return rows as dicts.
 
-    Handles UTF-8 BOM encoding that LinkedIn includes.
-    LinkedIn nests CSVs in a subdirectory or at root — we match on the
-    basename. Newer exports (observed live 2026-06-12, ORPHEUS-87)
-    append the member ID to per-member files (Shares_181682616.csv,
-    Comments_181682616.csv, ...), so the match tolerates an optional
-    _<digits> suffix. The previous endswith() match could never hit
-    those, which zeroed behavioral scoring (Dims 2/3/4) on any fresh
-    export. Exact-name matches are preferred when both forms exist.
-    Returns an empty list if the file is not found.
+    Handles UTF-8 BOM encoding that LinkedIn includes. Matching is
+    suffix-tolerant (see _csv_name_matches); exact-name matches are
+    preferred when both forms exist. Returns an empty list if not found.
     """
-    stem = filename.lower()
-    if stem.endswith(".csv"):
-        stem = stem[: -len(".csv")]
-    pattern = re.compile(rf"^{re.escape(stem)}(_\d+)?\.csv$")
-
     matching = [
         name for name in zf.namelist()
-        if pattern.match(name.lower().rsplit("/", 1)[-1])
-        and not name.startswith("__MACOSX")
+        if _csv_name_matches(name, filename)
     ]
 
     if not matching:
@@ -573,17 +596,18 @@ def parse_zip(source: bytes | str | Path) -> tuple[ZipData, DataQualityReport]:
         comment_rows = _read_csv_from_zip(zf, "Comments.csv")
         reaction_rows = _read_csv_from_zip(zf, "Reactions.csv")
 
-        # Check for missing files
-        found_lower = {n.split("/")[-1].lower() for n in csv_files}
-
-        if "profile.csv" not in found_lower:
+        # Check for missing files. Matching is suffix-tolerant (ORPHEUS-87
+        # member-ID suffixes) via _csv_present — an exact-name compare here
+        # falsely flagged Shares_<id>.csv as missing, which ORPHEUS-88's
+        # gate then treated as a Basic archive and rejected at upload.
+        if not _csv_present(csv_files, "Profile.csv"):
             report.add(
                 IssueSeverity.CRITICAL, IssueCategory.MISSING_FILE,
                 "Profile.csv", "Profile.csv not found in archive — cannot score Dimension 1",
                 "Dim 1 (Profile Signal Clarity)",
             )
 
-        if "shares.csv" not in found_lower:
+        if not _csv_present(csv_files, "Shares.csv"):
             report.add(
                 IssueSeverity.CRITICAL, IssueCategory.MISSING_FILE,
                 "Shares.csv",
@@ -593,7 +617,7 @@ def parse_zip(source: bytes | str | Path) -> tuple[ZipData, DataQualityReport]:
                 "Dim 2, Dim 3, Dim 4",
             )
 
-        if "comments.csv" not in found_lower:
+        if not _csv_present(csv_files, "Comments.csv"):
             report.add(
                 IssueSeverity.WARNING, IssueCategory.MISSING_FILE,
                 "Comments.csv",
@@ -602,7 +626,7 @@ def parse_zip(source: bytes | str | Path) -> tuple[ZipData, DataQualityReport]:
                 "Dim 2 — Continuity; Dim 3 — Engagement Quality Score",
             )
 
-        if "reactions.csv" not in found_lower:
+        if not _csv_present(csv_files, "Reactions.csv"):
             report.add(
                 IssueSeverity.WARNING, IssueCategory.MISSING_FILE,
                 "Reactions.csv",
