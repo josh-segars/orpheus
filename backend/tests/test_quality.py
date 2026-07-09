@@ -155,3 +155,48 @@ def test_data_limitation_notices_dedup():
 
 def test_empty_report_is_not_data_limited():
     assert DataQualityReport().is_data_limited is False
+
+
+# --- ORPHEUS-106: proportional parse_failure data-limitation ---------------
+
+
+def test_immaterial_parse_failure_is_not_data_limited():
+    """A small unparseable-date tail (below the material fraction) is benign
+    LinkedIn noise — recorded as a WARNING but NOT banner-flagged. Andrew's
+    live July 8 shape: 66 of 2,306 comments (2.9%)."""
+    r = DataQualityReport()
+    r.add(
+        IssueSeverity.WARNING, IssueCategory.PARSE_FAILURE, "Comments.csv",
+        "66 comment(s) have unparseable dates and will be excluded from scoring",
+        "Dim 2 — Continuity; Dim 3 — Engagement Quality",
+        field="date", rows_affected=66, total_rows=2306,
+    )
+    assert r.is_data_limited is False
+    assert r.data_limitation_notices() == []
+    # The warning is still recorded for the audit trail / admin view.
+    assert r.has_warnings is True
+
+
+def test_material_parse_failure_is_data_limited():
+    """A large fraction of dropped rows (above the material threshold) still
+    counts as a genuine data limitation."""
+    r = DataQualityReport()
+    r.add(
+        IssueSeverity.WARNING, IssueCategory.PARSE_FAILURE, "Comments.csv",
+        "800 comment(s) have unparseable dates and will be excluded from scoring",
+        "Dim 3", field="date", rows_affected=800, total_rows=2000,
+    )
+    assert r.is_data_limited is True
+    assert len(r.data_limitation_notices()) == 1
+
+
+def test_parse_failure_without_totals_stays_data_limited():
+    """Legacy issues stored without rows_affected/total_rows keep the old
+    always-limiting behavior — magnitude can't be assessed, so be
+    conservative."""
+    r = DataQualityReport()
+    r.add(
+        IssueSeverity.WARNING, IssueCategory.PARSE_FAILURE, "Comments.csv",
+        "some comment rows had unparseable dates", "Dim 3",
+    )
+    assert r.is_data_limited is True

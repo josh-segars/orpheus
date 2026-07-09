@@ -65,6 +65,15 @@ DATA_LIMITATION_CATEGORIES: set[IssueCategory] = {
     IssueCategory.DATE_RANGE,
 }
 
+# ORPHEUS-106: a PARSE_FAILURE only counts as a data limitation when a
+# material fraction of the source's rows were dropped. LinkedIn exports
+# routinely carry a small tail of unparseable activity dates (~2-3% —
+# ORPHEUS-87), which the parser still records as a WARNING for the audit
+# trail but which is benign noise, not a limitation worth banner-flagging to
+# the client. A parse_failure whose row count we can't assess (no
+# rows_affected / total_rows) is treated as material — conservative.
+PARSE_FAILURE_MATERIAL_FRACTION = 0.10
+
 
 class QualityIssue(BaseModel):
     """A single data quality finding."""
@@ -75,6 +84,7 @@ class QualityIssue(BaseModel):
     message: str = Field(..., description="Human-readable description of the issue")
     impact: str = Field(..., description="What this affects — which dimension or metric is degraded")
     rows_affected: int | None = Field(None, description="Number of rows dropped or affected, if applicable")
+    total_rows: int | None = Field(None, description="Total rows in the source, for assessing the magnitude of rows_affected")
 
 
 class DataQualityReport(BaseModel):
@@ -133,18 +143,35 @@ class DataQualityReport(BaseModel):
     def has_blocking_issue(self) -> bool:
         return bool(self.blocking_issues())
 
+    def _is_material_parse_failure(self, issue: QualityIssue) -> bool:
+        """Whether a parse_failure dropped a material fraction of its source.
+
+        Returns True (conservative) when magnitude can't be assessed —
+        legacy issues stored without rows_affected/total_rows keep the old
+        always-limiting behavior.
+        """
+        if issue.rows_affected is None or not issue.total_rows:
+            return True
+        return issue.rows_affected / issue.total_rows > PARSE_FAILURE_MATERIAL_FRACTION
+
     def data_limitation_issues(self) -> list[QualityIssue]:
         """CRITICAL/WARNING issues that mean the report rests on limited data.
 
         Drives the client-facing report banner and the advisor/admin chip.
         Excludes MISSING_FIELD (a legitimate profile-completeness score
-        input) and INFO (noise).
+        input) and INFO (noise). A PARSE_FAILURE below the material fraction
+        (ORPHEUS-106) is a benign date-format tail and does not count.
         """
-        return [
-            i for i in self.issues
-            if i.severity in (IssueSeverity.CRITICAL, IssueSeverity.WARNING)
-            and i.category in DATA_LIMITATION_CATEGORIES
-        ]
+        result: list[QualityIssue] = []
+        for i in self.issues:
+            if i.severity not in (IssueSeverity.CRITICAL, IssueSeverity.WARNING):
+                continue
+            if i.category not in DATA_LIMITATION_CATEGORIES:
+                continue
+            if i.category == IssueCategory.PARSE_FAILURE and not self._is_material_parse_failure(i):
+                continue
+            result.append(i)
+        return result
 
     @property
     def is_data_limited(self) -> bool:
@@ -177,6 +204,7 @@ class DataQualityReport(BaseModel):
         impact: str,
         field: str | None = None,
         rows_affected: int | None = None,
+        total_rows: int | None = None,
     ):
         """Convenience method to append an issue."""
         self.issues.append(QualityIssue(
@@ -187,4 +215,5 @@ class DataQualityReport(BaseModel):
             message=message,
             impact=impact,
             rows_affected=rows_affected,
+            total_rows=total_rows,
         ))

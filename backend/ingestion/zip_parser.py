@@ -476,7 +476,7 @@ def validate_zip_data(
             "Shares.csv",
             f"{bad_share_dates} post(s) have unparseable dates and will be excluded from scoring",
             "Dim 2 (Behavioral Signal Strength) — Posting Presence, Continuity",
-            field="date", rows_affected=bad_share_dates,
+            field="date", rows_affected=bad_share_dates, total_rows=len(share_rows),
         )
 
     bad_comment_dates = sum(1 for r in comment_rows if r.get("date") and not _check_date_parseable(r["date"]))
@@ -486,7 +486,7 @@ def validate_zip_data(
             "Comments.csv",
             f"{bad_comment_dates} comment(s) have unparseable dates and will be excluded from scoring",
             "Dim 2 — Continuity; Dim 3 — Engagement Quality",
-            field="date", rows_affected=bad_comment_dates,
+            field="date", rows_affected=bad_comment_dates, total_rows=len(comment_rows),
         )
 
     bad_reaction_dates = sum(1 for r in reaction_rows if r.get("date") and not _check_date_parseable(r["date"]))
@@ -496,7 +496,7 @@ def validate_zip_data(
             "Reactions.csv",
             f"{bad_reaction_dates} reaction(s) have unparseable dates and will be excluded from scoring",
             "Dim 2 — History Depth; Dim 3 — Engagement Quality",
-            field="date", rows_affected=bad_reaction_dates,
+            field="date", rows_affected=bad_reaction_dates, total_rows=len(reaction_rows),
         )
 
     # --- Behavioral data volume ---
