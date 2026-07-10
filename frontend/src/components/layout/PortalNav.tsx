@@ -50,6 +50,10 @@ export function PortalNav() {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
+  // Falls back to the initials avatar when the LinkedIn photo fails to load
+  // (ORPHEUS-105) — the OIDC `picture` URL can be expired/hotlink-blocked,
+  // which otherwise renders a broken-image icon.
+  const [avatarFailed, setAvatarFailed] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
 
@@ -63,6 +67,13 @@ export function PortalNav() {
   const initials = pickInitials(meta, email)
   const picture = meta.picture
   const isAdmin = isAdminEmail(email)
+  const showPicture = Boolean(picture) && !avatarFailed
+
+  // Reset the failure flag if the photo URL changes (e.g. account switch),
+  // so a fresh valid URL gets another chance to load.
+  useEffect(() => {
+    setAvatarFailed(false)
+  }, [picture])
 
   // Closed Beta feedback link (ORPHEUS-72). Rendered only when the env var
   // is set, so non-beta builds don't show a dangling button. URL is wired
@@ -146,8 +157,13 @@ export function PortalNav() {
             <span className="nav-client-name">{displayName}</span>
           </span>
           <span className="nav-client-avatar" aria-hidden="true">
-            {picture ? (
-              <img src={picture} alt="" referrerPolicy="no-referrer" />
+            {showPicture ? (
+              <img
+                src={picture}
+                alt=""
+                referrerPolicy="no-referrer"
+                onError={() => setAvatarFailed(true)}
+              />
             ) : (
               <span className="nav-client-initials">{initials}</span>
             )}

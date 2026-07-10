@@ -586,7 +586,7 @@ function MetricsBlock({ data }: { data: ForwardBriefData }) {
               className={`metrics-signal${s.on ? ' metrics-signal-on' : ''}`}
             >
               <span className="metrics-signal-mark" aria-hidden="true">
-                {s.on ? '✓' : '✕'}
+                <SignalMark on={s.on} />
               </span>
               <span className="metrics-signal-label">{s.label}</span>
               <span className="sr-only">{s.on ? ' — yes' : ' — no'}</span>
@@ -595,6 +595,37 @@ function MetricsBlock({ data }: { data: ForwardBriefData }) {
         </ul>
       </div>
     </section>
+  )
+}
+
+/**
+ * Profile Signals check/cross mark (ORPHEUS-105). Material icons (`check` /
+ * `close`) on a 24×24 viewBox rather than text glyphs, so the mark has a
+ * consistent box + baseline inside the circular chip — matches the sub-dim
+ * caret treatment (ORPHEUS-76) and fixes the uneven vertical alignment the
+ * bare ✓/✕ characters produced against their row labels.
+ */
+function SignalMark({ on }: { on: boolean }) {
+  return (
+    <svg
+      className="metrics-signal-icon"
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width="14"
+      height="14"
+    >
+      {on ? (
+        <path
+          d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.42z"
+          fill="currentColor"
+        />
+      ) : (
+        <path
+          d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+          fill="currentColor"
+        />
+      )}
+    </svg>
   )
 }
 

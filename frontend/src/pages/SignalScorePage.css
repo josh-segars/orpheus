@@ -494,9 +494,14 @@
   height: 22px;
   border-radius: 50%;
   flex-shrink: 0;
-  font-size: 12px;
   background-color: var(--surface-elevated);
   color: var(--text-muted);
+}
+
+/* Material check/close icon (ORPHEUS-105) — box-aligned inside the chip;
+   inherits the chip's currentColor (muted off / knockout on). */
+.metrics-signal-icon {
+  display: block;
 }
 
 .metrics-signal-on .metrics-signal-mark {
@@ -520,7 +525,14 @@
 }
 
 /* ── Data-limited banner (ORPHEUS-88) ──────────────────────── */
+/* z-index lifts the banner above the score hero (ORPHEUS-105): the hero's
+   waveform is absolutely positioned and bleeds ~100px down into this area,
+   and .score-hero establishes a z-index:0 stacking context that paints
+   after in-flow siblings — so without an explicit positive z-index the
+   waveform tail clips the banner copy. */
 .quality-banner {
+  position: relative;
+  z-index: 2;
   border: 1px solid var(--issue);
   border-left-width: 4px;
   border-radius: 10px;

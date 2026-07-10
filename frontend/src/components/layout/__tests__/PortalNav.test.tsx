@@ -16,12 +16,12 @@
  *   - Escape closes the menu.
  *   - Clicking Log Out invokes signOut.
  */
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 
 import { PortalNav } from '../PortalNav'
-import { signOut } from '../../../lib/auth'
+import { signOut, useSession } from '../../../lib/auth'
 import { useSessionRoles } from '../../../hooks/useSessionRoles'
 import { isAdminEmail } from '../../../hooks/useAdmin'
 
@@ -36,7 +36,11 @@ import { isAdminEmail } from '../../../hooks/useAdmin'
 // --------------------------------------------------------------------------- //
 
 vi.mock('../../../lib/auth', () => ({
-  useSession: () => ({
+  // vi.fn wrapper (not a bare arrow) so individual tests can override the
+  // session — e.g. to supply a LinkedIn `picture` for the avatar cases.
+  // clearAllMocks keeps this default implementation; only resetAllMocks
+  // would drop it.
+  useSession: vi.fn(() => ({
     session: {
       user: {
         email: 'andrew@example.com',
@@ -44,9 +48,21 @@ vi.mock('../../../lib/auth', () => ({
       },
     },
     status: 'authenticated',
-  }),
+  })),
   signOut: vi.fn().mockResolvedValue(undefined),
 }))
+
+function sessionWithPicture(picture: string) {
+  return {
+    session: {
+      user: {
+        email: 'andrew@example.com',
+        user_metadata: { name: 'Andrew Segars', picture },
+      },
+    },
+    status: 'authenticated',
+  }
+}
 
 vi.mock('../../../hooks/useSessionRoles', () => ({
   useSessionRoles: vi.fn(),
@@ -175,6 +191,37 @@ describe('PortalNav account dropdown (ORPHEUS-71)', () => {
     await user.click(screen.getByRole('menuitem', { name: /log out/i }))
 
     expect(signOut).toHaveBeenCalledTimes(1)
+  })
+
+  // --- Avatar photo + fallback (ORPHEUS-105) ------------------------------ //
+
+  it('renders the LinkedIn photo when a picture claim is present', () => {
+    vi.mocked(useSession).mockReturnValue(
+      sessionWithPicture('https://media.example.com/photo.jpg') as unknown as ReturnType<typeof useSession>,
+    )
+    vi.mocked(useSessionRoles).mockReturnValue(rolesClientOnly() as ReturnType<typeof useSessionRoles>)
+    const { container } = renderNav()
+
+    const img = container.querySelector('.nav-client-avatar img')
+    expect(img).toHaveAttribute('src', 'https://media.example.com/photo.jpg')
+    // Initials chip is not rendered while the photo is showing.
+    expect(container.querySelector('.nav-client-initials')).not.toBeInTheDocument()
+  })
+
+  it('falls back to the initials avatar when the photo fails to load', () => {
+    vi.mocked(useSession).mockReturnValue(
+      sessionWithPicture('https://media.example.com/expired.jpg') as unknown as ReturnType<typeof useSession>,
+    )
+    vi.mocked(useSessionRoles).mockReturnValue(rolesClientOnly() as ReturnType<typeof useSessionRoles>)
+    const { container } = renderNav()
+
+    const img = container.querySelector('.nav-client-avatar img') as HTMLImageElement
+    expect(img).toBeInTheDocument()
+
+    fireEvent.error(img)
+
+    expect(container.querySelector('.nav-client-avatar img')).not.toBeInTheDocument()
+    expect(container.querySelector('.nav-client-initials')).toHaveTextContent('AS')
   })
 
   // --- Closed Beta feedback link (ORPHEUS-72) ----------------------------- //

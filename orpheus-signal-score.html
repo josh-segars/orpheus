@@ -94,6 +94,8 @@
 
     /* ── Data-limited banner (ORPHEUS-88) ──────────────────── */
     .quality-banner {
+      position: relative;
+      z-index: 2; /* above the score-hero waveform bleed (ORPHEUS-105) */
       border: 1px solid var(--issue);
       border-left-width: 4px;
       border-radius: 10px;
@@ -460,9 +462,13 @@
       height: 22px;
       border-radius: 50%;
       flex-shrink: 0;
-      font-size: 12px;
       background-color: var(--surface-elevated);
       color: var(--text-muted);
+    }
+
+    /* Material check/close icon (ORPHEUS-105) — box-aligned inside the chip. */
+    .metrics-signal-icon {
+      display: block;
     }
 
     .metrics-signal-on .metrics-signal-mark {
@@ -858,11 +864,11 @@
       <div class="metrics-section">
         <div class="metrics-section-label">Profile Signals</div>
         <ul class="metrics-signal-list">
-          <li class="metrics-signal metrics-signal-on"><span class="metrics-signal-mark" aria-hidden="true">✓</span><span class="metrics-signal-label">Profile photo present</span></li>
-          <li class="metrics-signal"><span class="metrics-signal-mark" aria-hidden="true">✕</span><span class="metrics-signal-label">Call to action in About</span></li>
-          <li class="metrics-signal"><span class="metrics-signal-mark" aria-hidden="true">✕</span><span class="metrics-signal-label">Services section listed</span></li>
-          <li class="metrics-signal metrics-signal-on"><span class="metrics-signal-mark" aria-hidden="true">✓</span><span class="metrics-signal-label">Contact info visible</span></li>
-          <li class="metrics-signal metrics-signal-on"><span class="metrics-signal-mark" aria-hidden="true">✓</span><span class="metrics-signal-label">Engagement spread across your network</span></li>
+          <li class="metrics-signal metrics-signal-on"><span class="metrics-signal-mark" aria-hidden="true"><svg class="metrics-signal-icon" viewBox="0 0 24 24" width="14" height="14"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.42z" fill="currentColor"/></svg></span><span class="metrics-signal-label">Profile photo present</span></li>
+          <li class="metrics-signal"><span class="metrics-signal-mark" aria-hidden="true"><svg class="metrics-signal-icon" viewBox="0 0 24 24" width="14" height="14"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg></span><span class="metrics-signal-label">Call to action in About</span></li>
+          <li class="metrics-signal"><span class="metrics-signal-mark" aria-hidden="true"><svg class="metrics-signal-icon" viewBox="0 0 24 24" width="14" height="14"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg></span><span class="metrics-signal-label">Services section listed</span></li>
+          <li class="metrics-signal metrics-signal-on"><span class="metrics-signal-mark" aria-hidden="true"><svg class="metrics-signal-icon" viewBox="0 0 24 24" width="14" height="14"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.42z" fill="currentColor"/></svg></span><span class="metrics-signal-label">Contact info visible</span></li>
+          <li class="metrics-signal metrics-signal-on"><span class="metrics-signal-mark" aria-hidden="true"><svg class="metrics-signal-icon" viewBox="0 0 24 24" width="14" height="14"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.42z" fill="currentColor"/></svg></span><span class="metrics-signal-label">Engagement spread across your network</span></li>
         </ul>
       </div>
     </section>
