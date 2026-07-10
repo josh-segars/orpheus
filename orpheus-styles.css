@@ -183,12 +183,12 @@ body {
   inset: 0;
   background: linear-gradient(
     100deg,
-    transparent 40%,
-    var(--accent-tint-hover) 50%,
-    transparent 60%
+    transparent 25%,
+    rgba(37, 205, 101, 0.45) 50%,
+    transparent 75%
   );
-  transform: translateX(-100%);
-  animation: nav-survey-wave 2s ease-in-out infinite;
+  transform: translateX(-130%);
+  animation: nav-survey-wave 4.5s ease-in-out infinite;
   pointer-events: none;
 }
 .nav-survey-link:hover {
@@ -204,15 +204,17 @@ body {
   outline-offset: 4px;
 }
 
+/* One brisk left→right sweep (~1.1s) then a long hold off-screen, so the
+   wave fires roughly once every ~4.5s instead of near-continuously. The
+   highlight band is wider + brighter than the first pass so it actually
+   reads. */
 @keyframes nav-survey-wave {
   0% {
-    transform: translateX(-100%);
+    transform: translateX(-130%);
   }
-  /* Sweep completes in the first ~60% of the cycle (~1.2s), then holds
-     off-screen so the effect fires once per 2s rather than continuously. */
-  55%,
+  25%,
   100% {
-    transform: translateX(100%);
+    transform: translateX(130%);
   }
 }
 
