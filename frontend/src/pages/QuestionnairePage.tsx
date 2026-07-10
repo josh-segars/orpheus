@@ -6,6 +6,7 @@ import {
   RadioWithOtherQuestion,
   TextQuestion,
 } from '../components/questionnaire/Questions'
+import { MaterialIcon } from '../components/icons/MaterialIcon'
 import { useQuestionnaireDraft } from '../hooks/useQuestionnaire'
 import { OTHER_OPTION } from '../types/questionnaire'
 
@@ -114,7 +115,7 @@ export function QuestionnairePage() {
   return (
     <main className="main-interior">
       <Link to="/groundwork" className="back-link">
-        <span className="back-arrow">&#8249;</span> Groundwork Checklist
+        <MaterialIcon name="chevron_left" size={18} className="back-arrow" /> Groundwork Checklist
       </Link>
 
       <div className="section-header">

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
+import { MaterialIcon } from '../components/icons/MaterialIcon'
 import { useLinkedInUpload } from '../contexts/LinkedInUploadContext'
 import { useCreateJob } from '../hooks/useCreateJob'
 import { useGroundworkProgress } from '../hooks/useGroundworkProgress'
@@ -166,7 +167,7 @@ function ChecklistItem({ to, title, badge, complete }: ChecklistItemProps) {
       }
     >
       <div className="groundwork-check-indicator">
-        <span className="groundwork-check-mark">&#10003;</span>
+        <MaterialIcon name="check" size={14} className="groundwork-check-mark" />
       </div>
       <div className="groundwork-item-content">
         <div className="groundwork-item-title-row">
@@ -174,7 +175,7 @@ function ChecklistItem({ to, title, badge, complete }: ChecklistItemProps) {
           {badge && <span className="groundwork-item-badge">{badge}</span>}
         </div>
       </div>
-      <div className="groundwork-item-arrow">&#8250;</div>
+      <MaterialIcon name="chevron_right" size={20} className="groundwork-item-arrow" />
     </Link>
   )
 }

@@ -226,22 +226,22 @@ describe('PortalNav account dropdown (ORPHEUS-71)', () => {
 
   // --- Closed Beta feedback link (ORPHEUS-72) ----------------------------- //
 
-  it('hides the Closed Beta Feedback link when VITE_BETA_SURVEY_URL is unset', () => {
+  it('hides the feedback link when VITE_BETA_SURVEY_URL is unset', () => {
     // Stub to empty explicitly — vitest loads .env.local, so a dev machine
     // with the real survey URL set would otherwise leak it into this test.
     vi.stubEnv('VITE_BETA_SURVEY_URL', '')
     vi.mocked(useSessionRoles).mockReturnValue(rolesClientOnly() as ReturnType<typeof useSessionRoles>)
     renderNav()
 
-    expect(screen.queryByRole('link', { name: /closed beta feedback/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /tell us what you think/i })).not.toBeInTheDocument()
   })
 
-  it('renders the Closed Beta Feedback link to the survey URL (new tab) when the env var is set', () => {
+  it('renders the feedback link to the survey URL (new tab) when the env var is set', () => {
     vi.stubEnv('VITE_BETA_SURVEY_URL', 'https://forms.example.com/beta')
     vi.mocked(useSessionRoles).mockReturnValue(rolesClientOnly() as ReturnType<typeof useSessionRoles>)
     renderNav()
 
-    const link = screen.getByRole('link', { name: /closed beta feedback/i })
+    const link = screen.getByRole('link', { name: /tell us what you think/i })
     expect(link).toHaveAttribute('href', 'https://forms.example.com/beta')
     expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))

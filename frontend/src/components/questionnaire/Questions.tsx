@@ -1,5 +1,7 @@
 import { type ChangeEvent, type ReactNode } from 'react'
 
+import { MaterialIcon } from '../icons/MaterialIcon'
+
 /**
  * Question primitives. All five mirror the structure in
  * orpheus-questionnaire-s*.html and rely on the global classes defined in
@@ -267,7 +269,9 @@ export function CheckboxWithOtherQuestion({
                 onChange={() => toggle(opt.value)}
               />
               <span className="checkbox-indicator">
-                <span className="checkbox-check">&#10003;</span>
+                <span className="checkbox-check">
+                  <MaterialIcon name="check" size={14} />
+                </span>
               </span>
               <span className="option-text">
                 {opt.label}

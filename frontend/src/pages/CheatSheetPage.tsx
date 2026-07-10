@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useAdvisorClients } from '../hooks/useAdvisorClients'
 import { useJob } from '../hooks/useJob'
 import { useSessionRoles } from '../hooks/useSessionRoles'
+import { MaterialIcon } from '../components/icons/MaterialIcon'
 import type { CheatSheetPriority } from '../types/scoring'
 import './CheatSheetPage.css'
 
@@ -90,7 +91,7 @@ export function CheatSheetPage() {
         </div>
         <div className="actions cheat-actions">
           <Link to={`/jobs/${job.id}`} className="btn-secondary">
-            &larr; Return to your report
+            <MaterialIcon name="arrow_back" size={16} /> Return to your report
           </Link>
         </div>
       </main>
@@ -177,7 +178,7 @@ export function CheatSheetPage() {
           Cheat Sheet (ORPHEUS-69); the Forward Brief page is retired. */}
       <div className="actions cheat-actions">
         <Link to={`/jobs/${job.id}`} className="btn-secondary">
-          &larr; Return to your report
+          <MaterialIcon name="arrow_back" size={16} /> Return to your report
         </Link>
       </div>
     </main>

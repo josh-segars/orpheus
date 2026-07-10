@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useAdvisorClients } from '../hooks/useAdvisorClients'
 import { useJob } from '../hooks/useJob'
 import { useSessionRoles } from '../hooks/useSessionRoles'
+import { MaterialIcon } from '../components/icons/MaterialIcon'
 import type {
   DimensionScore,
   ForwardBriefData,
@@ -163,10 +164,10 @@ export function SignalScorePage() {
           Groundwork", which predates multi-report support). */}
       <div className="actions">
         <Link to="/reports" className="btn-secondary">
-          &larr; View My Reports
+          <MaterialIcon name="arrow_back" size={16} /> View My Reports
         </Link>
         <Link to={`/jobs/${job.id}/cheat-sheet`} className="btn-primary">
-          View My Quick Reference Card &rarr;
+          View My Quick Reference Card <MaterialIcon name="arrow_forward" size={16} />
         </Link>
       </div>
     </main>
@@ -331,15 +332,7 @@ function SubDimRow({ sub, expanded, onToggle }: SubDimRowProps) {
      arrow_right (▸) collapsed, rotating 90° to arrow_drop_down (▾) when
      open. Only expandable rows render it; static rows pad to align. */
   const caret = hasDetail ? (
-    <svg
-      className="sub-dim-caret"
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      width="24"
-      height="24"
-    >
-      <path d="M10 17V7l5 5z" fill="currentColor" />
-    </svg>
+    <MaterialIcon name="arrow_right" size={24} className="sub-dim-caret" />
   ) : null
 
   const row = (
@@ -607,25 +600,11 @@ function MetricsBlock({ data }: { data: ForwardBriefData }) {
  */
 function SignalMark({ on }: { on: boolean }) {
   return (
-    <svg
+    <MaterialIcon
+      name={on ? 'check' : 'close'}
+      size={14}
       className="metrics-signal-icon"
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      width="14"
-      height="14"
-    >
-      {on ? (
-        <path
-          d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.42z"
-          fill="currentColor"
-        />
-      ) : (
-        <path
-          d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
-          fill="currentColor"
-        />
-      )}
-    </svg>
+    />
   )
 }
 

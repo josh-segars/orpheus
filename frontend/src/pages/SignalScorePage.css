@@ -534,7 +534,6 @@
   position: relative;
   z-index: 2;
   border: 1px solid var(--issue);
-  border-left-width: 4px;
   border-radius: 10px;
   background-color: rgba(191, 41, 35, 0.08);
   padding: 16px 20px;

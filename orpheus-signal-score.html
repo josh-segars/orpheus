@@ -97,7 +97,6 @@
       position: relative;
       z-index: 2; /* above the score-hero waveform bleed (ORPHEUS-105) */
       border: 1px solid var(--issue);
-      border-left-width: 4px;
       border-radius: 10px;
       background-color: rgba(191, 41, 35, 0.08);
       padding: 16px 20px;
@@ -488,7 +487,7 @@
     <div class="wordmark"><span class="wordmark-orpheus">Orpheus</span><span class="wordmark-social">Social</span></div>
     <!-- Closed Beta feedback link (ORPHEUS-72) — centered button-style link;
          React (PortalNav) renders the same markup gated on VITE_BETA_SURVEY_URL. -->
-    <a href="#" class="nav-survey-link">Closed Beta Feedback</a>
+    <a href="#" class="nav-survey-link">Tell Us What You Think</a>
     <!-- Account cluster + dropdown (ORPHEUS-71). JS-free disclosure:
          the hidden checkbox toggles the menu via the shared stylesheet's
          .nav-account-toggle:not(:checked) ~ .nav-account-menu rule. The
@@ -876,8 +875,8 @@
     <!-- Actions — flow is Signal Score → Cheat Sheet (ORPHEUS-69);
          the Forward Brief page is retired. -->
     <div class="actions">
-      <a href="orpheus-reports-v1.html" class="btn-secondary">← View My Reports</a>
-      <a href="orpheus-cheat-sheet.html" class="btn-primary">View My Quick Reference Card →</a>
+      <a href="orpheus-reports-v1.html" class="btn-secondary"><svg class="material-icon" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z" fill="currentColor"/></svg> View My Reports</a>
+      <a href="orpheus-cheat-sheet.html" class="btn-primary">View My Quick Reference Card <svg class="material-icon" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z" fill="currentColor"/></svg></a>
     </div>
   </main>
 

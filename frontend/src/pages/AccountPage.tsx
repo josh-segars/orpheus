@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom'
 
+import { MaterialIcon } from '../components/icons/MaterialIcon'
+
 /**
  * Placeholder for account management (ORPHEUS-71 → ORPHEUS-42).
  *
@@ -24,7 +26,7 @@ export function AccountPage() {
       </div>
       <div className="actions">
         <Link to="/" className="btn-secondary">
-          &larr; Back to my portal
+          <MaterialIcon name="arrow_back" size={16} /> Back to my portal
         </Link>
       </div>
     </main>

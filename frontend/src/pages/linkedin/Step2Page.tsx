@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { UploadArea } from '../../components/uploads/UploadArea'
+import { MaterialIcon } from '../../components/icons/MaterialIcon'
 import { useLinkedInUpload } from '../../contexts/LinkedInUploadContext'
 
 /**
@@ -19,7 +20,7 @@ export function LinkedInStep2Page() {
   return (
     <main className="main-interior">
       <Link to="/groundwork" className="back-link">
-        <span className="back-arrow">&#8249;</span> Groundwork Checklist
+        <MaterialIcon name="chevron_left" size={18} className="back-arrow" /> Groundwork Checklist
       </Link>
 
       <div className="section-header">

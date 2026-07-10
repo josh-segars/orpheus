@@ -145,12 +145,13 @@ body {
   flex-shrink: 0;
 }
 
-/* Closed Beta feedback link (ORPHEUS-72). A button-style link centered in
-   the header, between the wordmark and the account cluster. Absolutely
-   centered on the nav so its width never shifts the two flex children;
-   the nav is centered in the viewport, so this reads as header-centered.
-   Styled after .btn-secondary (outlined pill) to stay unobtrusive. In the
-   React app it renders only when VITE_BETA_SURVEY_URL is set. */
+/* "Tell Us What You Think" feedback link (ORPHEUS-72, relabelled ORPHEUS-105).
+   A button-style link centered in the header, between the wordmark and the
+   account cluster. Absolutely centered on the nav so its width never shifts
+   the two flex children; the nav is centered in the viewport, so this reads
+   as header-centered. Styled after .btn-secondary (outlined pill) to stay
+   unobtrusive. In the React app it renders only when VITE_BETA_SURVEY_URL
+   is set. */
 .nav-survey-link {
   position: absolute;
   left: 50%;
@@ -168,39 +169,66 @@ body {
   border-radius: 10px;
   text-decoration: none;
   white-space: nowrap;
+  overflow: hidden; /* clip the wave sweep to the pill */
   transition: border-color 0.15s ease, color 0.15s ease;
-  /* Gentle accent pulse to draw beta users' eye without being distracting
-     (ORPHEUS-105). Pauses on hover/focus so the interactive emphasis reads
-     cleanly, and is disabled entirely under prefers-reduced-motion. */
-  animation: nav-survey-pulse 2.8s ease-in-out infinite;
+}
+/* Accent "wave" that sweeps left→right across the pill once every 2s to draw
+   beta users' eye without being distracting (ORPHEUS-105). A soft accent-tint
+   band on a pseudo-element travels the full width, then waits off-screen for
+   the rest of the cycle. Paused on hover/focus so the interactive emphasis
+   reads cleanly; disabled entirely under prefers-reduced-motion. */
+.nav-survey-link::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 40%,
+    var(--accent-tint-hover) 50%,
+    transparent 60%
+  );
+  transform: translateX(-100%);
+  animation: nav-survey-wave 2s ease-in-out infinite;
+  pointer-events: none;
 }
 .nav-survey-link:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+.nav-survey-link:hover::before,
+.nav-survey-link:focus-visible::before {
   animation-play-state: paused;
 }
 .nav-survey-link:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 4px;
-  animation-play-state: paused;
 }
 
-@keyframes nav-survey-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(37, 205, 101, 0);
-    border-color: var(--border);
+@keyframes nav-survey-wave {
+  0% {
+    transform: translateX(-100%);
   }
-  50% {
-    box-shadow: 0 0 0 4px var(--accent-tint-hover);
-    border-color: var(--accent);
+  /* Sweep completes in the first ~60% of the cycle (~1.2s), then holds
+     off-screen so the effect fires once per 2s rather than continuously. */
+  55%,
+  100% {
+    transform: translateX(100%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nav-survey-link {
+  .nav-survey-link::before {
     animation: none;
+    display: none;
   }
+}
+
+/* Inline Material icons (ORPHEUS-105). vertical-align keeps a 24×24 SVG
+   centered against adjacent text in inline contexts (buttons, links); it's
+   inert inside flex/inline-flex parents (back-link, groundwork rows, the
+   Profile Signals chip), so this one rule covers every usage. */
+.material-icon {
+  vertical-align: middle;
 }
 
 /* Wordmark — full size */

@@ -138,7 +138,7 @@ export function PortalNav() {
           target="_blank"
           rel="noopener noreferrer"
         >
-          Closed Beta Feedback
+          Tell Us What You Think
         </a>
       )}
 
