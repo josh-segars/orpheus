@@ -291,7 +291,7 @@ Both are computed in the **scoring stage** (single stage, not separate). Claude 
 - **Multi-advisor from day one** — Multiple advisors at launch, not just Andrew. [Josh, 2026-03-23]
 - **White-labeling = branding + narrative editing** — Scoring framework is fixed and shared, not configurable per advisor. [Josh, 2026-03-23]
 - **client_id anchors all analysis data** — Enables advisory→self-serve migration. [Josh, 2026-03-23]
-- **Pipeline config snapshot on jobs** — JSONB config_snapshot for reproducibility. [Josh, 2026-03-23]
+- **Pipeline config snapshot on jobs** — JSONB config_snapshot for reproducibility. [Josh, 2026-03-23] Records `ref_date` + `ref_date_anchor` since ORPHEUS-91 [Josh, 2026-06-18] and the effective scoring `model` since ORPHEUS-97 [Josh, 2026-07-13] — rows stored before 2026-07-13 have no model key; the 2026-06-12 deploy is the known Sonnet-4/4.6 boundary.
 - **Client login included in initial build** — Advisor invites client, scoped dashboard. [Josh, 2026-03-23]
 - **5 Dimension 1 rubrics complete** — Headline Clarity, About Clarity, Experience Section Clarity, Identity Clarity, Profile-Content Alignment. All 1–5 scale. [Andrew, 2026-03-30]
 
