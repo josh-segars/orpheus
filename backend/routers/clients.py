@@ -508,10 +508,18 @@ async def accept_invitation(
     if not lookup.data:
         # Either the token never existed, or it's been rotated away by
         # a resend-invitation. We don't distinguish — both surface to
-        # the frontend as the same "invitation not found" state.
+        # the frontend as the same "invitation not found" state. The
+        # copy leads with the likeliest real-world cause (ORPHEUS-93:
+        # a resend replaced this link) and points at the recovery path
+        # rather than implying the user did something wrong.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invitation not found or no longer valid.",
+            detail=(
+                "This invitation link is no longer valid — it may have "
+                "been replaced by a newer invitation. Check your inbox "
+                "for the most recent email, or ask your advisor to send "
+                "a fresh invitation."
+            ),
         )
 
     row = lookup.data[0]
@@ -790,6 +798,7 @@ async def resend_invitation(
             to_email=client_email,
             advisor_name=advisor_display_name,
             invite_url=invite_url,
+            is_resend=True,
         )
     except EmailSendError as exc:
         # Token has already been rotated. The OLD email link is now

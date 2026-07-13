@@ -421,6 +421,25 @@
   color: var(--text-strong);
 }
 
+/* ORPHEUS-93: inline resend confirmation — spans the row like the
+   error note; note text + Confirm/Cancel buttons in one line. */
+.advisor-row-confirm {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--accent-tint-soft);
+  border-radius: 10px;
+}
+
+.advisor-row-confirm-text {
+  color: var(--text-body);
+  font-size: 13px;
+}
+
 .advisor-row-error {
   grid-column: 1 / -1;
   margin-top: 6px;

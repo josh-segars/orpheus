@@ -12,6 +12,7 @@
  * rather than ballooning this file.
  */
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 
 import { ClientsPage } from '../ClientsPage'
@@ -49,9 +50,14 @@ vi.mock('../../../hooks/useInviteClient', () => ({
   extractInviteErrorMessage: (_err: unknown) => 'invite error',
 }))
 
+// Shared spy so the resend confirm-flow tests (ORPHEUS-93) can assert
+// whether/when the mutation actually fired. vi.hoisted lifts it above
+// the hoisted vi.mock factory.
+const resendMutateAsync = vi.hoisted(() => vi.fn())
+
 vi.mock('../../../hooks/useResendInvitation', () => ({
   useResendInvitation: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: resendMutateAsync,
     isPending: false,
   }),
   extractResendErrorMessage: (_err: unknown) => 'resend error',
@@ -81,6 +87,16 @@ const mockClients: AdvisorClient[] = [
     invitation_status: 'accepted',
     is_self: false,
     latest_job: { id: 'job-uuid-1', status: 'complete' },
+  },
+  // Pending row — exercises the Resend button + the ORPHEUS-93 inline
+  // confirmation (Resend rotates the token, killing the earlier link).
+  {
+    id: 'client-uuid-2',
+    display_name: 'Monika Gorzelanska',
+    email: 'monika@example.com',
+    invitation_status: 'pending',
+    is_self: false,
+    latest_job: null,
   },
 ]
 
@@ -113,7 +129,9 @@ describe('ClientsPage', () => {
     expect(screen.getByLabelText(/name/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /send invitation/i }),
+      // Anchored: /send invitation/i would also match the pending row's
+      // "Resend invitation" button.
+      screen.getByRole('button', { name: /^send invitation$/i }),
     ).toBeInTheDocument()
   })
 
@@ -122,5 +140,55 @@ describe('ClientsPage', () => {
     const link = screen.getByRole('link', { name: /view report/i })
     expect(link).toBeInTheDocument()
     expect(link).toHaveAttribute('href', '/jobs/job-uuid-1')
+  })
+})
+
+describe('ClientsPage resend confirmation (ORPHEUS-93)', () => {
+  beforeEach(() => {
+    resendMutateAsync.mockReset()
+    resendMutateAsync.mockResolvedValue({ client_id: 'client-uuid-2' })
+  })
+
+  it('arms an inline confirmation on Resend click without firing the mutation', async () => {
+    const user = userEvent.setup()
+    renderClientsPage()
+
+    await user.click(screen.getByRole('button', { name: /resend invitation/i }))
+
+    expect(resendMutateAsync).not.toHaveBeenCalled()
+    expect(
+      screen.getByText(/replaces the earlier invitation/i),
+    ).toBeInTheDocument()
+    // The original Resend button hides while confirming.
+    expect(
+      screen.queryByRole('button', { name: /resend invitation/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('fires the mutation only on Confirm resend', async () => {
+    const user = userEvent.setup()
+    renderClientsPage()
+
+    await user.click(screen.getByRole('button', { name: /resend invitation/i }))
+    await user.click(screen.getByRole('button', { name: /confirm resend/i }))
+
+    expect(resendMutateAsync).toHaveBeenCalledTimes(1)
+    expect(resendMutateAsync).toHaveBeenCalledWith('client-uuid-2')
+  })
+
+  it('Cancel dismisses the confirmation and restores the Resend button', async () => {
+    const user = userEvent.setup()
+    renderClientsPage()
+
+    await user.click(screen.getByRole('button', { name: /resend invitation/i }))
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }))
+
+    expect(resendMutateAsync).not.toHaveBeenCalled()
+    expect(
+      screen.queryByText(/replaces the earlier invitation/i),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /resend invitation/i }),
+    ).toBeInTheDocument()
   })
 })

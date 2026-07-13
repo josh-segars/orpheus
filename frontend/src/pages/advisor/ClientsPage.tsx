@@ -305,8 +305,19 @@ interface ClientRowProps {
 function ClientRow({ client }: ClientRowProps) {
   const resendMutation = useResendInvitation()
   const [resendError, setResendError] = useState<string | null>(null)
+  // ORPHEUS-93: resending rotates the invitation token, which kills the
+  // previously-emailed link the moment the new email goes out. First
+  // click arms an inline confirmation so the advisor knows the earlier
+  // link stops working; the mutation only fires on Confirm.
+  const [confirmingResend, setConfirmingResend] = useState(false)
 
-  const handleResend = async () => {
+  const handleResendClick = () => {
+    setResendError(null)
+    setConfirmingResend(true)
+  }
+
+  const handleConfirmResend = async () => {
+    setConfirmingResend(false)
     setResendError(null)
     try {
       await resendMutation.mutateAsync(client.id)
@@ -358,17 +369,41 @@ function ClientRow({ client }: ClientRowProps) {
         {!client.is_self &&
           !isOptimistic &&
           (client.invitation_status === 'pending' ||
-            client.invitation_status === 'expired') && (
+            client.invitation_status === 'expired') &&
+          !confirmingResend && (
             <button
               type="button"
               className="advisor-row-action"
-              onClick={handleResend}
+              onClick={handleResendClick}
               disabled={resendMutation.isPending}
             >
               {resendMutation.isPending ? 'Resending…' : 'Resend invitation'}
             </button>
           )}
       </div>
+
+      {confirmingResend && (
+        <div className="advisor-row-confirm">
+          <span className="advisor-row-confirm-text">
+            Resending replaces the earlier invitation — only the new link
+            will work.
+          </span>
+          <button
+            type="button"
+            className="advisor-row-action advisor-row-action-primary"
+            onClick={handleConfirmResend}
+          >
+            Confirm resend
+          </button>
+          <button
+            type="button"
+            className="advisor-row-action"
+            onClick={() => setConfirmingResend(false)}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
 
       {resendError && (
         <div className="advisor-row-error" role="alert">

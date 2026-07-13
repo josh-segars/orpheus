@@ -60,6 +60,43 @@ def test_format_invitation_email_embeds_invite_url_in_both_bodies():
 
 
 # --------------------------------------------------------------------------- #
+# Resend variant (ORPHEUS-93)
+# --------------------------------------------------------------------------- #
+
+
+def test_format_invitation_email_resend_variant_states_replacement():
+    """is_resend=True adds the replaces-the-earlier-link line to both bodies.
+
+    Resend rotates the token, killing the previously-emailed link — the
+    resend copy must say so or recipients holding the old email read the
+    401 as 'expired' (the ORPHEUS-93 live-beta finding).
+    """
+    url = "https://app.orpheussocial.com/invite/abc123"
+    _, html, text = format_invitation_email(
+        advisor_name="Andrew Segars",
+        invite_url=url,
+        is_resend=True,
+    )
+
+    assert "replaces any invitation" in html
+    assert "replaces any invitation" in text
+    # The rest of the invitation copy still renders.
+    assert f'href="{url}"' in html
+    assert url in text
+
+
+def test_format_invitation_email_default_omits_replacement_line():
+    """First-send copy (default) must not mention replacing an earlier link."""
+    _, html, text = format_invitation_email(
+        advisor_name="Andrew Segars",
+        invite_url="https://app.orpheussocial.com/invite/abc123",
+    )
+
+    assert "replaces" not in html.lower()
+    assert "replaces" not in text.lower()
+
+
+# --------------------------------------------------------------------------- #
 # Report-ready email (ORPHEUS-98)
 # --------------------------------------------------------------------------- #
 

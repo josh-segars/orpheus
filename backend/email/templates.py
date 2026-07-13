@@ -30,6 +30,7 @@ def format_invitation_email(
     *,
     advisor_name: str,
     invite_url: str,
+    is_resend: bool = False,
 ) -> tuple[str, str, str]:
     """Return (subject, html_body, text_body) for an invitation email.
 
@@ -38,12 +39,33 @@ def format_invitation_email(
     Mail without per-client tweaks. The text body mirrors the HTML
     line for line so accessibility/text-mode readers get the same
     information.
+
+    `is_resend` (ORPHEUS-93): the resend endpoint rotates the
+    invitation token, which kills every previously-emailed link the
+    instant the new email goes out. Without saying so, a recipient
+    holding the original email clicks the old link, gets the 401
+    not-found state, and reads it as "expired." The resend variant
+    states explicitly that this email replaces any earlier invitation
+    and only the newest link works.
     """
     subject = INVITATION_EMAIL_SUBJECT.format(advisor_name=advisor_name)
+
+    replaces_html = ""
+    replaces_text = ""
+    if is_resend:
+        replaces_html = (
+            "<p>This email replaces any invitation we sent you "
+            "earlier &mdash; only the link below will work now.</p>"
+        )
+        replaces_text = (
+            "This email replaces any invitation we sent you earlier - "
+            "only the link below will work now.\n\n"
+        )
 
     html_body = (
         f"<p>{advisor_name} invited you to complete a Strategic "
         f"Presence Diagnostic with Orpheus Social.</p>"
+        f"{replaces_html}"
         f"<p>To accept the invitation, sign in with LinkedIn:</p>"
         f'<p><a href="{invite_url}">{invite_url}</a></p>'
         f"<p>This link expires in 14 days.</p>"
@@ -52,6 +74,7 @@ def format_invitation_email(
     text_body = (
         f"{advisor_name} invited you to complete a Strategic "
         f"Presence Diagnostic with Orpheus Social.\n\n"
+        f"{replaces_text}"
         f"To accept the invitation, sign in with LinkedIn:\n"
         f"{invite_url}\n\n"
         f"This link expires in 14 days."

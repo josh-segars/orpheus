@@ -88,11 +88,15 @@ def send_invitation_email(
     to_email: str,
     advisor_name: str,
     invite_url: str,
+    is_resend: bool = False,
 ) -> str:
     """Send an invitation email and return the Resend message id.
 
     Sandbox-mode keys short-circuit the network call (see module
     docstring). Real keys POST to Resend's /emails endpoint.
+
+    `is_resend` selects the resend copy variant, which tells the
+    recipient the new link replaces any earlier one (ORPHEUS-93).
 
     Raises:
         EmailSendError: on any non-2xx response, network exception,
@@ -104,6 +108,7 @@ def send_invitation_email(
     subject, html_body, text_body = format_invitation_email(
         advisor_name=advisor_name,
         invite_url=invite_url,
+        is_resend=is_resend,
     )
 
     if _is_sandbox_key(api_key):

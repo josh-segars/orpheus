@@ -201,6 +201,9 @@ async def test_resend_happy_path_rotates_token_and_sends_email():
     assert update_payload["invitation_token"] in call_kwargs["invite_url"]
     # Old token explicitly NOT in the new URL.
     assert ORIGINAL_TOKEN not in call_kwargs["invite_url"]
+    # ORPHEUS-93: the resend copy variant is selected — the email tells
+    # the recipient this link replaces any earlier one.
+    assert call_kwargs["is_resend"] is True
 
 
 # --------------------------------------------------------------------------- #
