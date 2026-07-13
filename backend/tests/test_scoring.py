@@ -608,6 +608,27 @@ class TestConfigSnapshotRefDate:
         assert "ref_date_anchor" not in snap
 
 
+class TestConfigSnapshotModel:
+    """build_config_snapshot records the scoring model for per-job
+    provenance (ORPHEUS-97) — post-ORPHEUS-90, the model determines the
+    calibration scale, so it must be readable from the stored snapshot."""
+
+    def test_model_defaults_to_effective_pipeline_model(self):
+        from backend.agents import DEFAULT_MODEL
+
+        snap = build_config_snapshot()
+        assert snap["model"] == DEFAULT_MODEL
+
+    def test_model_always_present_and_nonempty(self):
+        snap = build_config_snapshot(ref_date=date(2025, 1, 15))
+        assert isinstance(snap["model"], str)
+        assert snap["model"]
+
+    def test_model_explicit_override_recorded(self):
+        snap = build_config_snapshot(model="claude-test-model-1")
+        assert snap["model"] == "claude-test-model-1"
+
+
 # ============================================================
 # Composite + band
 # ============================================================

@@ -241,7 +241,8 @@ async def stage_scoring(
     }, on_conflict="job_id").execute()
 
     # Save config snapshot to the job for reproducibility (ORPHEUS-91:
-    # includes the resolved ref_date so the recency window is auditable).
+    # includes the resolved ref_date so the recency window is auditable;
+    # ORPHEUS-97: includes the effective scoring model for provenance).
     snapshot = build_config_snapshot(ref_date=ref_date)
     supabase.table("jobs").update({
         "config_snapshot": snapshot,

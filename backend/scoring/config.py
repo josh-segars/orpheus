@@ -9,6 +9,8 @@ Recalibration checkpoint: 50–100 profiles.
 
 from datetime import date
 
+from backend.agents import DEFAULT_MODEL
+
 # === Dimension weights ===
 # INFERRED + PROVISIONAL — grounded in cold-start literature
 # but LinkedIn does not publish dimension weights.
@@ -136,7 +138,9 @@ AFFINITY_CONCENTRATION_THRESHOLD = 0.25  # 25% of total outbound to top N
 # === Serializable config for snapshot ===
 
 def build_config_snapshot(
-    version_label: str = "2026-Q2", ref_date: date | None = None
+    version_label: str = "2026-Q2",
+    ref_date: date | None = None,
+    model: str | None = None,
 ) -> dict:
     """Build a serializable config snapshot for the jobs table.
 
@@ -146,9 +150,19 @@ def build_config_snapshot(
     ORPHEUS-91: when ref_date is supplied (the resolved latest-activity anchor)
     it is recorded so the trailing-window math is reproducible and auditable —
     the recency window is no longer a function of the wall-clock run date.
+
+    ORPHEUS-97: the scoring model is always recorded. Post-ORPHEUS-90 the
+    model determines the calibration scale (Sonnet-4 vs. 4.6 reports are not
+    scale-comparable), so per-job provenance must be readable from the DB.
+    Defaults to the effective pipeline model (DEFAULT_MODEL, which already
+    resolves the ANTHROPIC_MODEL env override at import time); pass `model`
+    explicitly only to record a deliberate non-default (e.g. experiments).
+    Rows stored before 2026-07-13 have no model key — the 2026-06-12 deploy
+    cutover is the known Sonnet-4/4.6 boundary if a heuristic is needed.
     """
     snapshot: dict = {
         "version_label": version_label,
+        "model": model if model is not None else DEFAULT_MODEL,
         "scoring": {
             "dimension_weights": DIMENSION_WEIGHTS,
             "bands": {name: [lo, hi] for name, lo, hi in SIGNAL_BANDS},
