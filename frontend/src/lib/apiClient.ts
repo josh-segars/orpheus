@@ -56,6 +56,46 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * A transport-level failure — the request never produced an HTTP response.
+ * `fetch()` rejects with a `TypeError` (surfaced to users as the opaque
+ * "Failed to fetch") when the connection is refused/dropped, DNS fails,
+ * CORS blocks it, or a large upload body dies mid-transfer at the edge
+ * (the ORPHEUS-86 symptom). Distinct from `ApiError`, which always carries
+ * a real HTTP status and (usually) a `{detail}` body the UI can render.
+ * Callers branch on `instanceof NetworkError` to show connection-oriented
+ * guidance instead of leaking the raw browser message.
+ */
+export class NetworkError extends Error {
+  constructor(
+    message: string,
+    public readonly cause?: unknown,
+  ) {
+    super(message)
+    this.name = 'NetworkError'
+  }
+}
+
+/**
+ * `fetch()` with transport failures normalized to `NetworkError`. A
+ * deliberate `AbortController` cancellation (React Query unmount, etc.)
+ * still surfaces as the original `AbortError` so callers can treat it as
+ * a cancellation rather than a failure.
+ */
+async function safeFetch(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init)
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw err
+    }
+    throw new NetworkError(
+      'The request could not reach the server.',
+      err,
+    )
+  }
+}
+
 async function authHeaders(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
@@ -69,7 +109,7 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
     ...(await authHeaders()),
   }
 
-  const res = await fetch(url, { method: 'GET', headers, signal })
+  const res = await safeFetch(url, { method: 'GET', headers, signal })
   if (!res.ok) {
     let body: unknown = null
     try {
@@ -103,7 +143,7 @@ export async function apiPostJson<T>(
     ...(await authHeaders()),
   }
 
-  const res = await fetch(url, {
+  const res = await safeFetch(url, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -145,7 +185,7 @@ export async function apiPatchJson<T>(
     ...(await authHeaders()),
   }
 
-  const res = await fetch(url, {
+  const res = await safeFetch(url, {
     method: 'PATCH',
     headers,
     body: JSON.stringify(body),
@@ -186,7 +226,7 @@ export async function apiPostMultipart<T>(
     ...(await authHeaders()),
   }
 
-  const res = await fetch(url, {
+  const res = await safeFetch(url, {
     method: 'POST',
     headers,
     body: formData,

@@ -5,8 +5,47 @@ import { MaterialIcon } from '../components/icons/MaterialIcon'
 import { useLinkedInUpload } from '../contexts/LinkedInUploadContext'
 import { useCreateJob } from '../hooks/useCreateJob'
 import { useGroundworkProgress } from '../hooks/useGroundworkProgress'
-import { ApiError } from '../lib/apiClient'
+import { ApiError, NetworkError } from '../lib/apiClient'
 import './GroundworkPage.css'
+
+// Soft advisory threshold for the archive (ORPHEUS-86). A LinkedIn "Complete"
+// export is typically 5–50 MB; the behavioral CSVs the parsers need are tiny.
+// Rich media (images/video) is what bloats large archives, and none of it is
+// used in scoring. Past this size the multipart upload is at elevated risk of
+// dying mid-transfer at the edge before the server-side 200 MB cap can return
+// a friendly error, so we warn — but don't block, since the real edge limit
+// is unconfirmed and a legitimately large archive should still be submittable.
+const LARGE_ARCHIVE_WARN_BYTES = 150 * 1024 * 1024 // 150 MB
+
+// Fallback shown when the network drops the upload before any HTTP response.
+const NETWORK_ERROR_MESSAGE =
+  'We couldn’t reach the server, so your upload didn’t go through. This can ' +
+  'happen with very large archives or an unstable connection. Your LinkedIn ' +
+  '“Complete” archive only needs its data files — the photos and videos ' +
+  'inside it aren’t used in your analysis — so re-downloading a smaller ' +
+  'export can help. Please check your connection and try again.'
+
+function formatMegabytes(bytes: number): string {
+  return `${Math.round(bytes / (1024 * 1024))} MB`
+}
+
+const GENERIC_SUBMIT_ERROR = 'We couldn’t submit your data. Please try again.'
+
+/**
+ * Map a submit failure to client-facing copy. A NetworkError is a
+ * transport-level death (the ORPHEUS-86 case) and gets connection-oriented
+ * guidance; an ApiError carries FastAPI's `{detail}` for HTTPExceptions
+ * (Basic-archive/stale/parse rejections etc.); anything else is generic.
+ */
+function resolveSubmitError(err: unknown): string {
+  if (err instanceof NetworkError) {
+    return NETWORK_ERROR_MESSAGE
+  }
+  if (err instanceof ApiError && typeof err.body === 'object' && err.body) {
+    return (err.body as { detail?: string }).detail ?? GENERIC_SUBMIT_ERROR
+  }
+  return GENERIC_SUBMIT_ERROR
+}
 
 /**
  * Groundwork Checklist — the hub the client returns to between the intake
@@ -38,6 +77,9 @@ export function GroundworkPage() {
   const linkedInArchive = !!archive
   const linkedInAnalytics = !!analytics
 
+  // Soft, non-blocking warning for an unusually large archive (ORPHEUS-86).
+  const largeArchive = !!archive && archive.size > LARGE_ARCHIVE_WARN_BYTES
+
   // Derived "all complete" using the live LinkedIn flags. Questionnaire
   // completion is a single derived boolean (see useGroundworkProgress).
   const allComplete =
@@ -67,15 +109,7 @@ export function GroundworkPage() {
       clearUploads()
       navigate(`/jobs/${job.id}/analysis`)
     } catch (err) {
-      const message =
-        err instanceof ApiError && typeof err.body === 'object' && err.body
-          ? // FastAPI returns { detail: "..." } for HTTPExceptions.
-            ((err.body as { detail?: string }).detail ??
-              'We couldn’t submit your data. Please try again.')
-          : err instanceof Error
-            ? err.message
-            : 'We couldn’t submit your data. Please try again.'
-      setSubmitError(message)
+      setSubmitError(resolveSubmitError(err))
     }
   }
 
@@ -127,6 +161,15 @@ export function GroundworkPage() {
       </div>
 
       <div className="groundwork-completion-row">
+        {largeArchive && (
+          <p className="groundwork-completion-warning" role="status">
+            Your data archive is large ({formatMegabytes(archive!.size)}). A
+            LinkedIn “Complete” export only needs its data files — the photos
+            and videos inside it aren’t used in your analysis. You can still
+            submit as-is, but if the upload fails, re-downloading a smaller
+            export usually fixes it.
+          </p>
+        )}
         <button
           type="button"
           className={
@@ -139,7 +182,14 @@ export function GroundworkPage() {
         >
           {buttonLabel}
         </button>
-        <span className="groundwork-completion-note">
+        <span
+          className={
+            submitError
+              ? 'groundwork-completion-note error'
+              : 'groundwork-completion-note'
+          }
+          role={submitError ? 'alert' : undefined}
+        >
           {submitError
             ? submitError
             : 'Available once all items above are complete.'}
