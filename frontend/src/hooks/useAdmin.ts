@@ -119,6 +119,21 @@ export interface UpdateAdminNarrativeRequest {
   status?: 'draft' | 'published'
 }
 
+// ORPHEUS-104 — mirrors AdminWaitlistEntry in backend/routers/admin.py
+export interface AdminWaitlistEntry {
+  id: string
+  email: string
+  first_name: string | null
+  last_name: string | null
+  interests: string[]
+  source: string | null
+  created_at: string | null
+}
+
+export interface AdminWaitlistResponse {
+  entries: AdminWaitlistEntry[]
+}
+
 // --------------------------------------------------------------------------- //
 // Query keys — centralised so mutation hooks invalidate the right caches
 // --------------------------------------------------------------------------- //
@@ -130,6 +145,8 @@ export const adminJobsQueryKey = (clientId: string | null) =>
 
 export const adminNarrativeQueryKey = (narrativeId: string) =>
   ['admin', 'narratives', narrativeId] as const
+
+export const ADMIN_WAITLIST_QUERY_KEY = ['admin', 'waitlist'] as const
 
 // --------------------------------------------------------------------------- //
 // Hooks
@@ -179,6 +196,22 @@ export function useAdminNarrative(narrativeId: string | null) {
       : ['admin', 'narratives', '__none__'],
     queryFn: () =>
       apiGet<AdminNarrative>(`/admin/narratives/${narrativeId}`),
+    enabled,
+    retry: false,
+  })
+}
+
+/**
+ * Read-only view of `public.waitlist` via `GET /admin/waitlist`
+ * (ORPHEUS-104). The table is write-only from the browser (anon
+ * INSERT-only RLS), so this admin endpoint is the only in-app read
+ * surface for marketing-page signups.
+ */
+export function useAdminWaitlist() {
+  const enabled = useEnabled()
+  return useQuery<AdminWaitlistResponse, ApiError>({
+    queryKey: ADMIN_WAITLIST_QUERY_KEY,
+    queryFn: () => apiGet<AdminWaitlistResponse>('/admin/waitlist'),
     enabled,
     retry: false,
   })

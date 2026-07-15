@@ -27,6 +27,7 @@ import type {
   AdminClient,
   AdminJob,
   AdminNarrative,
+  AdminWaitlistEntry,
 } from '../../hooks/useAdmin'
 import { AdminPage } from '../AdminPage'
 
@@ -56,6 +57,15 @@ const mockNarrativeRef: {
   isError: boolean
 } = {
   data: null,
+  isLoading: false,
+  isError: false,
+}
+const mockWaitlistRef: {
+  data: AdminWaitlistEntry[]
+  isLoading: boolean
+  isError: boolean
+} = {
+  data: [],
   isLoading: false,
   isError: false,
 }
@@ -92,6 +102,11 @@ vi.mock('../../hooks/useAdmin', () => ({
   useUpdateAdminNarrative: () => ({
     mutateAsync: mockMutateAsync,
     isPending: false,
+  }),
+  useAdminWaitlist: () => ({
+    data: { entries: mockWaitlistRef.data },
+    isLoading: mockWaitlistRef.isLoading,
+    isError: mockWaitlistRef.isError,
   }),
 }))
 
@@ -155,6 +170,27 @@ const mockJobs: AdminJob[] = [
   },
 ]
 
+const mockWaitlist: AdminWaitlistEntry[] = [
+  {
+    id: 'wl-uuid-1',
+    email: 'prospect@example.com',
+    first_name: 'Paula',
+    last_name: 'Prospect',
+    interests: ['beta_access', 'live_workshop'],
+    source: 'www-landing',
+    created_at: '2026-07-14T09:00:00+00:00',
+  },
+  {
+    id: 'wl-uuid-2',
+    email: 'emailonly@example.com',
+    first_name: null,
+    last_name: null,
+    interests: ['beta_access'],
+    source: null,
+    created_at: '2026-07-12T09:00:00+00:00',
+  },
+]
+
 function resetMocks() {
   mockClientsRef.data = mockClients
   mockClientsRef.isLoading = false
@@ -166,6 +202,9 @@ function resetMocks() {
   mockNarrativeRef.data = null
   mockNarrativeRef.isLoading = false
   mockNarrativeRef.isError = false
+  mockWaitlistRef.data = mockWaitlist
+  mockWaitlistRef.isLoading = false
+  mockWaitlistRef.isError = false
   mockMutateAsync.mockReset()
   mockMutateAsync.mockResolvedValue({})
 }
@@ -272,5 +311,36 @@ describe('AdminPage', () => {
       narrativeId: 'narr-uuid-1',
       body: { edited_text: 'Original edit.', status: 'draft' },
     })
+  })
+
+  // ORPHEUS-104 — waitlist section
+
+  it('renders the waitlist section with rows and header stats', () => {
+    renderAdmin()
+    expect(
+      screen.getByRole('heading', { level: 2, name: /waitlist/i }),
+    ).toBeInTheDocument()
+    // Header stats: 2 signups, 2 beta access, 1 live workshop.
+    expect(
+      screen.getByText(/2 signups · 2 beta access · 1 live workshop/i),
+    ).toBeInTheDocument()
+    // Named row.
+    expect(screen.getByText('Paula Prospect')).toBeInTheDocument()
+    expect(screen.getByText('prospect@example.com')).toBeInTheDocument()
+    // Interest values render with display labels, not raw enum values.
+    expect(screen.getAllByText('Beta access').length).toBe(2)
+    expect(screen.getByText('Live workshop')).toBeInTheDocument()
+    expect(screen.queryByText('beta_access')).not.toBeInTheDocument()
+    // Email-only (migration-017-era) row: name column falls back to a dash.
+    expect(screen.getByText('emailonly@example.com')).toBeInTheDocument()
+  })
+
+  it('shows the waitlist empty state when there are no signups', () => {
+    mockWaitlistRef.data = []
+    renderAdmin()
+    expect(screen.getByText(/no signups yet/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/0 signups · 0 beta access · 0 live workshop/i),
+    ).toBeInTheDocument()
   })
 })

@@ -1092,3 +1092,112 @@ async def test_patch_admin_narrative_empty_body_is_noop():
     assert response.id == NARR_1_ID
     # No `update(...)` was called.
     assert fake._tables["narratives"]._last_update_payload is None
+
+
+# --------------------------------------------------------------------------- #
+# GET /admin/waitlist (ORPHEUS-104)
+# --------------------------------------------------------------------------- #
+
+WAITLIST_1_ID = "wl111111-0000-0000-0000-000000000000"
+WAITLIST_2_ID = "wl222222-0000-0000-0000-000000000000"
+
+
+@pytest.mark.asyncio
+async def test_list_admin_waitlist_returns_rows_newest_first():
+    """Happy path — rows come back in the order the query returned them,
+    with all fields mapped (interests array included)."""
+    fake = FakeSupabase(
+        queues={
+            "waitlist": [
+                FakeResult(
+                    data=[
+                        {
+                            "id": WAITLIST_2_ID,
+                            "email": "newer@example.com",
+                            "first_name": "Nadia",
+                            "last_name": "Newer",
+                            "interests": ["beta_access", "live_workshop"],
+                            "source": "www-landing",
+                            "created_at": "2026-07-14T09:00:00+00:00",
+                        },
+                        {
+                            "id": WAITLIST_1_ID,
+                            "email": "older@example.com",
+                            "first_name": "Omar",
+                            "last_name": "Older",
+                            "interests": ["beta_access"],
+                            "source": "www-landing",
+                            "created_at": "2026-07-12T09:00:00+00:00",
+                        },
+                    ]
+                )
+            ]
+        }
+    )
+
+    with _patch_supabase(fake):
+        response = await admin_router.list_admin_waitlist(
+            _admin=_admin_roles()
+        )
+
+    assert [e.id for e in response.entries] == [WAITLIST_2_ID, WAITLIST_1_ID]
+    first = response.entries[0]
+    assert first.email == "newer@example.com"
+    assert first.first_name == "Nadia"
+    assert first.last_name == "Newer"
+    assert first.interests == ["beta_access", "live_workshop"]
+    assert first.source == "www-landing"
+    assert first.created_at == "2026-07-14T09:00:00+00:00"
+    # Single round trip — only the waitlist table was touched.
+    assert fake.tables_queried == ["waitlist"]
+
+
+@pytest.mark.asyncio
+async def test_list_admin_waitlist_tolerates_migration_017_era_rows():
+    """Email-only rows (pre-migration-018: no names, NULL interests)
+    map to None / empty list instead of raising."""
+    fake = FakeSupabase(
+        queues={
+            "waitlist": [
+                FakeResult(
+                    data=[
+                        {
+                            "id": WAITLIST_1_ID,
+                            "email": "early@example.com",
+                            "first_name": None,
+                            "last_name": None,
+                            "interests": None,
+                            "source": None,
+                            "created_at": None,
+                        }
+                    ]
+                )
+            ]
+        }
+    )
+
+    with _patch_supabase(fake):
+        response = await admin_router.list_admin_waitlist(
+            _admin=_admin_roles()
+        )
+
+    entry = response.entries[0]
+    assert entry.email == "early@example.com"
+    assert entry.first_name is None
+    assert entry.last_name is None
+    assert entry.interests == []
+    assert entry.source is None
+    assert entry.created_at is None
+
+
+@pytest.mark.asyncio
+async def test_list_admin_waitlist_empty_table():
+    """No signups yet → empty entries list, no error."""
+    fake = FakeSupabase(queues={"waitlist": [FakeResult(data=[])]})
+
+    with _patch_supabase(fake):
+        response = await admin_router.list_admin_waitlist(
+            _admin=_admin_roles()
+        )
+
+    assert response.entries == []

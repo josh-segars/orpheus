@@ -395,3 +395,18 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* ORPHEUS-104: waitlist section. */
+.admin-waitlist-stats {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.admin-chip-interest {
+  color: var(--accent);
+  border-color: var(--accent);
+  margin-right: 4px;
+}

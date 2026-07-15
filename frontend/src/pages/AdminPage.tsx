@@ -28,10 +28,12 @@ import {
   AdminClient,
   AdminJob,
   AdminNarrativeMeta,
+  AdminWaitlistEntry,
   extractAdminErrorMessage,
   useAdminClients,
   useAdminJobs,
   useAdminNarrative,
+  useAdminWaitlist,
   useUpdateAdminNarrative,
 } from '../hooks/useAdmin'
 import './AdminPage.css'
@@ -111,8 +113,141 @@ export function AdminPage() {
           />
         </section>
       )}
+
+      <WaitlistSection />
     </main>
   )
+}
+
+// --------------------------------------------------------------------------- //
+// Waitlist (ORPHEUS-104) — read-only view of public.waitlist
+// --------------------------------------------------------------------------- //
+
+function WaitlistSection() {
+  const waitlistQuery = useAdminWaitlist()
+  const entries = waitlistQuery.data?.entries ?? []
+
+  const betaCount = entries.filter((e) =>
+    e.interests.includes('beta_access'),
+  ).length
+  const workshopCount = entries.filter((e) =>
+    e.interests.includes('live_workshop'),
+  ).length
+
+  return (
+    <section className="admin-section">
+      <h2 className="admin-section-title">
+        Waitlist
+        {!waitlistQuery.isLoading && !waitlistQuery.isError && (
+          <span className="admin-waitlist-stats">
+            {entries.length} signup{entries.length === 1 ? '' : 's'}
+            {' · '}
+            {betaCount} beta access
+            {' · '}
+            {workshopCount} live workshop
+          </span>
+        )}
+      </h2>
+      <WaitlistTable
+        isLoading={waitlistQuery.isLoading}
+        isError={waitlistQuery.isError}
+        errorMessage={
+          waitlistQuery.isError
+            ? extractAdminErrorMessage(waitlistQuery.error)
+            : null
+        }
+        entries={entries}
+      />
+    </section>
+  )
+}
+
+interface WaitlistTableProps {
+  isLoading: boolean
+  isError: boolean
+  errorMessage: string | null
+  entries: AdminWaitlistEntry[]
+}
+
+function WaitlistTable({
+  isLoading,
+  isError,
+  errorMessage,
+  entries,
+}: WaitlistTableProps) {
+  if (isLoading) {
+    return <div className="admin-status">Loading waitlist…</div>
+  }
+  if (isError) {
+    return (
+      <div className="admin-status admin-status-error" role="alert">
+        {errorMessage ?? 'Failed to load waitlist.'}
+      </div>
+    )
+  }
+  if (entries.length === 0) {
+    return (
+      <div className="admin-status">
+        No signups yet. Express-interest submissions from the marketing
+        page will appear here.
+      </div>
+    )
+  }
+
+  return (
+    <table className="admin-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Interests</th>
+          <th>Source</th>
+          <th>Signed up</th>
+        </tr>
+      </thead>
+      <tbody>
+        {entries.map((entry) => (
+          <tr key={entry.id} className="admin-row">
+            <td>{formatWaitlistName(entry)}</td>
+            <td>{entry.email}</td>
+            <td>
+              {entry.interests.length === 0 ? (
+                <span className="admin-cell-secondary">—</span>
+              ) : (
+                entry.interests.map((interest) => (
+                  <span
+                    key={interest}
+                    className="admin-chip admin-chip-interest"
+                  >
+                    {WAITLIST_INTEREST_LABELS[interest] ?? interest}
+                  </span>
+                ))
+              )}
+            </td>
+            <td className="admin-cell-secondary">{entry.source ?? '—'}</td>
+            <td className="admin-cell-secondary">
+              {formatDateOnly(entry.created_at)}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+// Display labels for the migration-018 interests values. Unknown values
+// (the column is extensible without migration) fall through verbatim.
+const WAITLIST_INTEREST_LABELS: Record<string, string> = {
+  beta_access: 'Beta access',
+  live_workshop: 'Live workshop',
+}
+
+function formatWaitlistName(entry: AdminWaitlistEntry): string {
+  const name = [entry.first_name, entry.last_name]
+    .filter(Boolean)
+    .join(' ')
+    .trim()
+  return name || '—'
 }
 
 // --------------------------------------------------------------------------- //

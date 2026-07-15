@@ -23,6 +23,11 @@ Three routes:
   * `PATCH /admin/narratives/{narrative_id}` — update `edited_text`
     and / or `status` on a narrative row.
 
+  * `GET /admin/waitlist` — every `public.waitlist` row, newest
+    first (ORPHEUS-104). The waitlist table is write-only from the
+    browser (anon INSERT-only RLS, no select policy), so this
+    service-role read is the only in-app surface for signups.
+
 Every endpoint depends on `get_current_admin` (backend/auth.py) and
 uses the service-role Supabase client (RLS bypassed intentionally —
 the whole point of the admin surface is to see across tenants).
@@ -158,6 +163,30 @@ class AdminNarrative(BaseModel):
     status: str
     published_at: str | None
     generated_at: str | None
+
+
+class AdminWaitlistEntry(BaseModel):
+    """One row of `GET /admin/waitlist` (ORPHEUS-104).
+
+    Mirrors `public.waitlist` (migrations 017 + 018). `first_name` /
+    `last_name` are nullable — migration-017-era rows were email-only.
+    `interests` defaults to empty for the same vintage reason (the
+    column has a `not null default '{}'`, but be defensive on read).
+    """
+
+    id: str
+    email: str
+    first_name: str | None
+    last_name: str | None
+    interests: list[str]
+    source: str | None
+    created_at: str | None
+
+
+class ListAdminWaitlistResponse(BaseModel):
+    """Body of `GET /admin/waitlist`."""
+
+    entries: list[AdminWaitlistEntry]
 
 
 class UpdateAdminNarrativeRequest(BaseModel):
@@ -432,6 +461,59 @@ async def list_admin_jobs(
         )
 
     return ListAdminJobsResponse(jobs=items)
+
+
+# --------------------------------------------------------------------------- #
+# GET /admin/waitlist — every waitlist signup, newest first (ORPHEUS-104)
+# --------------------------------------------------------------------------- #
+
+@router.get("/waitlist", response_model=ListAdminWaitlistResponse)
+async def list_admin_waitlist(
+    _admin: Annotated[SessionRoles, Depends(get_current_admin)],
+) -> ListAdminWaitlistResponse:
+    """Return every `public.waitlist` row, newest first.
+
+    Single round trip — the table has no relations worth joining.
+    Service-role client is *required* here, not just conventional:
+    `public.waitlist` has an anon INSERT-only RLS posture with no
+    select policy (migration 017), so reads only work with RLS
+    bypassed.
+
+    Read-only in v1 — no edit/delete endpoints. No pagination: the
+    waitlist is a closed-beta marketing capture; if it ever crosses
+    a few hundred rows that's a good problem warranting a follow-up.
+
+    Interests breakdown (beta_access vs. live_workshop counts) is
+    computed client-side from the returned rows rather than shipped
+    as a server aggregate — one fewer contract to keep in sync at
+    this scale.
+    """
+    supabase = get_service_client()
+
+    result = (
+        supabase.table("waitlist")
+        .select(
+            "id, email, first_name, last_name, interests, "
+            "source, created_at"
+        )
+        .order("created_at", desc=True)
+        .execute()
+    )
+
+    entries = [
+        AdminWaitlistEntry(
+            id=str(row["id"]),
+            email=row["email"],
+            first_name=row.get("first_name"),
+            last_name=row.get("last_name"),
+            interests=list(row.get("interests") or []),
+            source=row.get("source"),
+            created_at=_iso_or_none(row.get("created_at")),
+        )
+        for row in (result.data or [])
+    ]
+
+    return ListAdminWaitlistResponse(entries=entries)
 
 
 # --------------------------------------------------------------------------- #
