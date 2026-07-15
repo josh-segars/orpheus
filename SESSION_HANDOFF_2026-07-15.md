@@ -1,15 +1,15 @@
-# Session Handoff — 2026-07-15
+# Session Handoff — 2026-07-15 (updated in place: part 2, ORPHEUS-108)
 
 Replaces `SESSION_HANDOFF_2026-07-13.md` — its threads are resolved or carried below:
 
 - **ORPHEUS-93 / 97 / 86 (frontend half) / 105 / 106** — all shipped and documented; their Vercel + Railway redeploys are still the pending manual step (carried).
-- **ORPHEUS-8 go-live** — the "migrations 017/018 not applied to cloud" caveat was **stale**: this session verified both are applied (ladder shows 2026-07-02, harmless idempotent re-apply 2026-07-08) and the table shape matches the migration files exactly (8 columns, RLS + anon-INSERT-only policy, unique index, 0 rows). Remaining go-live steps are the Vercel domain + registrar DNS wiring only. Carried, reduced.
-- **ORPHEUS-108** — still Backlog (high), blocked on Andrew's file-size/time-to-failure data. Carried.
+- **ORPHEUS-8 go-live** — the "migrations 017/018 not applied to cloud" caveat was **stale**: part 1 verified both are applied (ladder shows 2026-07-02, harmless idempotent re-apply 2026-07-08) and the table shape matches the migration files exactly. Remaining go-live steps are the Vercel domain + registrar DNS wiring only. Carried, reduced.
+- **ORPHEUS-108** — no longer blocked: **shipped in part 2** (see below). In Progress pending live validation.
 - **ORPHEUS-107** — still Backlog (low), wants Tim privacy check. Carried.
 - **ORPHEUS-90 Decision Log paste** — still owed. Carried.
 - **Untracked-by-intent files** — unchanged (see "State of the repo").
 
-This session was a single-ticket session: shipped and closed **ORPHEUS-104** (waitlist admin view), and cleared the stale 017/018 caveat en route.
+Two sessions today: **part 1** shipped and closed ORPHEUS-104 (waitlist admin view) and cleared the stale 017/018 caveat; **part 2** shipped ORPHEUS-108 (browser-direct upload) without waiting on Andrew's failure data.
 
 ---
 
@@ -17,10 +17,10 @@ This session was a single-ticket session: shipped and closed **ORPHEUS-104** (wa
 
 | Ticket | Title | Status |
 |---|---|---|
-| ORPHEUS-104 | Waitlist admin view: surface `public.waitlist` in /admin | ✅ **Done (this session, `cd6eb94`).** Live once Railway backend redeploys. |
-| ORPHEUS-86 | Upload UI: catch network-level fetch failures | 🔄 In Progress. Frontend half shipped 07-13 (`4edf25f`); stays open until it deploys + validates. Backend half = 108. |
-| ORPHEUS-108 | Large multipart uploads die at the edge | ⏳ Backlog (high). Blocked on Andrew's file-size/time-to-failure data. |
-| ORPHEUS-102 | Live validation of the gate trio (88/100/101) | ⏳ Backlog (medium). Unblocked; fold in the ORPHEUS-97 model-key spot-check. |
+| ORPHEUS-108 | Large multipart uploads die at the edge | 🔄 **In Progress — code shipped part 2 (`c406c00` + `48261ce`, both pushed).** Browser-direct upload to Storage; stays open pending live validation + legacy multipart removal. |
+| ORPHEUS-104 | Waitlist admin view: surface `public.waitlist` in /admin | ✅ Done (part 1, `cd6eb94`). Live once Railway backend redeploys. |
+| ORPHEUS-86 | Upload UI: catch network-level fetch failures | 🔄 In Progress. Frontend half shipped 07-13 (`4edf25f`); ORPHEUS-108's live validation is what closes it. |
+| ORPHEUS-102 | Live validation of the gate trio (88/100/101) | ⏳ Backlog (medium). Unblocked; fold in the ORPHEUS-97 model-key spot-check + first live `GET /admin/waitlist`. |
 | ORPHEUS-93 / 97 / 105 / 106 | (resend messaging / config_snapshot model / UI polish / LIMITED DATA proportionality) | ✅ Done, deploys pending (same Vercel + Railway redeploys). |
 | ORPHEUS-99 | Atomic "Publish report" admin action | ⏳ Backlog (low). |
 | ORPHEUS-94 | Email-mismatch reads as an error | ⏳ Backlog (low). |
@@ -30,57 +30,60 @@ This session was a single-ticket session: shipped and closed **ORPHEUS-104** (wa
 
 ---
 
-## What this session did
+## What part 2 did — ORPHEUS-108, commits `c406c00` + `48261ce` (pushed)
 
-### ORPHEUS-104 — waitlist admin view — commit `cd6eb94`, closed
+**Decision [Josh]: proceed without Andrew's file-size/time-to-failure data, browser-direct upload over server-side streaming.** Research finding that drove it: Railway's published specs document *no* edge body-size limit (only a 60s proxy keep-alive + 15-min max request duration), so the mechanism was never actually confirmed — and server-side streaming (the ticket's original "likely primary") wouldn't fix a mid-transfer connection/timeout death since the body still crosses the same edge. Browser-direct sidesteps every candidate mechanism.
 
-Shape locked with Josh up front: **section below the existing AdminPage panes** (not a tab/toggle — no nav state on a stopgap page), **header stats included** (signup count + beta_access / live_workshop breakdown, computed client-side from the fetched rows).
+- **`POST /jobs/upload-urls`** — role gate + concurrent-run guard *before* any bytes move, then mints signed Storage upload URLs for `{client_id}/staging/{upload_id}/` (uuid4; validated on the way back in to block path traversal). Signed URLs = no storage RLS migration; backend keeps sole path authority.
+- **Browser → Storage direct** — `useCreateJob` rewritten: mint targets → `uploadToSignedUrl` both files (parallel) → submit. A failed transfer throws the ORPHEUS-86 `NetworkError`, so GroundworkPage's connection/large-archive guidance fires unchanged.
+- **`POST /jobs/from-uploads`** (small JSON body: `upload_id`, `archive_filename`, `has_profile_photo`) — stats the staged objects (size caps re-checked server-side; signed URLs can't enforce them), downloads Railway↔Supabase, runs the identical three gates via the extracted **`_apply_submission_gates`** helper (shared with the multipart handler so the entry points can't drift; the ORPHEUS-101 filename gate rides the browser filename in the body since staged objects are always `archive.zip`), mints the job row, then **moves** the objects to `{client_id}/{job_id}/` — the worker is untouched. Gate rejections best-effort delete the staged files.
+- **Legacy multipart `POST /jobs` stays** as a deploy-skew shim (the Railway auto-deploy quirk makes a hard cutover risky). **Follow-up: remove after live validation.**
+- `48261ce` renamed both 413 sites to `HTTP_413_CONTENT_TOO_LARGE` (Starlette deprecation, same family as ORPHEUS-88's `610df1a`).
+- **Tests:** +10 pytest (`test_jobs_uploads.py`), +2 vitest (`useCreateJob` sequence + NetworkError). Backend pytest **387 green** (Josh's terminal), frontend vitest **76 green**, `tsc -b` clean.
 
-- **Backend** — `GET /admin/waitlist` in `backend/routers/admin.py` (`AdminWaitlistEntry` / `ListAdminWaitlistResponse` models), gated by the existing `get_current_admin`. Single round trip, newest-first. The service-role client is *required*, not just conventional: `public.waitlist` is anon-INSERT-only with no select policy (migration 017), so RLS bypass is the only read path. Nullable-tolerant for migration-017-era email-only rows (names → None, NULL interests → []).
-- **Frontend** — `useAdminWaitlist` hook in `useAdmin.ts` (admin-allowlist gated like the other admin hooks, keyed `['admin', 'waitlist']`) + `WaitlistSection` / `WaitlistTable` in `AdminPage.tsx` with interest display labels (`beta_access` → "Beta access"; unknown values pass through verbatim since the column is extensible without migration) and a "No signups yet" empty state. Two small CSS additions (`.admin-waitlist-stats`, `.admin-chip-interest`).
-- **Tests** — +3 pytest in `test_admin.py` (happy path incl. single-round-trip assertion, 017-era row tolerance, empty table); +2 vitest in `AdminPage.test.tsx` (rows + stats + labels + email-only fallback; empty state). The `vi.mock('../../hooks/useAdmin')` factory gained the `useAdminWaitlist` entry — remember it's a whole-module mock, so any new hook AdminPage consumes must be added there.
+Files touched: `backend/routers/jobs.py`, `backend/tests/test_jobs_uploads.py`, `frontend/src/hooks/useCreateJob.ts`, `frontend/src/hooks/__tests__/useCreateJob.test.tsx`.
 
-Files touched: `backend/routers/admin.py`, `backend/tests/test_admin.py`, `frontend/src/hooks/useAdmin.ts`, `frontend/src/pages/AdminPage.tsx`, `frontend/src/pages/AdminPage.css`, `frontend/src/pages/__tests__/AdminPage.test.tsx`.
+## What part 1 did — ORPHEUS-104, commit `cd6eb94` (pushed), closed
 
-### Cloud finding — migrations 017/018 were already applied
-
-Asked to apply them for ORPHEUS-104's dependency, the preflight found them already in the cloud ladder (`017_waitlist` + `018_waitlist_fields` at 2026-07-02, re-applied 2026-07-08 — both idempotent, duplicate harmless). Verified live: all 8 columns, `rls_enabled=true`, only policy `waitlist_insert_anon`, `waitlist_email_unique` index present, **0 rows** (consistent with the marketing page not being live on the apex yet). PRODUCT_CONTEXT's Build Status row corrected. Nothing was applied this session — read-only verification only.
+New `GET /admin/waitlist` (service-role read of the anon-INSERT-only `public.waitlist`, gated by `get_current_admin`) + a read-only Waitlist section below the existing AdminPage panes with header stats (signup count + beta_access/live_workshop breakdown) and interest display labels. +3 pytest, +2 vitest. En route: the "migrations 017/018 not applied" caveat found stale — both already applied and verified, so ORPHEUS-8's remaining go-live step is the Vercel domain/DNS wiring only.
 
 ---
 
 ## Pending — your manual steps
 
-1. **Push** — this session's commits with the command below (also covers the 07-13 part-3 commits if they haven't gone yet).
-2. **Vercel redeploy** — picks up ORPHEUS-104's admin waitlist section + the carried 07-13 bundle (86 frontend half, 93 inline resend confirm, 105 UI batch).
-3. **Railway backend + worker redeploy** (carried) — backend now also serves `GET /admin/waitlist`; worker redeploy still owed for the ORPHEUS-97 model key + 106 banner clear. Watch the auto-deploy quirk (check the Deployments tab took the new commit).
-4. **ORPHEUS-8 go-live, remaining** — Vercel Domains: add `orpheussocial.com` + `www.`; update registrar DNS off the GoDaddy placeholder; confirm SSL + the `isMarketingHost()` branch live; test a waitlist submit end-to-end (migrations are ready — the submit should now succeed, and the new /admin section will show it).
-5. **Decision Log paste (ORPHEUS-90)** — still owed. Drafted at `outputs/DecisionLog_ORPHEUS-90_Model_Calibration_2026-06-24.md`.
-6. **ORPHEUS-108 data** — Andrew's fresh ZIP (+ XLSX) size and DevTools time-to-failure, when convenient.
+1. **Push** — the wrap commit only (`c406c00`, `48261ce`, `cd6eb94` are already pushed). Command below.
+2. **Railway backend redeploy** — now carries `GET /admin/waitlist` + the two new upload endpoints. **Do this before or with the Vercel redeploy**: the new frontend flow 404s against a stale backend (the reverse skew is safe — the legacy multipart shim covers an old frontend on a new backend). Watch the auto-deploy quirk. Worker redeploy still owed too (ORPHEUS-97 model key + 106 banner clear); 108 doesn't touch the worker.
+3. **Vercel redeploy** — picks up the 108 direct-upload flow + the carried 07-13 bundle (86 frontend half, 93 inline resend confirm, 105 UI batch) + 104's admin waitlist section.
+4. **Supabase file-size limit check** — dashboard → Storage settings: confirm the project's global file-upload size limit accommodates real Complete archives. It binds browser-direct uploads exactly as it bound the old server-side write; if Andrew's archive exceeds it, the failure is now at least a clear storage error instead of a dead connection.
+5. **ORPHEUS-8 go-live, remaining** — Vercel Domains: add `orpheussocial.com` + `www.`; registrar DNS off the GoDaddy placeholder; confirm SSL + the `isMarketingHost()` branch; test a waitlist submit e2e.
+6. **Decision Log paste (ORPHEUS-90)** — still owed. Drafted at `outputs/DecisionLog_ORPHEUS-90_Model_Calibration_2026-06-24.md`.
 
 ---
 
 ## Recommended pickup for next session
 
-1. **ORPHEUS-102** (live validation of the gate trio) — needs a real Basic archive for the reject path; fold in the ORPHEUS-97 model-key spot-check and the first live `GET /admin/waitlist` check on the same pass.
-2. **ORPHEUS-8 go-live finish** — domain/DNS is manual (yours), but a session can verify the hostname branch + waitlist submit end-to-end right after, and the new /admin section closes the loop on seeing the row.
-3. **ORPHEUS-108** — once the file-size/time-to-failure data exists; streaming-to-Storage is the likely primary fix.
+1. **ORPHEUS-108 live validation** — after the redeploys: a real submission through the new flow (ideally Andrew's large archive — this is the failing case, and his file-size/time-to-failure numbers would confirm the diagnosis retroactively). Success closes ORPHEUS-86 and unlocks the legacy-multipart-removal follow-up; then close 108.
+2. **ORPHEUS-102** (live validation of the gate trio) — needs a real Basic archive for the reject path; fold in the ORPHEUS-97 model-key spot-check and the first live `GET /admin/waitlist` check.
+3. **ORPHEUS-8 go-live finish** — domain/DNS is manual (yours); a session can verify the hostname branch + waitlist submit right after.
 
 ---
 
 ## Caveats / things that will bite
 
-1. **Nothing from 07-13 or today is validated in prod yet** — the Vercel + Railway redeploys are the gate. `GET /admin/waitlist` 404s in prod until the backend redeploy.
-2. **ORPHEUS-86 doesn't fix the actual upload failure** — a high-activity client with a large archive still can't submit; ORPHEUS-108 is the real fix.
-3. **The waitlist has 0 rows** — the /admin section will show its empty state until the marketing page is live on the apex (ORPHEUS-8 DNS step).
-4. **AdminPage test mock is whole-module** — `vi.mock('../../hooks/useAdmin')` must list every hook AdminPage imports; a future hook addition without a mock entry breaks all seven cases with an unhelpful "not a function".
-5. **Sandbox quirks unchanged** — no `pip install` / pytest (runs on Josh's terminal); no SSH push; `.git/*.lock` needs the `mv`-workaround before each commit; `tmp_obj` unlink warnings cosmetic; origin-comparison unreliable from the sandbox, so the push command below is the safe catch-all.
-6. **Untracked-by-intent files** — do not `git add`: `ORPHEUS-90_Model_Calibration_Decision_Brief_2026-06-17.md`, `Scoping_Free_Tier_And_Premium_Recommendations_2026-07-01.md`, `Survey_Closed_Beta_Feedback_2026-06-08.md`, `create_beta_survey_form.gs`, both `rubric_consistency_results_*.json`, the local `.claude/` cache, `Draft_Cohort_Rubric_2026-07-13.md`, `Draft_Unit_Narrative_Questionnaire_2026-07-13.md`, `Scoping_B2B_Cohort_Assessment_2026-07-13.md`.
+1. **Deploy ordering matters this time** — new frontend + old backend = 404 on `/jobs/upload-urls` at submit. Redeploy Railway backend first (or together). Old frontend + new backend is safe via the multipart shim.
+2. **The legacy multipart POST /jobs is still live** — remove it (and its now-redundant `_read_upload` path) in a follow-up commit once 108 validates; the shared `_apply_submission_gates` makes that a clean deletion.
+3. **Abandoned staging uploads aren't swept** — a browser that uploads but never submits leaves orphans under `{client_id}/staging/`. Periodic cleanup is a follow-up only if the bucket accumulates.
+4. **TUS resumable upload is the escalation path** if very large files still fail browser→Storage (standard signed-URL PUT for now).
+5. **Nothing from 07-13 or today is validated in prod yet** — the redeploys are the gate. The waitlist still has 0 rows until ORPHEUS-8's DNS step.
+6. **AdminPage test mock is whole-module** — `vi.mock('../../hooks/useAdmin')` must list every hook AdminPage imports.
+7. **Sandbox quirks unchanged** — no `pip install` / pytest (Josh's terminal); no SSH push; `.git/*.lock` needs the `mv`-workaround before each commit; `tmp_obj` unlink warnings cosmetic.
+8. **Untracked-by-intent files** — do not `git add`: `ORPHEUS-90_Model_Calibration_Decision_Brief_2026-06-17.md`, `Scoping_Free_Tier_And_Premium_Recommendations_2026-07-01.md`, `Survey_Closed_Beta_Feedback_2026-06-08.md`, `create_beta_survey_form.gs`, both `rubric_consistency_results_*.json`, the local `.claude/` cache, `Draft_Cohort_Rubric_2026-07-13.md`, `Draft_Unit_Narrative_Questionnaire_2026-07-13.md`, `Scoping_B2B_Cohort_Assessment_2026-07-13.md`.
 
 ---
 
-## State of the repo right now (end of session)
+## State of the repo right now (end of part 2)
 
-One code commit `cd6eb94` (ORPHEUS-104) + the wrap commit (this handoff, CLAUDE.md + PRODUCT_CONTEXT.md refresh, 07-13 handoff retired). Backend pytest **375 green** (372 → 375, Josh's terminal), frontend vitest **74 green** (72 → 74), `tsc -b` clean. Working tree otherwise clean except the intentionally-untracked files in caveat 6.
+Part 1: `cd6eb94` (ORPHEUS-104) + `45d1986` (wrap). Part 2: `c406c00` (ORPHEUS-108) + `48261ce` (413 deprecation) — **all four pushed**. This wrap commit (handoff update in place, CLAUDE.md + PRODUCT_CONTEXT.md refresh) is the only unpushed commit. Backend pytest **387 green** (Josh's terminal), frontend vitest **76 green**, `tsc -b` clean. Working tree otherwise clean except the intentionally-untracked files in caveat 8.
 
 Suggested push:
 
