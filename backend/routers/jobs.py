@@ -420,7 +420,7 @@ async def create_job_from_uploads(
         if size is not None and size > max_bytes:
             _remove_staged(storage, prefix)
             raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                 detail=(
                     f"Your {label} upload exceeds the "
                     f"{max_bytes // (1024 * 1024)} MB limit. "
@@ -749,7 +749,7 @@ async def _read_upload(
         total += len(chunk)
         if total > max_bytes:
             raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                 detail=(
                     f"Your {label} upload exceeds the "
                     f"{max_bytes // (1024 * 1024)} MB limit. "
