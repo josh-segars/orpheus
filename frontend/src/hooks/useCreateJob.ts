@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiPostMultipart } from '../lib/apiClient'
+import { NetworkError, apiPostJson } from '../lib/apiClient'
 import { supabase } from '../lib/supabase'
 import type { Job } from '../types/job'
 
@@ -8,11 +8,37 @@ interface CreateJobArgs {
   analytics: File
 }
 
+interface UploadTarget {
+  path: string
+  token: string
+}
+
+interface CreateUploadUrlsResponse {
+  upload_id: string
+  archive: UploadTarget
+  analytics: UploadTarget
+}
+
 /**
- * Submit the LinkedIn ZIP + XLSX to POST /jobs and return the freshly-
- * created pending Job. The Groundwork page calls this when the client
- * clicks "My Groundwork is Complete" — on success it navigates to the
+ * Submit the LinkedIn ZIP + XLSX and return the freshly-created pending
+ * Job. The Groundwork page calls this when the client clicks "My
+ * Groundwork is Complete" — on success it navigates to the
  * Analysis-in-Progress screen, which polls GET /jobs/{id}.
+ *
+ * ORPHEUS-108: the files no longer travel through the backend as a
+ * multipart body — large archives were observed dying mid-transfer at the
+ * Railway edge (the ORPHEUS-86 "Failed to fetch" symptom). Instead:
+ *
+ *   1. POST /jobs/upload-urls mints signed Supabase Storage upload URLs
+ *      (and runs the concurrent-run guard before anything is transferred);
+ *   2. both files upload browser → Storage directly, bypassing the
+ *      Railway edge entirely;
+ *   3. POST /jobs/from-uploads (small JSON body) runs the submission
+ *      gates server-side against the staged bytes and mints the job.
+ *
+ * A failed direct upload surfaces as a NetworkError so GroundworkPage's
+ * existing connection/large-archive guidance (ORPHEUS-86) applies
+ * unchanged.
  *
  * On success we invalidate the groundwork-progress query so the smart
  * index redirect picks up the new pending job on the next render.
@@ -29,16 +55,55 @@ export function useCreateJob() {
 
   return useMutation<Job, Error, CreateJobArgs>({
     mutationFn: async ({ archive, analytics }) => {
-      const form = new FormData()
-      form.append('archive', archive, archive.name)
-      form.append('analytics', analytics, analytics.name)
+      const targets = await apiPostJson<CreateUploadUrlsResponse>(
+        '/jobs/upload-urls',
+        {},
+      )
+
+      const bucket = supabase.storage.from('uploads')
+      const [archiveResult, analyticsResult] = await Promise.all([
+        bucket.uploadToSignedUrl(
+          targets.archive.path,
+          targets.archive.token,
+          archive,
+          { contentType: 'application/zip' },
+        ),
+        bucket.uploadToSignedUrl(
+          targets.analytics.path,
+          targets.analytics.token,
+          analytics,
+          {
+            contentType:
+              'application/vnd.openxmlformats-officedocument.' +
+              'spreadsheetml.sheet',
+          },
+        ),
+      ])
+      if (archiveResult.error) {
+        throw new NetworkError(
+          'Your archive upload did not complete.',
+          archiveResult.error,
+        )
+      }
+      if (analyticsResult.error) {
+        throw new NetworkError(
+          'Your analytics upload did not complete.',
+          analyticsResult.error,
+        )
+      }
 
       const { data } = await supabase.auth.getUser()
       const meta = data.user?.user_metadata
       const hasProfilePhoto = Boolean(meta?.picture ?? meta?.avatar_url)
-      form.append('has_profile_photo', String(hasProfilePhoto))
 
-      return apiPostMultipart<Job>('/jobs', form)
+      return apiPostJson<Job>('/jobs/from-uploads', {
+        upload_id: targets.upload_id,
+        // The staged object is always named archive.zip; the original
+        // browser filename carries the Basic/Complete flag + export date
+        // for the ORPHEUS-101 filename gate.
+        archive_filename: archive.name,
+        has_profile_photo: hasProfilePhoto,
+      })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['groundwork-progress'] })

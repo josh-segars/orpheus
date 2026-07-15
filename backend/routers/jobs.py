@@ -20,10 +20,12 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import BaseModel
 
 from backend.auth import SessionRoles, get_current_session_roles
 from backend.db import get_service_client
@@ -76,6 +78,13 @@ async def create_job(
     roles: SessionRoles = Depends(get_current_session_roles),
 ) -> Job:
     """Create a new analysis job from a client's uploaded LinkedIn data.
+
+    LEGACY PATH (ORPHEUS-108): the frontend now uploads browser-direct to
+    Storage and submits via POST /jobs/upload-urls + /jobs/from-uploads,
+    keeping large bodies off the Railway edge (where they were observed
+    dying mid-transfer). This multipart handler stays only so a stale
+    frontend bundle keeps working across the deploy window — remove it
+    once the new flow validates live.
 
     Pipeline at request time:
 
@@ -130,135 +139,11 @@ async def create_job(
         analytics, _MAX_ANALYTICS_BYTES, "analytics"
     )
 
-    # ── 2. Parse inline so bad uploads fail fast ───────────────────────
+    # ── 2. Parse + gates (shared with POST /jobs/from-uploads) ─────────
 
-    try:
-        zip_data, quality_report = parse_zip(archive_bytes)
-    except Exception as exc:
-        # parse_zip raises BadZipFile / FileNotFoundError / KeyError on
-        # malformed inputs. Surface a stable 400 to the client.
-        logger.warning(
-            "ZIP parse failed for client %s: %s", client_id, exc
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "We couldn't read your LinkedIn archive. Please make sure "
-                "you uploaded the unmodified ZIP from "
-                "Settings → Data privacy → Download larger data archive."
-            ),
-        ) from exc
-
-    try:
-        xlsx_data = parse_xlsx(analytics_bytes)
-    except Exception as exc:
-        logger.warning(
-            "XLSX parse failed for client %s: %s", client_id, exc
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "We couldn't read your LinkedIn analytics export. Please "
-                "make sure you uploaded the XLSX exactly as LinkedIn "
-                "delivered it from the Analytics → Export flow."
-            ),
-        ) from exc
-
-    # ── 2a. Filename signals (ORPHEUS-101) ─────────────────────────────
-    # The LinkedIn archive filename (Complete_LinkedInDataExport_MM-DD-YYYY
-    # .zip / Basic_…) carries the Basic-vs-Complete flag and the export date
-    # directly. It's the primary signal; the content-based gates below stay
-    # as the backstop for renamed files. Both fields are optional — a
-    # renamed upload yields (None, None) and falls through to content.
-
-    archive_type, filename_date = parse_archive_filename(archive.filename)
-
-    _BASIC_ARCHIVE_DETAIL = (
-        "This looks like LinkedIn's Basic data export — it leaves out your "
-        "posts, comments, and reactions, which we need to measure your "
-        "activity. Please request the Complete archive instead: "
-        "Settings → Data privacy → Get a copy of your data → "
-        "“Download larger data archive” (the option that can take up to 24 "
-        "hours). Upload that ZIP once it arrives."
+    zip_data, quality_report, xlsx_data = _apply_submission_gates(
+        client_id, archive_bytes, analytics_bytes, archive.filename
     )
-
-    if archive_type == "basic":
-        logger.info(
-            "Rejected job for client %s at filename gate: Basic archive "
-            "(%s)",
-            client_id,
-            archive.filename,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=_BASIC_ARCHIVE_DETAIL,
-        )
-
-    # ── 2b. Quality gate (ORPHEUS-88) ──────────────────────────────────
-    # A Basic archive (or a corrupt one) parses fine but is missing the
-    # core CSVs — scoring it produces a confident-looking report on data
-    # that isn't a measurement. Reject those here with actionable guidance
-    # rather than let the worker deliver an authoritative-looking result.
-    # This is the content backstop for the filename check above (catches a
-    # renamed Basic archive). Only MISSING_FILE criticals block: a Complete
-    # archive from a genuinely inactive member trips the EMPTY_DATA critical
-    # instead and is allowed through as a valid low-signal report.
-
-    if quality_report.has_blocking_issue:
-        blocking_sources = {i.source for i in quality_report.blocking_issues()}
-        if "Shares.csv" in blocking_sources:
-            detail = _BASIC_ARCHIVE_DETAIL
-        else:
-            detail = (
-                "Your archive is missing core profile data, so we can't "
-                "score it. Please re-download the Complete archive from "
-                "Settings → Data privacy → Get a copy of your data "
-                "→ “Download larger data archive” and upload "
-                "the unmodified ZIP."
-            )
-        logger.info(
-            "Rejected job for client %s at quality gate: %s",
-            client_id,
-            quality_report.summary(),
-        )
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=detail,
-        )
-
-    # ── 2c. Freshness gate (ORPHEUS-100 + ORPHEUS-101) ─────────────────
-    # Testers re-upload old exports; the report would then reflect a stale
-    # snapshot. Recency signal, in priority order:
-    #   1. the archive filename's export date (ORPHEUS-101) — LinkedIn's own
-    #      export/request stamp, the most direct "when was this downloaded";
-    #   2. the analytics XLSX's newest dated row (ORPHEUS-100) — a good proxy
-    #      since "Past 365 days" analytics refresh continuously (unlike the
-    #      ZIP's activity dates, which are old for an inactive member even in
-    #      a fresh export; ORPHEUS-91).
-    # Skip entirely when neither is available (renamed file + brand-new
-    # account with an empty analytics export).
-
-    export_date = filename_date or latest_analytics_date(xlsx_data)
-    if export_date is not None:
-        age_days = (datetime.now(timezone.utc).date() - export_date).days
-        if age_days > _STALE_ARCHIVE_DAYS:
-            logger.info(
-                "Rejected job for client %s at freshness gate: analytics "
-                "ends %s (%d days old)",
-                client_id,
-                export_date.isoformat(),
-                age_days,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=(
-                    "This export looks out of date — its most recent data is "
-                    f"from {export_date.strftime('%B %-d, %Y')}, more than two "
-                    "weeks ago. Please download fresh copies of both files "
-                    "from LinkedIn and upload those so your report reflects "
-                    "your current activity."
-                ),
-            )
 
     # ── 3. Mint the job row ────────────────────────────────────────────
 
@@ -336,30 +221,304 @@ async def create_job(
 
     # ── 5. Persist parsed data + quality report ────────────────────────
 
+    _persist_ingested_data(
+        supabase, job_id, zip_data, xlsx_data, quality_report
+    )
+
+    return Job(
+        id=job_id,
+        state=job_row["status"],
+        created_at=job_row["created_at"],
+        updated_at=job_row.get("updated_at"),
+        client_id=job_row.get("client_id"),
+        result=None,
+        error=None,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Browser-direct upload flow (ORPHEUS-108)
+# --------------------------------------------------------------------------- #
+#
+# The legacy multipart POST /jobs above routes the whole archive body through
+# the Railway edge, where large uploads were observed dying mid-transfer
+# before the handler ever ran (no POST line in the logs after a passing
+# OPTIONS preflight; ORPHEUS-86). The fix is to keep the large body off the
+# Railway edge entirely:
+#
+#   1. POST /jobs/upload-urls mints signed Supabase Storage upload URLs for a
+#      staging path. Signed URLs mean no storage RLS migration — the backend
+#      keeps sole authority over paths, and the token only permits a PUT to
+#      the exact object it was minted for.
+#   2. The browser uploads both files directly to Supabase Storage.
+#   3. POST /jobs/from-uploads downloads the staged bytes server-side
+#      (Railway ↔ Supabase, no edge), runs the same three gates, mints the
+#      job row, and MOVES the objects to the {client_id}/{job_id}/ path the
+#      worker already reads from — the worker is untouched.
+#
+# The multipart handler stays temporarily so a stale frontend bundle keeps
+# working across the deploy window (the Railway auto-deploy quirk makes a
+# hard cutover risky); remove it once the new flow validates live.
+
+
+class UploadTarget(BaseModel):
+    """One signed Supabase Storage upload slot: object path + upload token."""
+
+    path: str
+    token: str
+
+
+class CreateUploadUrlsResponse(BaseModel):
+    upload_id: str
+    archive: UploadTarget
+    analytics: UploadTarget
+
+
+class CreateJobFromUploadsRequest(BaseModel):
+    upload_id: str
+    # Original browser-side filename of the archive. Feeds the ORPHEUS-101
+    # filename gate (Basic_ prefix + export-date stamp), which the storage
+    # object path can't carry — staged objects are always named archive.zip.
+    archive_filename: str | None = None
+    # ORPHEUS-89 OIDC photo-presence signal, same semantics as the
+    # multipart form field.
+    has_profile_photo: bool | None = None
+
+
+@router.post(
+    "/upload-urls",
+    response_model=CreateUploadUrlsResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_upload_urls(
+    roles: SessionRoles = Depends(get_current_session_roles),
+) -> CreateUploadUrlsResponse:
+    """Mint signed Storage upload URLs for a browser-direct submission.
+
+    Runs the role gate and the concurrent-run guard up front so a client
+    with a job already in flight is rejected before uploading anything —
+    the whole point of this flow is not to waste a large transfer.
+    """
+    if not roles.is_client():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Submitting a diagnostic requires a client profile.",
+        )
+    client_id = roles.client_id
+    assert client_id is not None
+
+    supabase = get_service_client()
+    if _has_active_job(supabase, client_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "You already have a report in progress. Please wait for "
+                "it to finish before starting a new one."
+            ),
+        )
+
+    upload_id = str(uuid.uuid4())
+    prefix = _staging_prefix(client_id, upload_id)
+    storage = supabase.storage.from_(_STORAGE_BUCKET)
     try:
-        supabase.table("ingested_data").upsert(
-            {
-                "job_id": job_id,
-                "zip_data": zip_data.model_dump(),
-                "xlsx_data": xlsx_data.model_dump(),
-                "quality_report": quality_report.model_dump(),
-                "ingested_at": datetime.utcnow().isoformat(),
-            },
-            on_conflict="job_id",
-        ).execute()
+        archive_signed = storage.create_signed_upload_url(
+            f"{prefix}/{_ARCHIVE_FILENAME}"
+        )
+        analytics_signed = storage.create_signed_upload_url(
+            f"{prefix}/{_ANALYTICS_FILENAME}"
+        )
     except Exception as exc:
-        # If ingested_data insert fails (e.g. table missing on a partial
-        # local-dev schema), the worker's stage_ingestion will re-parse
-        # from storage on its first run, so the job can still complete.
-        # We log loudly but don't fail the request — the user has
-        # successfully submitted and will see real progress on the
-        # Analysis screen.
         logger.exception(
-            "Persisting ingested_data for job %s failed (worker will "
-            "re-parse from storage): %s",
-            job_id,
+            "Signed upload URL mint failed for client %s: %s", client_id, exc
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "We couldn't prepare your upload. This is usually "
+                "transient — please try again in a moment."
+            ),
+        ) from exc
+
+    logger.info(
+        "Minted staging upload %s for client %s", upload_id, client_id
+    )
+    return CreateUploadUrlsResponse(
+        upload_id=upload_id,
+        archive=UploadTarget(
+            path=archive_signed["path"], token=archive_signed["token"]
+        ),
+        analytics=UploadTarget(
+            path=analytics_signed["path"], token=analytics_signed["token"]
+        ),
+    )
+
+
+@router.post(
+    "/from-uploads", response_model=Job, status_code=status.HTTP_201_CREATED
+)
+async def create_job_from_uploads(
+    body: CreateJobFromUploadsRequest,
+    roles: SessionRoles = Depends(get_current_session_roles),
+) -> Job:
+    """Create a job from files already staged in Storage by the browser.
+
+    Mirrors the legacy multipart handler's pipeline — same gates, same job
+    row, same worker path convention — but the request body is a small JSON
+    document instead of the multi-hundred-MB multipart body, so the Railway
+    edge never sees the archive.
+    """
+    if not roles.is_client():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Submitting a diagnostic requires a client profile.",
+        )
+    client_id = roles.client_id
+    assert client_id is not None
+
+    # upload_id must be the UUID we minted — it's interpolated into storage
+    # paths, so anything else is a path-traversal attempt.
+    try:
+        uuid.UUID(body.upload_id)
+    except (ValueError, AttributeError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid upload id.",
+        )
+
+    supabase = get_service_client()
+    if _has_active_job(supabase, client_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "You already have a report in progress. Please wait for "
+                "it to finish before starting a new one."
+            ),
+        )
+
+    storage = supabase.storage.from_(_STORAGE_BUCKET)
+    prefix = _staging_prefix(client_id, body.upload_id)
+
+    # ── 1. Stat + size-check the staged objects ────────────────────────
+    # The signed URL can't enforce a size cap, so re-check here before
+    # pulling anything into memory. Missing objects mean the browser's
+    # direct upload didn't finish.
+
+    sizes = _stat_staged_objects(storage, prefix)
+    for filename, max_bytes, label in (
+        (_ARCHIVE_FILENAME, _MAX_ARCHIVE_BYTES, "archive"),
+        (_ANALYTICS_FILENAME, _MAX_ANALYTICS_BYTES, "analytics"),
+    ):
+        if filename not in sizes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Your {label} upload didn't finish. Please try "
+                    "submitting again."
+                ),
+            )
+        size = sizes[filename]
+        if size is not None and size > max_bytes:
+            _remove_staged(storage, prefix)
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=(
+                    f"Your {label} upload exceeds the "
+                    f"{max_bytes // (1024 * 1024)} MB limit. "
+                    "Please contact support if you have a larger archive."
+                ),
+            )
+
+    # ── 2. Download server-side + run the gates ────────────────────────
+
+    try:
+        archive_bytes = storage.download(f"{prefix}/{_ARCHIVE_FILENAME}")
+        analytics_bytes = storage.download(f"{prefix}/{_ANALYTICS_FILENAME}")
+    except Exception as exc:
+        logger.exception(
+            "Staged download failed for client %s upload %s: %s",
+            client_id,
+            body.upload_id,
             exc,
         )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "We couldn't read your uploaded files. This is usually "
+                "transient — please try again in a moment."
+            ),
+        ) from exc
+
+    try:
+        zip_data, quality_report, xlsx_data = _apply_submission_gates(
+            client_id, archive_bytes, analytics_bytes, body.archive_filename
+        )
+    except HTTPException:
+        # A rejected submission shouldn't leave a large orphan in staging.
+        _remove_staged(storage, prefix)
+        raise
+
+    # ── 3. Mint the job row ────────────────────────────────────────────
+
+    job_insert = (
+        supabase.table("jobs")
+        .insert(
+            {
+                "client_id": client_id,
+                "status": "pending",
+                "oidc_photo_present": body.has_profile_photo,
+            }
+        )
+        .execute()
+    )
+    if not job_insert.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create job row.",
+        )
+    job_row = job_insert.data[0]
+    job_id = str(job_row["id"])
+
+    logger.info(
+        "Created pending job %s for client %s (from upload %s)",
+        job_id,
+        client_id,
+        body.upload_id,
+    )
+
+    # ── 4. Move staged objects to the worker's path ────────────────────
+
+    try:
+        storage.move(
+            f"{prefix}/{_ARCHIVE_FILENAME}",
+            f"{client_id}/{job_id}/{_ARCHIVE_FILENAME}",
+        )
+        storage.move(
+            f"{prefix}/{_ANALYTICS_FILENAME}",
+            f"{client_id}/{job_id}/{_ANALYTICS_FILENAME}",
+        )
+    except Exception as exc:
+        logger.exception(
+            "Storage move failed for job %s: %s", job_id, exc
+        )
+        supabase.table("jobs").update(
+            {
+                "status": "failed",
+                "error_message": "Storage upload failed; please retry.",
+            }
+        ).eq("id", job_id).execute()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "We couldn't save your files. This is usually transient — "
+                "please try again in a moment."
+            ),
+        ) from exc
+
+    # ── 5. Persist parsed data + quality report ────────────────────────
+
+    _persist_ingested_data(
+        supabase, job_id, zip_data, xlsx_data, quality_report
+    )
 
     return Job(
         id=job_id,
@@ -604,6 +763,228 @@ async def _read_upload(
             detail=f"The {label} upload is empty.",
         )
     return b"".join(chunks)
+
+
+def _apply_submission_gates(
+    client_id: str,
+    archive_bytes: bytes,
+    analytics_bytes: bytes,
+    archive_filename: str | None,
+):
+    """Parse both uploads and run the three submission gates.
+
+    Shared by the legacy multipart POST /jobs and the browser-direct
+    POST /jobs/from-uploads (ORPHEUS-108) so the two entry points can
+    never drift on what constitutes an acceptable submission. Raises
+    HTTPException (400/422) on rejection; returns
+    ``(zip_data, quality_report, xlsx_data)`` on success.
+
+    Gates, in order:
+      * inline parse — malformed ZIP/XLSX → 400 (fail fast, don't let the
+        worker discover it later);
+      * 2a filename (ORPHEUS-101) — a ``Basic_`` archive filename rejects
+        immediately; the filename's date is the primary recency signal;
+      * 2b quality (ORPHEUS-88) — CRITICAL+MISSING_FILE blocks (Basic or
+        corrupt archive); an EMPTY_DATA critical from a genuinely inactive
+        member passes through as a valid low-signal report;
+      * 2c freshness (ORPHEUS-100) — export older than
+        ``_STALE_ARCHIVE_DAYS`` rejects, filename date first, analytics
+        XLSX date as fallback (the ZIP's activity dates would
+        false-positive on inactive members; ORPHEUS-91).
+    """
+    try:
+        zip_data, quality_report = parse_zip(archive_bytes)
+    except Exception as exc:
+        # parse_zip raises BadZipFile / FileNotFoundError / KeyError on
+        # malformed inputs. Surface a stable 400 to the client.
+        logger.warning(
+            "ZIP parse failed for client %s: %s", client_id, exc
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "We couldn't read your LinkedIn archive. Please make sure "
+                "you uploaded the unmodified ZIP from "
+                "Settings → Data privacy → Download larger data archive."
+            ),
+        ) from exc
+
+    try:
+        xlsx_data = parse_xlsx(analytics_bytes)
+    except Exception as exc:
+        logger.warning(
+            "XLSX parse failed for client %s: %s", client_id, exc
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "We couldn't read your LinkedIn analytics export. Please "
+                "make sure you uploaded the XLSX exactly as LinkedIn "
+                "delivered it from the Analytics → Export flow."
+            ),
+        ) from exc
+
+    # ── 2a. Filename signals (ORPHEUS-101) ─────────────────────────────
+
+    archive_type, filename_date = parse_archive_filename(archive_filename)
+
+    basic_archive_detail = (
+        "This looks like LinkedIn's Basic data export — it leaves out your "
+        "posts, comments, and reactions, which we need to measure your "
+        "activity. Please request the Complete archive instead: "
+        "Settings → Data privacy → Get a copy of your data → "
+        "“Download larger data archive” (the option that can take up to 24 "
+        "hours). Upload that ZIP once it arrives."
+    )
+
+    if archive_type == "basic":
+        logger.info(
+            "Rejected job for client %s at filename gate: Basic archive "
+            "(%s)",
+            client_id,
+            archive_filename,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=basic_archive_detail,
+        )
+
+    # ── 2b. Quality gate (ORPHEUS-88) ──────────────────────────────────
+
+    if quality_report.has_blocking_issue:
+        blocking_sources = {i.source for i in quality_report.blocking_issues()}
+        if "Shares.csv" in blocking_sources:
+            detail = basic_archive_detail
+        else:
+            detail = (
+                "Your archive is missing core profile data, so we can't "
+                "score it. Please re-download the Complete archive from "
+                "Settings → Data privacy → Get a copy of your data "
+                "→ “Download larger data archive” and upload "
+                "the unmodified ZIP."
+            )
+        logger.info(
+            "Rejected job for client %s at quality gate: %s",
+            client_id,
+            quality_report.summary(),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=detail,
+        )
+
+    # ── 2c. Freshness gate (ORPHEUS-100 + ORPHEUS-101) ─────────────────
+
+    export_date = filename_date or latest_analytics_date(xlsx_data)
+    if export_date is not None:
+        age_days = (datetime.now(timezone.utc).date() - export_date).days
+        if age_days > _STALE_ARCHIVE_DAYS:
+            logger.info(
+                "Rejected job for client %s at freshness gate: analytics "
+                "ends %s (%d days old)",
+                client_id,
+                export_date.isoformat(),
+                age_days,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    "This export looks out of date — its most recent data is "
+                    f"from {export_date.strftime('%B %-d, %Y')}, more than two "
+                    "weeks ago. Please download fresh copies of both files "
+                    "from LinkedIn and upload those so your report reflects "
+                    "your current activity."
+                ),
+            )
+
+    return zip_data, quality_report, xlsx_data
+
+
+def _staging_prefix(client_id: str, upload_id: str) -> str:
+    """Storage prefix for a browser-direct staging upload (ORPHEUS-108).
+
+    Lives under the client's own folder but in a `staging/` segment so it
+    can never collide with a `{client_id}/{job_id}/` worker path (job ids
+    are UUIDs, never the literal "staging").
+    """
+    return f"{client_id}/staging/{upload_id}"
+
+
+def _stat_staged_objects(storage, prefix: str) -> dict[str, int | None]:
+    """Map staged object basename → size in bytes (None if unreported).
+
+    Uses the storage list API on the staging prefix. Any listing failure
+    returns {} — the caller treats missing entries as "upload didn't
+    finish", which is the right user-facing message for that case too.
+    """
+    try:
+        entries = storage.list(prefix) or []
+    except Exception as exc:
+        logger.warning(
+            "Staged-object listing failed for %s: %s", prefix, exc
+        )
+        return {}
+    sizes: dict[str, int | None] = {}
+    for entry in entries:
+        name = entry.get("name") if isinstance(entry, dict) else None
+        if not name:
+            continue
+        metadata = entry.get("metadata") or {}
+        size = metadata.get("size") if isinstance(metadata, dict) else None
+        sizes[name] = size if isinstance(size, int) else None
+    return sizes
+
+
+def _remove_staged(storage, prefix: str) -> None:
+    """Best-effort cleanup of a staging upload after a rejection.
+
+    Never raises — the rejection response matters more than the orphan.
+    Abandoned staging uploads (browser uploaded, /from-uploads never
+    called) are not cleaned here; a periodic sweep is a follow-up if the
+    bucket ever accumulates enough to matter.
+    """
+    try:
+        storage.remove(
+            [
+                f"{prefix}/{_ARCHIVE_FILENAME}",
+                f"{prefix}/{_ANALYTICS_FILENAME}",
+            ]
+        )
+    except Exception as exc:
+        logger.warning(
+            "Staged-object cleanup failed for %s: %s", prefix, exc
+        )
+
+
+def _persist_ingested_data(
+    supabase, job_id: str, zip_data, xlsx_data, quality_report
+) -> None:
+    """Upsert the parsed JSONB + quality report into ingested_data.
+
+    Best-effort: if the insert fails (e.g. table missing on a partial
+    local-dev schema), the worker's stage_ingestion re-parses from storage
+    on its first run, so the job can still complete. We log loudly but
+    don't fail the request — the user has successfully submitted and will
+    see real progress on the Analysis screen.
+    """
+    try:
+        supabase.table("ingested_data").upsert(
+            {
+                "job_id": job_id,
+                "zip_data": zip_data.model_dump(),
+                "xlsx_data": xlsx_data.model_dump(),
+                "quality_report": quality_report.model_dump(),
+                "ingested_at": datetime.utcnow().isoformat(),
+            },
+            on_conflict="job_id",
+        ).execute()
+    except Exception as exc:
+        logger.exception(
+            "Persisting ingested_data for job %s failed (worker will "
+            "re-parse from storage): %s",
+            job_id,
+            exc,
+        )
 
 
 def _build_result_payload(supabase, job_id: str) -> dict | None:
