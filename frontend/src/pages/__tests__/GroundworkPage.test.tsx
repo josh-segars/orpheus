@@ -17,7 +17,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 import { GroundworkPage } from '../GroundworkPage'
-import { ApiError, NetworkError } from '../../lib/apiClient'
+import { ApiError, NetworkError, UploadRejectedError } from '../../lib/apiClient'
 
 const mockNavigate = vi.fn()
 vi.mock('react-router-dom', async (importOriginal) => {
@@ -88,6 +88,26 @@ describe('GroundworkPage upload-failure UX (ORPHEUS-86)', () => {
     ).toBeInTheDocument()
     // The raw browser string must not leak through.
     expect(screen.queryByText(/failed to fetch/i)).not.toBeInTheDocument()
+  })
+
+  it('shows the storage reason — not connection guidance — on a deterministic rejection (ORPHEUS-109)', async () => {
+    mockMutateAsync.mockRejectedValue(
+      new UploadRejectedError(
+        'Your archive upload was rejected by storage.',
+        400,
+        'mime type application/x-zip-compressed is not supported',
+      ),
+    )
+    renderPage()
+    clickComplete()
+    expect(
+      await screen.findByText(/is not supported/i),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/isn’t a connection problem/i)).toBeInTheDocument()
+    // The misleading ORPHEUS-86 connection copy must not appear.
+    expect(
+      screen.queryByText(/couldn’t reach the server/i),
+    ).not.toBeInTheDocument()
   })
 
   it('surfaces the API detail message on a rejected upload (ApiError)', async () => {

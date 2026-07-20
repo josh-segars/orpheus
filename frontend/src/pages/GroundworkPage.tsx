@@ -5,7 +5,7 @@ import { MaterialIcon } from '../components/icons/MaterialIcon'
 import { useLinkedInUpload } from '../contexts/LinkedInUploadContext'
 import { useCreateJob } from '../hooks/useCreateJob'
 import { useGroundworkProgress } from '../hooks/useGroundworkProgress'
-import { ApiError, NetworkError } from '../lib/apiClient'
+import { ApiError, NetworkError, UploadRejectedError } from '../lib/apiClient'
 import './GroundworkPage.css'
 
 // Soft advisory threshold for the archive (ORPHEUS-86). A LinkedIn "Complete"
@@ -32,12 +32,23 @@ function formatMegabytes(bytes: number): string {
 const GENERIC_SUBMIT_ERROR = 'We couldn’t submit your data. Please try again.'
 
 /**
- * Map a submit failure to client-facing copy. A NetworkError is a
+ * Map a submit failure to client-facing copy. An UploadRejectedError is a
+ * deterministic Storage 4xx (MIME/size/token — ORPHEUS-109) and surfaces
+ * the service's own reason, never connection guidance; a NetworkError is a
  * transport-level death (the ORPHEUS-86 case) and gets connection-oriented
  * guidance; an ApiError carries FastAPI's `{detail}` for HTTPExceptions
  * (Basic-archive/stale/parse rejections etc.); anything else is generic.
  */
 function resolveSubmitError(err: unknown): string {
+  if (err instanceof UploadRejectedError) {
+    return (
+      `${err.message} The storage service said: “${err.reason}”. This ` +
+      'isn’t a connection problem, so retrying the same file won’t help. ' +
+      'If the message mentions the file’s type or size, re-downloading a ' +
+      'fresh LinkedIn export usually resolves it — otherwise, please share ' +
+      'this message with us so we can help.'
+    )
+  }
   if (err instanceof NetworkError) {
     return NETWORK_ERROR_MESSAGE
   }

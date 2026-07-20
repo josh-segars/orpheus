@@ -77,6 +77,30 @@ export class NetworkError extends Error {
 }
 
 /**
+ * A deterministic rejection from Supabase Storage (HTTP 4xx) during the
+ * ORPHEUS-108 browser-direct upload — wrong MIME type, size cap, or a
+ * bad/expired signed-URL token. Unlike `NetworkError`, retrying the same
+ * file cannot succeed, so callers must NOT show connection-oriented
+ * guidance (ORPHEUS-109: Windows ZIP MIME rejections wore the
+ * connection/large-archive copy and triaged as a network mystery).
+ * `reason` carries the storage service's own message for display so the
+ * next such failure is self-identifying. Lives here (not in useCreateJob)
+ * because apiClient is the error-taxonomy home GroundworkPage already
+ * branches on, even though Storage uploads don't travel through the
+ * fetch wrappers below.
+ */
+export class UploadRejectedError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly reason: string,
+  ) {
+    super(message)
+    this.name = 'UploadRejectedError'
+  }
+}
+
+/**
  * `fetch()` with transport failures normalized to `NetworkError`. A
  * deliberate `AbortController` cancellation (React Query unmount, etc.)
  * still surfaces as the original `AbortError` so callers can treat it as

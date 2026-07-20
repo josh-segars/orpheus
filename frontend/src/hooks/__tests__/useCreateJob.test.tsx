@@ -16,7 +16,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { NetworkError } from '../../lib/apiClient'
+import { NetworkError, UploadRejectedError } from '../../lib/apiClient'
 import { useCreateJob } from '../useCreateJob'
 
 const apiPostJson = vi.hoisted(() => vi.fn())
@@ -95,6 +95,64 @@ describe('useCreateJob (ORPHEUS-108 direct upload)', () => {
       has_profile_photo: true,
     })
     expect(result.current.data).toEqual(JOB)
+  })
+
+  it('normalizes OS-reported MIME types to canonical ones before upload (ORPHEUS-109)', async () => {
+    apiPostJson.mockResolvedValueOnce(TARGETS).mockResolvedValueOnce(JOB)
+    uploadToSignedUrl.mockResolvedValue({ data: {}, error: null })
+
+    const { result } = renderHook(() => useCreateJob(), { wrapper })
+    result.current.mutate({
+      // Windows registers .zip as x-zip-compressed — the live incident.
+      archive: new File(
+        ['zip-bytes'],
+        'Complete_LinkedInDataExport_07-14-2026.zip',
+        { type: 'application/x-zip-compressed' },
+      ),
+      // No type at all is also common; must land as the xlsx MIME.
+      analytics: new File(['xlsx-bytes'], 'Content_2026.xlsx'),
+    })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    const archiveSent = uploadToSignedUrl.mock.calls[0][2] as File
+    const analyticsSent = uploadToSignedUrl.mock.calls[1][2] as File
+    expect(archiveSent.type).toBe('application/zip')
+    expect(analyticsSent.type).toBe(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    // The ORPHEUS-101 filename gate reads archive.name — must survive.
+    expect(archiveSent.name).toBe('Complete_LinkedInDataExport_07-14-2026.zip')
+  })
+
+  it('surfaces a Storage 4xx as an UploadRejectedError carrying the service reason (ORPHEUS-109)', async () => {
+    apiPostJson.mockResolvedValueOnce(TARGETS)
+    // Shape of supabase-js StorageApiError: numeric HTTP status + message.
+    uploadToSignedUrl
+      .mockResolvedValueOnce({
+        data: null,
+        error: {
+          message: 'mime type application/x-zip-compressed is not supported',
+          status: 400,
+          statusCode: 'InvalidMimeType',
+        },
+      })
+      .mockResolvedValueOnce({ data: {}, error: null })
+
+    const { result } = renderHook(() => useCreateJob(), { wrapper })
+    result.current.mutate(files())
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+
+    const err = result.current.error
+    expect(err).toBeInstanceOf(UploadRejectedError)
+    expect(err).not.toBeInstanceOf(NetworkError)
+    expect((err as UploadRejectedError).status).toBe(400)
+    expect((err as UploadRejectedError).reason).toBe(
+      'mime type application/x-zip-compressed is not supported',
+    )
+    // POST /jobs/from-uploads was never called.
+    expect(apiPostJson).toHaveBeenCalledTimes(1)
   })
 
   it('surfaces a failed Storage upload as a NetworkError and never submits', async () => {
