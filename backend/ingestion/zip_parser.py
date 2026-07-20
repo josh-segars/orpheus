@@ -90,6 +90,36 @@ def _csv_present(csv_files: list[str], filename: str) -> bool:
     return any(_csv_name_matches(name, filename) for name in csv_files)
 
 
+# Files observed only in LinkedIn's Complete export ("Download larger data
+# archive") — the fast Basic export carries none of these. Used to
+# distinguish a genuine Complete archive from a zero-activity member
+# (LinkedIn omits empty per-activity CSVs entirely, so a never-posted
+# member's Complete export has no Shares.csv to include) from a renamed
+# Basic archive (ORPHEUS-110; hit live by a real beta client 2026-07-20).
+# Rich_Media.csv is deliberately NOT a fingerprint — it's a selectable
+# category the Basic path may include. Requires at least
+# _COMPLETE_FINGERPRINT_MIN matches so one coincidental file can't flip
+# the classification.
+_COMPLETE_FINGERPRINT_FILES = [
+    "Ad_Targeting.csv",
+    "Inferences_about_you.csv",
+    "SearchQueries.csv",
+    "Logins.csv",
+    "Ads Clicked.csv",
+    "Security Challenges.csv",
+]
+_COMPLETE_FINGERPRINT_MIN = 2
+
+
+def _has_complete_fingerprint(csv_files: list[str]) -> bool:
+    """True if the archive carries enough Complete-only files to be
+    confidently a Complete export even when behavioral CSVs are absent."""
+    hits = sum(
+        1 for f in _COMPLETE_FINGERPRINT_FILES if _csv_present(csv_files, f)
+    )
+    return hits >= _COMPLETE_FINGERPRINT_MIN
+
+
 def _read_csv_from_zip(
     zf: zipfile.ZipFile, filename: str
 ) -> list[dict[str, str]]:
@@ -600,6 +630,18 @@ def parse_zip(source: bytes | str | Path) -> tuple[ZipData, DataQualityReport]:
         # member-ID suffixes) via _csv_present — an exact-name compare here
         # falsely flagged Shares_<id>.csv as missing, which ORPHEUS-88's
         # gate then treated as a Basic archive and rejected at upload.
+        #
+        # ORPHEUS-110: LinkedIn omits empty per-activity CSVs entirely, so
+        # a genuine Complete export from a member with no posts/comments/
+        # reactions has no Shares.csv — indistinguishable by absence alone
+        # from a renamed Basic archive. When the archive carries the
+        # Complete fingerprint, absent behavioral CSVs are reported as
+        # EMPTY_DATA (valid zero-activity signal; passes the upload gate,
+        # still drives the data-limited banner) instead of MISSING_FILE
+        # (blocking). Profile.csv is exempt — every member has a profile,
+        # so its absence always means a broken/Basic archive.
+        complete_fingerprint = _has_complete_fingerprint(csv_files)
+
         if not _csv_present(csv_files, "Profile.csv"):
             report.add(
                 IssueSeverity.CRITICAL, IssueCategory.MISSING_FILE,
@@ -608,32 +650,65 @@ def parse_zip(source: bytes | str | Path) -> tuple[ZipData, DataQualityReport]:
             )
 
         if not _csv_present(csv_files, "Shares.csv"):
-            report.add(
-                IssueSeverity.CRITICAL, IssueCategory.MISSING_FILE,
-                "Shares.csv",
-                "Shares.csv not found — this likely indicates a Basic archive "
-                "was uploaded instead of Complete. Behavioral scoring (Dim 2, 3, 4) "
-                "will be severely limited.",
-                "Dim 2, Dim 3, Dim 4",
-            )
+            if complete_fingerprint:
+                report.add(
+                    IssueSeverity.CRITICAL, IssueCategory.EMPTY_DATA,
+                    "Shares.csv",
+                    "No posts found in this archive — LinkedIn omits "
+                    "Shares.csv from a Complete export when there is no "
+                    "post history. Scoring will reflect zero posting "
+                    "activity.",
+                    "Dim 2, Dim 3, Dim 4",
+                )
+            else:
+                report.add(
+                    IssueSeverity.CRITICAL, IssueCategory.MISSING_FILE,
+                    "Shares.csv",
+                    "Shares.csv not found — this likely indicates a Basic archive "
+                    "was uploaded instead of Complete. Behavioral scoring (Dim 2, 3, 4) "
+                    "will be severely limited.",
+                    "Dim 2, Dim 3, Dim 4",
+                )
 
         if not _csv_present(csv_files, "Comments.csv"):
-            report.add(
-                IssueSeverity.WARNING, IssueCategory.MISSING_FILE,
-                "Comments.csv",
-                "Comments.csv not found — Engagement Quality scoring will use "
-                "reactions only. Continuity metric will undercount active weeks.",
-                "Dim 2 — Continuity; Dim 3 — Engagement Quality Score",
-            )
+            if complete_fingerprint:
+                report.add(
+                    IssueSeverity.WARNING, IssueCategory.EMPTY_DATA,
+                    "Comments.csv",
+                    "No comments found in this archive — LinkedIn omits "
+                    "Comments.csv from a Complete export when there is no "
+                    "comment history. Engagement Quality scoring will use "
+                    "reactions only.",
+                    "Dim 2 — Continuity; Dim 3 — Engagement Quality Score",
+                )
+            else:
+                report.add(
+                    IssueSeverity.WARNING, IssueCategory.MISSING_FILE,
+                    "Comments.csv",
+                    "Comments.csv not found — Engagement Quality scoring will use "
+                    "reactions only. Continuity metric will undercount active weeks.",
+                    "Dim 2 — Continuity; Dim 3 — Engagement Quality Score",
+                )
 
         if not _csv_present(csv_files, "Reactions.csv"):
-            report.add(
-                IssueSeverity.WARNING, IssueCategory.MISSING_FILE,
-                "Reactions.csv",
-                "Reactions.csv not found — Engagement Presence and Quality "
-                "scoring will use comments only.",
-                "Dim 2 — History Depth; Dim 3 — Outbound Engagement Presence",
-            )
+            if complete_fingerprint:
+                report.add(
+                    IssueSeverity.WARNING, IssueCategory.EMPTY_DATA,
+                    "Reactions.csv",
+                    "No reactions found in this archive — LinkedIn omits "
+                    "Reactions.csv from a Complete export when there is no "
+                    "reaction history. Engagement Presence and Quality "
+                    "scoring will use comments only.",
+                    "Dim 2 — History Depth; Dim 3 — Outbound Engagement Presence",
+                )
+            else:
+                report.add(
+                    IssueSeverity.WARNING, IssueCategory.MISSING_FILE,
+                    "Reactions.csv",
+                    "Reactions.csv not found — Engagement Presence and Quality "
+                    "scoring will use comments only.",
+                    "Dim 2 — History Depth; Dim 3 — Outbound Engagement Presence",
+                )
 
         # Parse data
         zip_data = ZipData(

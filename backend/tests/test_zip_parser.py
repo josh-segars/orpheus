@@ -25,7 +25,7 @@ from backend.ingestion.zip_parser import (
     parse_archive_filename,
     parse_zip,
 )
-from backend.models.quality import IssueCategory
+from backend.models.quality import IssueCategory, IssueSeverity
 
 MEMBER_ID = "181682616"
 CSV_BODY = "Date,ShareLink,ShareCommentary\n2026-06-01,https://x,Hello\n"
@@ -197,6 +197,117 @@ def test_genuinely_missing_shares_still_flags_and_blocks():
     missing = {i.source for i in report.issues if i.category == IssueCategory.MISSING_FILE}
     assert "Shares.csv" in missing
     assert report.has_blocking_issue is True
+
+
+# --------------------------------------------------------------------------- #
+# Complete-fingerprint: zero-activity Complete exports — ORPHEUS-110
+# --------------------------------------------------------------------------- #
+#
+# LinkedIn omits empty per-activity CSVs entirely, so a genuine Complete
+# export from a member who has never posted has no Shares.csv — which the
+# MISSING_FILE check read as a renamed Basic archive and hard-blocked at
+# upload (hit live by a real beta client, 2026-07-20). When the archive
+# carries >=2 Complete-only fingerprint files, absent behavioral CSVs are
+# EMPTY_DATA (non-blocking, still data-limiting) instead.
+
+_FINGERPRINT_STUB = "Header\nvalue\n"
+
+
+def _zero_activity_complete_bytes(
+    *fingerprints: str, extra: dict[str, str] | None = None
+) -> bytes:
+    """A Complete-shaped archive with no behavioral CSVs at all."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("Profile.csv", _PROFILE_CSV)
+        zf.writestr("Positions.csv", _POSITIONS_CSV)
+        zf.writestr("Skills.csv", _SKILLS_CSV)
+        zf.writestr("Rich_Media.csv", _RICH_MEDIA_CSV)
+        for name in fingerprints:
+            zf.writestr(name, _FINGERPRINT_STUB)
+        for name, body in (extra or {}).items():
+            zf.writestr(name, body)
+    return buf.getvalue()
+
+
+def test_zero_activity_complete_export_passes_gate():
+    """Fingerprinted archive with no behavioral CSVs must not block."""
+    _, report = parse_zip(
+        _zero_activity_complete_bytes("Ad_Targeting.csv", "SearchQueries.csv")
+    )
+
+    assert report.has_blocking_issue is False
+    missing = [i for i in report.issues if i.category == IssueCategory.MISSING_FILE]
+    assert missing == [], f"unexpected MISSING_FILE issues: {missing}"
+    # Shares absence is reported as a CRITICAL EMPTY_DATA signal instead —
+    # non-blocking per the ORPHEUS-88 decision, but still data-limiting.
+    shares_empty = [
+        i for i in report.issues
+        if i.category == IssueCategory.EMPTY_DATA and i.source == "Shares.csv"
+    ]
+    assert len(shares_empty) == 1
+    assert shares_empty[0].severity == IssueSeverity.CRITICAL
+    assert report.is_data_limited is True
+
+
+def test_nicole_shape_reactions_only_complete_export():
+    """The exact live shape from 2026-07-20: fingerprints + suffixed
+    Reactions with rows, no Shares or Comments anywhere."""
+    raw = _zero_activity_complete_bytes(
+        "Ad_Targeting.csv",
+        "Inferences_about_you.csv",
+        "SearchQueries.csv",
+        "Logins.csv",
+        "Ads Clicked.csv",
+        "Security Challenges.csv",
+        extra={"Reactions_163027716.csv": _REACTIONS_CSV},
+    )
+    zip_data, report = parse_zip(raw)
+
+    assert report.has_blocking_issue is False
+    assert report.total_reactions == 1  # suffixed file parsed (ORPHEUS-87)
+    empty_sources = {
+        i.source for i in report.issues
+        if i.category == IssueCategory.EMPTY_DATA
+    }
+    assert "Shares.csv" in empty_sources
+    assert "Comments.csv" in empty_sources
+    assert "Reactions.csv" not in empty_sources  # present, not absent
+
+
+def test_single_fingerprint_is_not_enough():
+    """One coincidental Complete-only file must not flip the classification
+    — a renamed Basic archive stays blocked."""
+    _, report = parse_zip(_zero_activity_complete_bytes("Logins.csv"))
+
+    missing = {i.source for i in report.issues if i.category == IssueCategory.MISSING_FILE}
+    assert "Shares.csv" in missing
+    assert report.has_blocking_issue is True
+
+
+def test_fingerprint_files_tolerate_member_id_suffix():
+    """Fingerprint matching rides _csv_name_matches, so suffixed
+    Complete-only files count."""
+    _, report = parse_zip(
+        _zero_activity_complete_bytes(
+            "Ad_Targeting_163027716.csv", "SearchQueries_163027716.csv"
+        )
+    )
+    assert report.has_blocking_issue is False
+
+
+def test_fingerprint_changes_nothing_when_behavioral_files_present():
+    """A normal Complete archive is unaffected: no MISSING_FILE, and no
+    per-file EMPTY_DATA entries for files that exist."""
+    _, report = parse_zip(_complete_archive_zip_bytes(MEMBER_ID))
+
+    per_file_empty = [
+        i for i in report.issues
+        if i.category == IssueCategory.EMPTY_DATA
+        and i.source in ("Shares.csv", "Comments.csv", "Reactions.csv")
+    ]
+    assert per_file_empty == []
+    assert report.has_blocking_issue is False
 
 
 # --------------------------------------------------------------------------- #
