@@ -1,10 +1,17 @@
-"""Jobs API — the endpoint the frontend's `useJob` hook polls plus the
-multipart POST /jobs that the LinkedIn upload flow submits to (ORPHEUS-16).
+"""Jobs API — the endpoints the frontend's `useJob` hook polls plus the
+browser-direct submission pair the LinkedIn upload flow posts to.
 
 Contract mirrors frontend/src/types/job.ts: a `Job` with id, state, timestamps,
 optional `result` (ScoringStageOutput + Narratives), and optional `error`.
 
-Both paths use the service-role Supabase client. The POST path uses it
+Submission is two calls (ORPHEUS-108): POST /jobs/upload-urls mints signed
+Storage upload targets, the browser PUTs both files straight to Supabase
+Storage, and POST /jobs/from-uploads carries only a small JSON body. The
+original multipart POST /jobs was retired 2026-07-27 once the browser-direct
+flow validated live — large bodies died mid-transfer at the Railway edge
+(ORPHEUS-86), which is the whole reason the archive no longer crosses it.
+
+All paths use the service-role Supabase client. The write paths use it
 because `ingested_data` only has SELECT RLS for clients — INSERTs are
 server-only — and we want a single client throughout the multi-table write
 so partial failures are easier to reason about. The GET path used to lean
@@ -22,9 +29,8 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from backend.auth import SessionRoles, get_current_session_roles
@@ -60,191 +66,15 @@ _MAX_ANALYTICS_BYTES = 25 * 1024 * 1024  # 25 MB
 _STALE_ARCHIVE_DAYS = 14
 
 
-@router.post("", response_model=Job, status_code=status.HTTP_201_CREATED)
-async def create_job(
-    archive: Annotated[UploadFile, File(description="LinkedIn complete data archive (ZIP).")],
-    analytics: Annotated[UploadFile, File(description="LinkedIn Analytics export (XLSX).")],
-    has_profile_photo: Annotated[
-        bool | None,
-        Form(
-            description=(
-                "Whether the client's LinkedIn OIDC session carries a "
-                "profile picture claim (ORPHEUS-89). Captured client-side "
-                "at submission; overrides the ZIP rich-media photo "
-                "heuristic. Omitted/None falls back to the heuristic."
-            ),
-        ),
-    ] = None,
-    roles: SessionRoles = Depends(get_current_session_roles),
-) -> Job:
-    """Create a new analysis job from a client's uploaded LinkedIn data.
-
-    LEGACY PATH (ORPHEUS-108): the frontend now uploads browser-direct to
-    Storage and submits via POST /jobs/upload-urls + /jobs/from-uploads,
-    keeping large bodies off the Railway edge (where they were observed
-    dying mid-transfer). This multipart handler stays only so a stale
-    frontend bundle keeps working across the deploy window — remove it
-    once the new flow validates live.
-
-    Pipeline at request time:
-
-      1. Read both uploads into memory (size-capped).
-      2. Parse the ZIP and the XLSX inline so we surface bad uploads as
-         400s rather than letting the worker fail later.
-      3. Insert a `pending` job row to mint a job_id.
-      4. Upload the raw bytes to Supabase Storage at the path the worker
-         reads from. The worker will re-parse from there — this gives us
-         a durable copy independent of whatever the request handler did.
-      5. Persist the parsed JSONB + quality report into ingested_data so
-         the worker's stage_ingestion can short-circuit if it ever wants
-         to (today it always re-parses; that's an idempotent upsert).
-
-    Returns the freshly-created Job (state=pending, no result yet). The
-    frontend redirects to the Analysis-in-Progress screen which polls
-    GET /jobs/{id} for completion.
-
-    Requires the client role — advisors hitting this endpoint without an
-    accompanying clients row get a 403, not silent acceptance into a
-    job they couldn't see afterward.
-    """
-
-    if not roles.is_client():
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Submitting a diagnostic requires a client profile.",
-        )
-    client_id = roles.client_id
-    assert client_id is not None  # narrowed by is_client() guard above
-
-    # ── 0. Concurrent-run guard (ORPHEUS-81) ───────────────────────────
-    # One in-flight pipeline per client. Checked before the uploads are
-    # even read so the reject is cheap. The frontend hides the "Run a
-    # new report" entry point while a job is in flight; this is the
-    # authoritative backstop for direct submissions.
-
-    supabase = get_service_client()
-    if _has_active_job(supabase, client_id):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "You already have a report in progress. Please wait for "
-                "it to finish before starting a new one."
-            ),
-        )
-
-    # ── 1. Read & validate uploads ─────────────────────────────────────
-
-    archive_bytes = await _read_upload(archive, _MAX_ARCHIVE_BYTES, "archive")
-    analytics_bytes = await _read_upload(
-        analytics, _MAX_ANALYTICS_BYTES, "analytics"
-    )
-
-    # ── 2. Parse + gates (shared with POST /jobs/from-uploads) ─────────
-
-    zip_data, quality_report, xlsx_data = _apply_submission_gates(
-        client_id, archive_bytes, analytics_bytes, archive.filename
-    )
-
-    # ── 3. Mint the job row ────────────────────────────────────────────
-
-    job_insert = (
-        supabase.table("jobs")
-        .insert(
-            {
-                "client_id": client_id,
-                "status": "pending",
-                # ORPHEUS-89: OIDC photo-presence signal captured at
-                # submission. None = no signal; worker falls back to the
-                # ZIP rich-media heuristic at scoring time.
-                "oidc_photo_present": has_profile_photo,
-            }
-        )
-        .execute()
-    )
-    if not job_insert.data:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create job row.",
-        )
-    job_row = job_insert.data[0]
-    job_id = str(job_row["id"])
-
-    logger.info(
-        "Created pending job %s for client %s", job_id, client_id
-    )
-
-    # ── 4. Upload raw bytes to Supabase Storage ────────────────────────
-
-    archive_path = (
-        f"{client_id}/{job_id}/{_ARCHIVE_FILENAME}"
-    )
-    analytics_path = (
-        f"{client_id}/{job_id}/{_ANALYTICS_FILENAME}"
-    )
-    try:
-        supabase.storage.from_(_STORAGE_BUCKET).upload(
-            archive_path,
-            archive_bytes,
-            {"content-type": "application/zip", "upsert": "true"},
-        )
-        supabase.storage.from_(_STORAGE_BUCKET).upload(
-            analytics_path,
-            analytics_bytes,
-            {
-                "content-type": (
-                    "application/vnd.openxmlformats-officedocument."
-                    "spreadsheetml.sheet"
-                ),
-                "upsert": "true",
-            },
-        )
-    except Exception as exc:
-        # Storage write failed after the job row exists. Mark the job
-        # failed so the orphan is visible in the dashboard rather than
-        # leaving the client polling forever.
-        logger.exception(
-            "Storage upload failed for job %s: %s", job_id, exc
-        )
-        supabase.table("jobs").update(
-            {
-                "status": "failed",
-                "error_message": "Storage upload failed; please retry.",
-            }
-        ).eq("id", job_id).execute()
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=(
-                "We couldn't save your files. This is usually transient — "
-                "please try again in a moment."
-            ),
-        ) from exc
-
-    # ── 5. Persist parsed data + quality report ────────────────────────
-
-    _persist_ingested_data(
-        supabase, job_id, zip_data, xlsx_data, quality_report
-    )
-
-    return Job(
-        id=job_id,
-        state=job_row["status"],
-        created_at=job_row["created_at"],
-        updated_at=job_row.get("updated_at"),
-        client_id=job_row.get("client_id"),
-        result=None,
-        error=None,
-    )
-
-
 # --------------------------------------------------------------------------- #
 # Browser-direct upload flow (ORPHEUS-108)
 # --------------------------------------------------------------------------- #
 #
-# The legacy multipart POST /jobs above routes the whole archive body through
-# the Railway edge, where large uploads were observed dying mid-transfer
-# before the handler ever ran (no POST line in the logs after a passing
-# OPTIONS preflight; ORPHEUS-86). The fix is to keep the large body off the
-# Railway edge entirely:
+# This is the only submission path. It replaced a multipart POST /jobs that
+# routed the whole archive body through the Railway edge, where large uploads
+# were observed dying mid-transfer before the handler ever ran (no POST line
+# in the logs after a passing OPTIONS preflight; ORPHEUS-86). The fix is to
+# keep the large body off the Railway edge entirely:
 #
 #   1. POST /jobs/upload-urls mints signed Supabase Storage upload URLs for a
 #      staging path. Signed URLs mean no storage RLS migration — the backend
@@ -256,9 +86,11 @@ async def create_job(
 #      job row, and MOVES the objects to the {client_id}/{job_id}/ path the
 #      worker already reads from — the worker is untouched.
 #
-# The multipart handler stays temporarily so a stale frontend bundle keeps
-# working across the deploy window (the Railway auto-deploy quirk makes a
-# hard cutover risky); remove it once the new flow validates live.
+# The multipart handler was kept as a deploy-skew shim through the validation
+# window (the Railway auto-deploy quirk made a hard cutover risky) and deleted
+# 2026-07-27 after the browser-direct flow was proven live on real client
+# submissions. Nothing calls multipart any more; `apiPostMultipart` went with
+# it on the frontend.
 
 
 class UploadTarget(BaseModel):
@@ -280,8 +112,8 @@ class CreateJobFromUploadsRequest(BaseModel):
     # filename gate (Basic_ prefix + export-date stamp), which the storage
     # object path can't carry — staged objects are always named archive.zip.
     archive_filename: str | None = None
-    # ORPHEUS-89 OIDC photo-presence signal, same semantics as the
-    # multipart form field.
+    # ORPHEUS-89 OIDC photo-presence signal. None = no signal; the worker
+    # falls back to the ZIP rich-media heuristic at scoring time.
     has_profile_photo: bool | None = None
 
 
@@ -362,9 +194,9 @@ async def create_job_from_uploads(
 ) -> Job:
     """Create a job from files already staged in Storage by the browser.
 
-    Mirrors the legacy multipart handler's pipeline — same gates, same job
-    row, same worker path convention — but the request body is a small JSON
-    document instead of the multi-hundred-MB multipart body, so the Railway
+    Same gates, same job row, same worker path convention as the retired
+    multipart handler this replaced — but the request body is a small JSON
+    document instead of a multi-hundred-MB multipart one, so the Railway
     edge never sees the archive.
     """
     if not roles.is_client():
@@ -732,39 +564,6 @@ def _has_active_job(supabase, client_id: str) -> bool:
     return bool(result.data)
 
 
-async def _read_upload(
-    upload: UploadFile, max_bytes: int, label: str
-) -> bytes:
-    """Read an UploadFile into memory with a size cap.
-
-    Streams the file in chunks so a hostile request can't exhaust memory
-    before we notice — we abort with a 413 once max_bytes is crossed.
-    """
-    chunks: list[bytes] = []
-    total = 0
-    while True:
-        chunk = await upload.read(1024 * 1024)  # 1 MB at a time
-        if not chunk:
-            break
-        total += len(chunk)
-        if total > max_bytes:
-            raise HTTPException(
-                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-                detail=(
-                    f"Your {label} upload exceeds the "
-                    f"{max_bytes // (1024 * 1024)} MB limit. "
-                    "Please contact support if you have a larger archive."
-                ),
-            )
-        chunks.append(chunk)
-    if total == 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"The {label} upload is empty.",
-        )
-    return b"".join(chunks)
-
-
 def _apply_submission_gates(
     client_id: str,
     archive_bytes: bytes,
@@ -773,11 +572,14 @@ def _apply_submission_gates(
 ):
     """Parse both uploads and run the three submission gates.
 
-    Shared by the legacy multipart POST /jobs and the browser-direct
-    POST /jobs/from-uploads (ORPHEUS-108) so the two entry points can
-    never drift on what constitutes an acceptable submission. Raises
-    HTTPException (400/422) on rejection; returns
-    ``(zip_data, quality_report, xlsx_data)`` on success.
+    Extracted from the multipart POST /jobs when the browser-direct flow
+    landed (ORPHEUS-108) so the two entry points could never drift on what
+    constitutes an acceptable submission. The multipart path is gone, but
+    the seam is worth keeping: it's the unit the gate tests target
+    directly, and it holds the whole accept/reject policy in one place
+    independent of how the bytes arrived. Raises HTTPException (400/422)
+    on rejection; returns ``(zip_data, quality_report, xlsx_data)`` on
+    success.
 
     Gates, in order:
       * inline parse — malformed ZIP/XLSX → 400 (fail fast, don't let the

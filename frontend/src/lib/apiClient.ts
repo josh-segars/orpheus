@@ -231,39 +231,8 @@ export async function apiPatchJson<T>(
   return (await res.json()) as T
 }
 
-/**
- * POST a multipart/form-data body. Used by the LinkedIn upload flow
- * (ORPHEUS-16) to submit the ZIP archive + XLSX analytics to /jobs.
- *
- * We deliberately don't set a Content-Type header — the browser's fetch
- * implementation generates one with the correct multipart boundary when
- * the body is a FormData instance.
- */
-export async function apiPostMultipart<T>(
-  path: string,
-  formData: FormData,
-  signal?: AbortSignal,
-): Promise<T> {
-  const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-    ...(await authHeaders()),
-  }
-
-  const res = await safeFetch(url, {
-    method: 'POST',
-    headers,
-    body: formData,
-    signal,
-  })
-  if (!res.ok) {
-    let body: unknown = null
-    try {
-      body = await res.json()
-    } catch {
-      // body wasn't JSON — fine, leave null
-    }
-    throw new ApiError(`POST ${path} failed: ${res.status}`, res.status, body)
-  }
-  return (await res.json()) as T
-}
+// `apiPostMultipart` was removed 2026-07-27 with the legacy multipart
+// POST /jobs (ORPHEUS-108). The upload flow now PUTs both files straight to
+// Supabase Storage via supabase-js `uploadToSignedUrl`, so no request this
+// client makes carries a FormData body. Reintroduce it only if a genuine
+// multipart endpoint appears — don't resurrect it for uploads.

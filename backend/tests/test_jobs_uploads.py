@@ -2,14 +2,14 @@
 
 POST /jobs/upload-urls mints signed Storage upload URLs for a staging
 path; POST /jobs/from-uploads downloads the staged bytes server-side,
-runs the same submission gates as the legacy multipart handler, mints
-the job row, and moves the objects to the worker's
-`{client_id}/{job_id}/` path.
+runs the shared submission gates, mints the job row, and moves the
+objects to the worker's `{client_id}/{job_id}/` path. This is the only
+submission path since the multipart shim was deleted (2026-07-27).
 
-Handler-invocation pattern matching test_jobs_post.py: patch the parse
-functions and `get_service_client`, call the handlers directly. The
-FakeSupabase here is richer than test_jobs_post's — it carries a
-FakeStorage (list / download / move / remove / create_signed_upload_url)
+Handler-invocation pattern: patch the parse functions and
+`get_service_client`, call the handlers directly. The FakeSupabase here
+carries a FakeStorage (list / download / move / remove /
+create_signed_upload_url)
 and supports upsert/update so the happy path can run end-to-end.
 """
 
@@ -360,8 +360,9 @@ async def test_from_uploads_gate_rejection_cleans_staging():
 
 @pytest.mark.asyncio
 async def test_from_uploads_quality_gate_still_blocks():
-    """The ORPHEUS-88 content gate runs identically to the multipart path
-    (shared _apply_submission_gates)."""
+    """The ORPHEUS-88 content gate fires through this handler too — the
+    policy itself is pinned in test_submission_gates.py; this is the
+    handler-level parity check that the gate is actually wired in."""
     report = DataQualityReport()
     report.add(
         IssueSeverity.CRITICAL,
