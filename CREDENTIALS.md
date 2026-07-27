@@ -89,16 +89,69 @@ If any of those fail, see the corresponding section below.
 
 ---
 
+## DNS — the `orpheussocial.com` zone
+
+> **Read this before moving nameservers or changing registrars.** Email delivery
+> depends on records that live in this zone, and they fail *silently* when
+> dropped — the app keeps running, invites keep returning 502s that look like a
+> Resend outage, and the worker swallows report-ready send failures entirely.
+> This exact failure happened on 2026-07-27 (ORPHEUS-118): the ORPHEUS-8 cutover
+> moved the zone to Vercel, the new zone was built with web records only, and
+> all transactional email went down.
+
+| | |
+|---|---|
+| **Registrar** | GoDaddy (domain ownership only — nameservers are delegated away) |
+| **Authoritative nameservers** | `ns1.vercel-dns.com` / `ns2.vercel-dns.com` (since the ORPHEUS-8 cutover) |
+| **Zone editor** | Vercel → Domains → `orpheussocial.com` → DNS |
+| **Account login** | `[password manager: <vault> / <item>]` (registrar); Vercel login is in the Vercel section above |
+
+### Records the zone must carry
+
+| Host | Type | Purpose | Owner / source of truth |
+|---|---|---|---|
+| `@` | A | Marketing site (`isMarketingHost()` branch) | Vercel — auto-managed when the domain is attached to the project |
+| `www` | A / CNAME | Marketing site | Vercel — auto-managed |
+| `app` | A / CNAME | React portal (`app.orpheussocial.com`) | Vercel — auto-managed |
+| `resend._domainkey` | TXT | **Resend DKIM.** Unique `p=` public key per domain — copy verbatim from the Resend dashboard, never reconstruct it. Missing = domain un-verified = every send 403s. | Resend → Domains → `orpheussocial.com` |
+| `send` | TXT | **Resend SPF** (`v=spf1 include:amazonses.com ~all`) | Resend → Domains |
+| `send` | MX | **Resend bounce feedback** (`feedback-smtp.<region>.amazonses.com`, priority 10) | Resend → Domains |
+| `_dmarc` | TXT | DMARC policy — currently `v=DMARC1; p=none;` | — |
+| `@` | MX | **Deliberately absent** [Josh, 2026-07-27]. There is no mailbox behind `hello@orpheussocial.com` (the `FROM_ADDRESS` in `backend/email/resend_client.py`) — it is send-only and replies bounce. Add an MX here if that ever changes. | — |
+| `@` | CAA | Three records (`pki.goog`, `sectigo.com`, `letsencrypt.org`) — SSL issuance allowlist | Vercel |
+
+### Verifying the zone
+
+No DNS resolver in the workspace sandbox — use DNS-over-HTTPS:
+
+```bash
+for n in resend._domainkey send; do
+  curl -s "https://dns.google/resolve?name=$n.orpheussocial.com&type=TXT"
+done
+curl -s "https://dns.google/resolve?name=send.orpheussocial.com&type=MX"
+curl -s "https://dns.google/resolve?name=orpheussocial.com&type=MX"
+```
+
+An `"Answer"` array means the record exists. A response with only `"Authority"`
+(the SOA) means it does **not** — that's the failure signature.
+
+From a normal terminal, `dig +short TXT resend._domainkey.orpheussocial.com`
+does the same thing.
+
+---
+
 ## Resend (transactional email)
 
 | | |
 |---|---|
-| **What** | Sends invitation emails for the ORPHEUS-38 invitation flow. |
+| **What** | Invitation emails (ORPHEUS-38) and report-ready / beta-feedback emails (ORPHEUS-98). |
 | **Dashboard** | https://resend.com |
 | **Account login** | `[password manager: <vault> / <item>]` |
-| **API key** | `RESEND_API_KEY` in `backend/.env` + Railway env vars. Real keys start with `re_`. Sandbox keys start with `test_` and trigger sandbox mode in `backend/email/resend_client.py` (logs the call, doesn't send). |
-| **Verified sender domain** | `[fill in once verified]` |
-| **First real send** | Pending — deliverability dashboards show 0/0/0 until ORPHEUS-44 runs. |
+| **API key** | `RESEND_API_KEY` in `backend/.env` + Railway env vars (**both** services). Real keys start with `re_`. Sandbox keys start with `test_` and trigger sandbox mode in `backend/email/resend_client.py` (logs the call, doesn't send). |
+| **Verified sender domain** | `orpheussocial.com`. Verification depends on the DKIM/SPF records in the DNS section above — if those go missing, Resend un-verifies the domain and every send 403s. |
+| **From address** | `Orpheus Social <hello@orpheussocial.com>` (`FROM_ADDRESS` constant). Replies need an apex MX record to land anywhere. |
+| **Failure surface** | Non-2xx or network failure → `EmailSendError`. The invite routes turn it into a 502 with retry guidance; the worker's report-ready send swallows it so a bad send never fails a job — meaning **email outages are invisible from the worker side**. Railway backend logs carry `Resend rejected the send: <status> <detail>`. |
+| **Known gotcha** | Requests must send a real `User-Agent` — the default `Python-urllib/3.x` trips Cloudflare WAF rule 1010 with a 403 (ORPHEUS-55). |
 
 ---
 
@@ -149,7 +202,7 @@ If any of those fail, see the corresponding section below.
 | **PagerDuty / OpsGenie** | On-call alerting | Not provisioned. Single-engineer project, manual monitoring for now. |
 | **Sentry / error tracking** | Backend error tracking | Not provisioned. Railway logs + Supabase logs are the current ground truth. |
 | **Analytics / product telemetry** | Client behavior tracking | Not provisioned. Product is currently outcome-measured by Andrew, not telemetered. |
-| **Domain registrar** | `orpheussocial.com` ownership | `[fill in registrar — Namecheap / Cloudflare / etc.]` |
+| **Domain registrar** | `orpheussocial.com` ownership | GoDaddy. Nameservers delegated to Vercel — see the DNS section above before changing anything. |
 
 ---
 
@@ -157,6 +210,7 @@ If any of those fail, see the corresponding section below.
 
 When you add a new external system to the project:
 
+0. If the system depends on DNS records in the `orpheussocial.com` zone, add them to the DNS section's record table. Undocumented DNS dependencies are how ORPHEUS-118 happened.
 1. Add a section to this file with the same five-row template (What / Where used / Dashboard / Credentials / Notes).
 2. If it's added to `.env`, also add an entry to `backend/.env.example` or `frontend/.env.local.example` with an inline comment.
 3. If it ships secrets that must be set in deploy dashboards, add a note under the Railway / Vercel section above.
