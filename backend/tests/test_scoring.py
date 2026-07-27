@@ -9,7 +9,7 @@ Includes:
 """
 
 import pytest
-from datetime import date
+from datetime import date, timedelta
 from backend.scoring.engine import (
     _band_lookup,
     _parse_date,
@@ -795,6 +795,163 @@ class TestForwardBrief:
         )
         fb = compute_forward_brief(zip_data, None, date(2026, 3, 16))
         assert fb.qualitative_flags.visual_professionalism.photo_present is True
+
+
+class TestAvgImpressionsPerPost:
+    """ORPHEUS-112. The denominator used to be days-with-impressions in the
+    ENGAGEMENT sheet, which is one row per calendar DAY and carries no post
+    count. Because impressions accrue to the whole back catalogue daily, that
+    count ran to the length of the export window for any active member, so the
+    metric was average impressions per DAY under a per-post label.
+
+    Both fixtures are the real live profiles named in the ticket, with counts
+    verified against the stored cloud data.
+    """
+
+    @staticmethod
+    def _daily_engagement(days: int, impressions_per_day: int, ref: date):
+        """One ENGAGEMENT row per day, every day carrying impressions — the
+        shape that made the old denominator equal the window length."""
+        return [
+            EngagementRow(
+                date=(ref - timedelta(days=i)).isoformat(),
+                impressions=impressions_per_day,
+                engagements=0,
+            )
+            for i in range(days)
+        ]
+
+    @staticmethod
+    def _shares(dates: list[date]):
+        return [
+            ShareItem(date=d.isoformat(), share_commentary="post body")
+            for d in dates
+        ]
+
+    def test_andrew_profile_reproduces_corrected_value(self):
+        """Job b902bd06: 319,511 impressions across 365 daily rows, 112 posts
+        published in the window. Old value 875.4 (= /365), correct 2,852.8."""
+        ref = date(2026, 7, 18)
+        # 875.373... per day × 365 ≈ 319,511; use exact totals instead.
+        engagement = self._daily_engagement(365, 1, ref)
+        engagement[0] = EngagementRow(
+            date=ref.isoformat(), impressions=319511 - 364, engagements=0
+        )
+        posts = [ref - timedelta(days=i * 3) for i in range(112)]
+        fb = compute_forward_brief(
+            ZipData(shares=self._shares(posts)),
+            XlsxData(engagement=engagement),
+            ref,
+        )
+        assert fb.quantitative.avg_impressions_per_post == 2852.8
+        # The old proxy would have produced 875.4 from the same inputs.
+        assert fb.quantitative.avg_impressions_per_post != 875.4
+
+    def test_marie_profile_reproduces_corrected_value(self):
+        """Job 844e179e: 4,316 impressions, only 189 of 365 days carrying any,
+        8 posts in the window. Old value 22.8 (= /189), correct 539.5.
+
+        The low-activity case matters because the error scales inversely with
+        activity — a 23.7x understatement here against Andrew's 3.3x.
+        """
+        ref = date(2026, 6, 9)
+        engagement = [
+            EngagementRow(
+                date=(ref - timedelta(days=i)).isoformat(),
+                impressions=(4316 - 188) if i == 0 else (1 if i < 189 else 0),
+                engagements=0,
+            )
+            for i in range(365)
+        ]
+        posts = [ref - timedelta(days=i * 30) for i in range(8)]
+        fb = compute_forward_brief(
+            ZipData(shares=self._shares(posts)),
+            XlsxData(engagement=engagement),
+            ref,
+        )
+        assert fb.quantitative.avg_impressions_per_post == 539.5
+
+    def test_posts_outside_the_window_are_excluded(self):
+        """The denominator is posts published inside the scoring window, not
+        every post in the archive — the archive spans the member's whole
+        history (341 shares for 112 in-window on b902bd06)."""
+        ref = date(2026, 7, 18)
+        posts = [ref - timedelta(days=10), ref - timedelta(days=400)]
+        fb = compute_forward_brief(
+            ZipData(shares=self._shares(posts)),
+            XlsxData(engagement=[EngagementRow(date=ref.isoformat(), impressions=100)]),
+            ref,
+        )
+        # 100 / 1 in-window post, not / 2.
+        assert fb.quantitative.avg_impressions_per_post == 100.0
+
+    def test_link_posts_still_count(self):
+        """A non-empty shared_url marks a post containing a link, not a
+        repost, so it must not be filtered out of the denominator."""
+        ref = date(2026, 7, 18)
+        shares = [
+            ShareItem(date=ref.isoformat(), share_commentary="look at this",
+                      shared_url="https://example.com/article"),
+            ShareItem(date=(ref - timedelta(days=5)).isoformat(),
+                      share_commentary="plain post"),
+        ]
+        fb = compute_forward_brief(
+            ZipData(shares=shares),
+            XlsxData(engagement=[EngagementRow(date=ref.isoformat(), impressions=200)]),
+            ref,
+        )
+        assert fb.quantitative.avg_impressions_per_post == 100.0
+
+    def test_no_posts_in_window_yields_none(self):
+        """Div-by-zero guard. An inactive member with impressions still
+        accruing to old content gets no per-post figure at all rather than a
+        fabricated one."""
+        ref = date(2026, 7, 18)
+        fb = compute_forward_brief(
+            ZipData(shares=self._shares([ref - timedelta(days=500)])),
+            XlsxData(engagement=[EngagementRow(date=ref.isoformat(), impressions=5000)]),
+            ref,
+        )
+        assert fb.quantitative.avg_impressions_per_post is None
+
+    def test_no_xlsx_yields_none(self):
+        ref = date(2026, 7, 18)
+        fb = compute_forward_brief(
+            ZipData(shares=self._shares([ref])), None, ref
+        )
+        assert fb.quantitative.avg_impressions_per_post is None
+
+    def test_denominator_is_independent_of_engagement_row_count(self):
+        """The regression pin: same posts and same total impressions, spread
+        over a different number of daily rows, must give the same answer. The
+        old implementation moved with the row count."""
+        ref = date(2026, 7, 18)
+        posts = self._shares([ref - timedelta(days=i * 7) for i in range(10)])
+
+        few_rows = [EngagementRow(date=ref.isoformat(), impressions=10000)]
+        many_rows = [
+            EngagementRow(date=(ref - timedelta(days=i)).isoformat(),
+                          impressions=50, engagements=0)
+            for i in range(200)
+        ]
+        a = compute_forward_brief(ZipData(shares=posts), XlsxData(engagement=few_rows), ref)
+        b = compute_forward_brief(ZipData(shares=posts), XlsxData(engagement=many_rows), ref)
+        assert a.quantitative.avg_impressions_per_post == 1000.0
+        assert b.quantitative.avg_impressions_per_post == 1000.0
+
+    def test_posting_gap_metrics_share_the_same_post_set(self):
+        """post_dates is computed once and used by both the denominator and
+        the posting-gap distribution, so the two can't disagree about what
+        counts as a post."""
+        ref = date(2026, 7, 18)
+        posts = self._shares([ref, ref - timedelta(days=21)])
+        fb = compute_forward_brief(
+            ZipData(shares=posts),
+            XlsxData(engagement=[EngagementRow(date=ref.isoformat(), impressions=1000)]),
+            ref,
+        )
+        assert fb.quantitative.avg_impressions_per_post == 500.0
+        assert fb.quantitative.longest_posting_gap_weeks == 3
 
     def test_photo_override_true_wins_over_empty_zip(self):
         # ORPHEUS-89: OIDC says a photo is present even though the ZIP

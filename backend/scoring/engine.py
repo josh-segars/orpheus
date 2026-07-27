@@ -582,6 +582,23 @@ def _compute_forward_brief_quantitative(
     """Compute quantitative fields for Forward Brief."""
     fields: dict = {}
 
+    # Original posts published inside the scoring window, hoisted above the
+    # XLSX branch because two metrics need it: the per-post impressions
+    # denominator (ORPHEUS-112) and the posting-gap distribution further down.
+    # Computing it once keeps them from disagreeing about what "a post" is.
+    #
+    # Every share counts. A non-empty shared_url marks a post that contains a
+    # link, not a repost, so filtering on it would drop legitimate original
+    # posts — and on both validation profiles (Andrew b902bd06, Marie
+    # 844e179e) zero in-window shares carried one anyway.
+    cutoff = ref_date - timedelta(days=365)
+    post_dates = []
+    for item in zip_data.shares:
+        d = _parse_date(item.date)
+        if d and d >= cutoff:
+            post_dates.append(d)
+    posts_in_window = len(post_dates)
+
     # --- From XLSX ---
     if xlsx_data:
         # Follower count + growth rate
@@ -598,11 +615,34 @@ def _compute_forward_brief_quantitative(
         if xlsx_data.engagement:
             total_impressions = sum(r.impressions for r in xlsx_data.engagement)
             total_engagements = sum(r.engagements for r in xlsx_data.engagement)
-            # Count posts from top_posts or shares — use engagement rows as proxy
-            # for post count: days with impressions > 0
-            post_days = sum(1 for r in xlsx_data.engagement if r.impressions > 0)
-            if post_days > 0:
-                fields["avg_impressions_per_post"] = round(total_impressions / post_days, 1)
+            # ORPHEUS-112: divide by posts published in the window, taken from
+            # the ZIP. The ENGAGEMENT sheet is one row per calendar DAY and
+            # carries no post count at all, so the previous denominator —
+            # days with impressions > 0 — measured how many days the member's
+            # content was seen, not how often they posted. Because impressions
+            # accrue to the whole back catalogue daily, that count runs to the
+            # length of the export window for any active member (365 of 365
+            # rows on b902bd06), making the value average impressions per DAY
+            # while labeled per post: 875.4 against a true 2,852.8.
+            #
+            # TOP POSTS does carry per-post rows but is capped at 50, so it
+            # can't supply the count either.
+            #
+            # The result is an approximation, not an identity, in two ways
+            # worth knowing before tightening ORPHEUS-114's reconciliation
+            # tolerance. (1) The numerator covers impressions earned during
+            # the window by ALL live content, including posts published before
+            # it, while the denominator counts only posts published inside it.
+            # Impressions decay within days of publication, so out-of-window
+            # posts contribute little in practice. (2) The two sides come from
+            # different windows: the numerator's is fixed by the analytics
+            # export, the denominator's is anchored on latest ZIP activity
+            # (ORPHEUS-91). On b902bd06 they are offset 3 days at the head and
+            # 2 at the tail, which happened to change nothing.
+            if posts_in_window > 0:
+                fields["avg_impressions_per_post"] = round(
+                    total_impressions / posts_in_window, 1
+                )
             if total_impressions > 0:
                 fields["avg_engagement_rate"] = round(total_engagements / total_impressions, 4)
 
@@ -635,7 +675,6 @@ def _compute_forward_brief_quantitative(
 
     # --- From ZIP ---
     # Average comment length
-    cutoff = ref_date - timedelta(days=365)
     comment_lengths = []
     for item in zip_data.comments:
         d = _parse_date(item.date)
@@ -647,13 +686,8 @@ def _compute_forward_brief_quantitative(
             sum(comment_lengths) / len(comment_lengths), 1
         )
 
-    # Posting gap distribution
-    post_dates = []
-    for item in zip_data.shares:
-        d = _parse_date(item.date)
-        if d and d >= cutoff:
-            post_dates.append(d)
-
+    # Posting gap distribution — post_dates is computed once at the top of
+    # this function, shared with the per-post impressions denominator.
     if post_dates:
         post_dates.sort()
         # Longest gap in weeks

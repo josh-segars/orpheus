@@ -532,7 +532,9 @@ def _format_forward_brief_data(scoring_output: ScoringStageOutput) -> str:
     if q.unique_members_reached is not None:
         parts.append(f"Unique members reached: {q.unique_members_reached:,}")
     if q.avg_impressions_per_post is not None:
-        parts.append(f"Avg impressions/post: {q.avg_impressions_per_post:.0f}")
+        # Thousands separator: post-ORPHEUS-112 this runs to four figures on
+        # an active profile, and the agent quotes it to the client verbatim.
+        parts.append(f"Avg impressions/post: {q.avg_impressions_per_post:,.0f}")
     if q.avg_engagement_rate is not None:
         parts.append(f"Avg engagement rate: {q.avg_engagement_rate:.1%}")
     if q.top_post_impressions is not None:

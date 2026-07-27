@@ -201,7 +201,19 @@ class ForwardBriefQuantitative(BaseModel):
     unique_members_reached: Optional[int] = Field(
         None, description="From DISCOVERY sheet summary"
     )
-    avg_impressions_per_post: Optional[float] = None
+    avg_impressions_per_post: Optional[float] = Field(
+        None,
+        description=(
+            "Total impressions over the analytics window divided by original "
+            "posts published inside the scoring window (ORPHEUS-112). An "
+            "approximation, not an identity: the numerator includes "
+            "impressions earned by posts published before the window (bounded "
+            "in practice by how fast impressions decay after publication), "
+            "and the two sides are drawn from windows that differ by a few "
+            "days — the numerator's is fixed by the analytics export, the "
+            "denominator's is anchored on latest ZIP activity per ORPHEUS-91."
+        ),
+    )
     avg_engagement_rate: Optional[float] = Field(
         None, description="Engagement rate on received content"
     )
