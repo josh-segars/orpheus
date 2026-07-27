@@ -1,52 +1,59 @@
 # Session Handoff — 2026-07-27
 
-Replaces `SESSION_HANDOFF_2026-07-21.md`. Its threads are unchanged except where noted — this was an unplanned incident session, not a continuation of the 07-21 pickup plan.
+Covers **two sessions on the same day**, updated in place rather than split into a second dated file (precedent: `Session handoff: 2026-07-15 part 2`). Replaces `SESSION_HANDOFF_2026-07-21.md`, retired in the part-1 commit.
 
-- **ORPHEUS-118 (transactional email outage): filed, fixed, closed same day.** Ops-only; no code commits.
-- **ORPHEUS-119 filed** — no ORPHEUS-98 report-ready email has ever delivered in production. This *answers* the 07-21 handoff's caveat #1 ("verify whether Nicole's report-ready email went out"): it did not.
-- **Carried unchanged from 07-21:** ORPHEUS-108's legacy shim removal, ORPHEUS-111, ORPHEUS-90 Decision Log paste, ORPHEUS-107, the Andrew comms items, untracked-by-intent files.
-- **Now stale and removed:** the 07-21 "ORPHEUS-8 go-live: Vercel domain + registrar DNS" pending item. The cutover happened — that's what caused this incident.
+- **Part 1 — ORPHEUS-118 (transactional email outage): filed, fixed, closed.** Ops-only; no code commits.
+- **Part 2 — ORPHEUS-119 diagnosed, ORPHEUS-120 filed, ORPHEUS-108 closed and deployed.** One code commit (`8f1b890`).
+- **Now resolved from part 1:** the "three clients owed a report-ready email" item (it's two, and the back-send is dropped), and the standing question of whether Nicole's narratives auto-publishing was a gate failure (it wasn't).
+- **Newly surfaced during the wrap:** ORPHEUS-112–117, filed 2026-07-22 by a session that left no handoff, invisible to the canon until now.
+- **Carried unchanged:** ORPHEUS-111, the ORPHEUS-90 Decision Log paste, ORPHEUS-107, the Andrew comms items, untracked-by-intent files.
 
 ---
 
-## What this session did
+## Part 1 — the email outage (ORPHEUS-118)
 
-### The incident (ORPHEUS-118)
+Josh hit a 502 inviting a new client (Indy Beck). **Root cause: the ORPHEUS-8 nameserver cutover took email down.** `orpheussocial.com` now delegates to Vercel, and the rebuilt zone carried web records only — Resend's DKIM TXT, SPF TXT and `send` MX were all gone, so Resend un-verified the domain and 403'd every send. Fixed by re-adding four records (DKIM, SPF, `send` MX → `feedback-smtp.us-east-1.amazonses.com` priority 10, plus `_dmarc`); Josh's live invite to Indy delivered.
 
-Josh hit a 502 inviting a new client (Indy Beck). The UI copy is the backend's own `detail` string surfaced verbatim, which placed the failure at Resend rather than in the invite handler.
+**Decisions locked [Josh, 2026-07-27]:** no apex MX, deliberately (`hello@orpheussocial.com` is send-only, replies bounce); DMARC added rather than deferred.
 
-**Root cause: the ORPHEUS-8 nameserver cutover took email down.** `orpheussocial.com` now delegates to `ns1/ns2.vercel-dns.com`, and the Vercel zone was built with web records only — it carried three CAA records and nothing else. Resend's `resend._domainkey` TXT (DKIM), `send` TXT (SPF) and `send` MX were all gone, so Resend un-verified the sending domain and 403'd every send; `_post_to_resend` normalizes that into `EmailSendError`, which the invite routes turn into the 502.
+Prevention shipped as the new "DNS — the `orpheussocial.com` zone" section in `CREDENTIALS.md`. Full detail is in CLAUDE.md's Decisions Made entry — not repeated here.
 
-Confirmed at both ends before touching anything: DoH lookups returned SOA-only (no `Answer`) for each record, and the Resend dashboard independently showed domain status `Failed` with all three records `Failed`.
+---
 
-**Fix** — four records added to the Vercel zone (TTL 60, each commented `… - ORPHEUS-118`):
+## Part 2 — what this session did
 
-| Host | Type | Value |
-|---|---|---|
-| `resend._domainkey` | TXT | DKIM `p=…` (216-char RSA key, copied verbatim from Resend) |
-| `send` | TXT | `v=spf1 include:amazonses.com ~all` |
-| `send` | MX | `feedback-smtp.us-east-1.amazonses.com`, priority 10 |
-| `_dmarc` | TXT | `v=DMARC1; p=none;` |
+### ORPHEUS-119: cause established, no send-path bug (left In Progress)
 
-Resend's Restart flipped SPF MX + TXT to `Verified` in about a minute; DKIM followed on SES's own poll. **Josh sent a real invitation and it delivered** — Indy shows `Delivered` in the send log.
+The ticket named two candidate causes and couldn't separate them. **The evidence that separates them:** Tatiana Rossova's `clients` row was created **2026-07-20 16:13:58 UTC** with `invitation_status = 'pending'` and no delivery in the Resend log. Since `POST /clients/invite` always attempts a send and deliberately does *not* roll the row back on `EmailSendError`, a persisted row with no delivery is the signature of a failed send. That dates the outage to before all three publications — two minutes after the Josh-test one, 3.5 hours before Nicole's, a day before Francesa's. **Cause 1 confirmed; both send paths read correctly against live data.**
 
-**Decisions locked [Josh, 2026-07-27]:** (1) **no apex MX, deliberately** — nothing sits behind `hello@orpheussocial.com`, it's send-only and replies bounce, so the missing MX flagged in the ticket is not a regression; (2) DMARC added rather than deferred.
+Two corrections to the ticket:
 
-### The finding (ORPHEUS-119)
+- **The owed list is two, not three.** Josh's test client `8480c922` has **7 complete jobs**, so `_is_first_complete_job` suppressed its email correctly as a re-run. Not a miss.
+- **The worker path is the one that should have fired** for Nicole and Francesa — their advisor row carries `is_individual = true` → `is_advisory = False`. This also resolves the 07-21 handoff's open question about Nicole's narratives auto-publishing: correct behavior for that advisor row, not a gate failure.
 
-Resend's send log for the trailing 15 days contains **only invitation emails**. No ORPHEUS-98 report-ready email has ever been observed delivering. Three clients are owed one:
+**Back-send dropped [Josh, 2026-07-27]** — Josh has been in direct personal contact with both clients, so the feedback ask is covered out-of-band. No `published_at` reset, no manual send. This is written onto the ticket as "future sessions should not attempt this," because the ticket description still lists the three clients.
 
-| Client | Job | Published |
-|---|---|---|
-| Nicole Persun | `a8a47ff8-ba4d-4669-b9c4-0002f2255c2b` | 2026-07-20 19:50 UTC |
-| Joshua Segars (test) | `c6116df9-6f05-433e-9068-18e0fb6cbbe4` | 2026-07-20 16:11 UTC |
-| Francesa Castellanos | `e2b92877-3da5-464a-832a-ea24e362c2d2` | 2026-07-21 18:00 UTC |
+**Worker env pre-flight confirmed** — `APP_BASE_URL` and `BETA_SURVEY_URL` are set on both Railway services, so neither silent-skip branch in `_maybe_send_report_ready_email` can fire.
 
-Two candidate causes, **not separable from the evidence available**: collateral of this outage (last successful send of any kind was 07-17, so the outage could have begun any time in the 07-17 → 07-27 window), or an independent bug in the ORPHEUS-98 send path. A fresh completion now that sending works will settle it.
+### ORPHEUS-120 filed (high) — the real finding
 
-### Documentation
+ORPHEUS-98 deferred the advisory email to publication on the premise that "a client genuinely can't see a draft," verified at the time against the `narratives_select_as_client` RLS policy (`status = 'published'`). **That policy is dead code for that surface.** `_build_result_payload` reads narratives with the *service-role* client and never filters on `status`, and no frontend surface reads narratives direct-to-Supabase — so `GET /jobs/{id}` serves `draft` narratives to the report subject the moment the pipeline finishes.
 
-New "DNS — the `orpheussocial.com` zone" section in `CREDENTIALS.md`: read-before-you-move warning, the full record table with per-record purpose and source of truth, the deliberate-no-MX note, and a DoH verification snippet (the sandbox has no resolver — `dig` fails with "network unreachable"). The Resend section was refreshed at the same time — it still read "first real send pending" with a blank verified domain — and a step 0 was added to the new-external-system checklist so DNS dependencies get recorded going forward. `CLAUDE.md` gets an Active-phase sentence and a Decisions Made entry.
+**Two defects have been cancelling each other out.** 13 clients on Andrew's roster (`is_individual = false`, which is *correct* per `Decision_Self_Serve_And_Advisor_Invite_2026-05-11` — not a misconfiguration) have `reports.published_at IS NULL`, never received the feedback ask, and have been reading their reports since 2026-06-16 anyway.
+
+Nothing has broken because **nobody has run a report through advisor approval yet** [Josh]. Reports finish in a minute or two while the client watches, so the email was never a readiness notification in practice and the leak stayed invisible. But the gate won't hold the first time review-then-release is actually used — which is the core of the advisory practice model.
+
+**Cross-linked as a dependency of ORPHEUS-114** [Josh]: a reconciliation pre-publish gate has no pre-publish window to occupy until 120 restores the boundary. Comments posted on both tickets.
+
+Left on 120 as a note for Josh + Andrew, deliberately undecided: whether the feedback ask should be gated on advisory publication at all, given the client is already reading the report. The 13 missing asks self-resolve if Andrew ever publishes — `_maybe_send_report_ready_on_publish` fires on the narrative flip — so they're unsent, not unsendable.
+
+### ORPHEUS-108 closed — multipart shim deleted (`8f1b890`, deploy green)
+
+Removed: the multipart `create_job` handler (176 lines), `_read_upload`, the now-unused `Annotated`/`File`/`Form`/`UploadFile` imports, and the frontend's `apiPostMultipart` (dead since `useCreateJob` moved to `uploadToSignedUrl`; its docstring pointed at the deleted endpoint). `_apply_submission_gates` stays — transport-independent accept/reject policy in one place.
+
+**Test decision worth knowing about:** the handoff plan said "drop the pytest cases that exercise it," but `test_jobs_post.py`'s 12 cases were the *only* detailed coverage of the ORPHEUS-88/100/101 gate policy (`test_jobs_uploads.py` has just the handler-level parity smoke). They were **retargeted** onto the gate function as `test_submission_gates.py` — 11 cases, preserving Basic-filename rejection, filename-date-over-XLSX precedence, the XLSX fallback, the 14/15-day boundaries, Shares-vs-Profile guidance. The one dropped case is the handler-level 403, already covered for both live handlers. Passing a gate is now asserted as "returns the parsed payload" instead of the old proxy of "500s later at an unmocked insert."
+
+Backend pytest **391 green** (was 392), frontend vitest **79 green**, `tsc -b` clean, deploy confirmed green by Josh.
 
 ---
 
@@ -54,52 +61,57 @@ New "DNS — the `orpheussocial.com` zone" section in `CREDENTIALS.md`: read-bef
 
 | Ticket | Title | Status |
 |---|---|---|
-| ORPHEUS-118 | Restore Resend DNS after the nameserver cutover | ✅ Done (verified by a real delivered invite) |
-| ORPHEUS-119 | Report-ready email never observed sending; back-send owed | ⏳ Backlog (medium) — **new** |
-| ORPHEUS-108 | Browser-direct upload | 🔄 In Progress — **only** the legacy multipart `POST /jobs` + `_read_upload` deletion remains |
+| ORPHEUS-118 | Restore Resend DNS after the nameserver cutover | ✅ Done (part 1) |
+| ORPHEUS-108 | Browser-direct upload | ✅ Done — shim deleted, deploy green |
+| ORPHEUS-119 | Report-ready email path | 🔄 In Progress — cause established; awaiting live verification + monitoring |
+| ORPHEUS-120 | Advisory draft gate doesn't hold on the read path | ⏳ Backlog (high) — **new**; dependency of 114 |
+| ORPHEUS-112–117 | Metric-accuracy cluster (bugs A/B/D/E, reconciliation gate, evidence layer) | ⏳ Backlog — 4 high; **filed 07-22, undocumented until now** |
 | ORPHEUS-111 | 50 MB cap vs 150 MB advisory vs 200 MB copy | ⏳ Backlog (medium) |
 | ORPHEUS-99 / 94 / 84 / 85 / 107 | (publish action / email-mismatch / invite-advisor / self-serve signup / avatar) | ⏳ Backlog, unchanged |
 | ORPHEUS-96 follow-up | CTA as sub-dim 1B criterion | ⏳ Deferred (framework, Andrew) |
 
-Test baselines unchanged: backend pytest **392 green**, frontend vitest **79 green**. No code touched this session.
+Baselines: backend pytest **391 green**, frontend vitest **79 green**.
 
 ---
 
 ## Pending — your manual steps
 
-1. **Push** — the wrap commit only. Command below.
-2. **Delete the duplicate ORPHEUS-118 comment.** The first closing comment posted double-escaped (renders as literal HTML source); the corrected repost sits directly below it. Plane's MCP has no delete-comment tool, so it needs the UI.
-3. **Andrew comms, carried from 07-21:** (a) Nicole's report is live to her and is the first real-client exercise of the ORPHEUS-63 score-0 posture — worth his read-through; (b) Jenn hasn't retried since the MIME fix; (c) Jodie needs an onboarding nudge, not a fix.
-4. **Decision Log paste (ORPHEUS-90)** — still owed (`outputs/DecisionLog_ORPHEUS-90_Model_Calibration_2026-06-24.md` from the 06-24 session).
+1. **Nothing to push.** `8f1b890` is already pushed and deployed; this wrap commit is the only outstanding one.
+2. **Delete the duplicate ORPHEUS-118 comment** (carried from part 1, if not already done). The first closing comment posted double-escaped; the corrected repost sits below it. Plane's MCP has no delete-comment tool.
+3. **Decision Log paste (ORPHEUS-90)** — still owed (`outputs/DecisionLog_ORPHEUS-90_Model_Calibration_2026-06-24.md` from the 06-24 session).
+4. **Andrew comms, carried:** (a) Nicole's report is live to her and is the first real-client exercise of the ORPHEUS-63 score-0 posture — worth his read-through; (b) Jenn hasn't retried since the MIME fix; (c) Jodie needs an onboarding nudge, not a fix. **New:** (d) ORPHEUS-120's open question — should the feedback ask wait for advisory publication at all?
 
 ---
 
 ## Recommended pickup for next session
 
-1. **ORPHEUS-119** — cheapest path to certainty: run one fresh completion, watch whether the report-ready email lands. That single observation decides whether there's a bug to fix or just three back-sends to do. Do this before it ages further; Francesa's report has been sitting unemailed since 07-21.
-2. **Legacy multipart removal** — delete `POST /jobs` multipart + `_read_upload`, drop the pytest cases that exercise it, close ORPHEUS-108. Small, fully unblocked, unchanged from the 07-21 recommendation.
-3. **ORPHEUS-111**, then the backlog: ORPHEUS-107, ORPHEUS-94, ORPHEUS-99.
+1. **Triage ORPHEUS-112–117 into the canon.** Six tickets, four high, filed 07-22 with no handoff behind them — the highest-value next move is establishing what that session found and getting it into CLAUDE.md, because right now the canon is blind to a metric-accuracy cluster that includes a scoring bug affecting already-delivered reports (112, "regenerate affected reports").
+2. **ORPHEUS-120 + ORPHEUS-114 together.** Design the publish boundary once. 120 is small on its own (filter `status` for client callers in `_build_result_payload`, plus an "advisor is reviewing this" surface) but shouldn't land twice.
+3. **ORPHEUS-119's remainder** rides the next real completion — no action until then, then the monitoring sibling.
+4. Then ORPHEUS-111, ORPHEUS-107, ORPHEUS-94, ORPHEUS-99.
 
 ---
 
 ## Caveats / things that will bite
 
-1. **Resend's dashboard lists the provider as GoDaddy** and warns about GoDaddy propagation times — stale metadata from when the domain was added in April. The zone is Vercel's now. **Do not use Resend's Auto configure button**; it would write to the wrong provider.
-2. **Email outages are invisible from inside the product.** The worker swallows `EmailSendError` by design, and the invite 502 only surfaces if an advisor happens to be inviting someone. This one ran ~10 days undetected. A monitoring sibling (Resend webhook into a log, or a periodic did-we-send-anything check) is captured as a note on ORPHEUS-119 but isn't ticketed on its own.
-3. **`reports.published_at` blocks the retry.** All three owed clients have it stamped, so ORPHEUS-98's once-per-client guard will suppress an automatic re-send — back-sending needs a manual send or a deliberate `published_at` reset.
-4. **Nicole's narratives auto-published at completion** (carried from 07-21, still open) — if advisory reports were meant to gate on admin publish, that gate didn't hold for her. Relevant to ORPHEUS-119: it's unconfirmed which of the two send paths should have fired.
-5. **The part-1-partial sub-question is open** (on ORPHEUS-110): if LinkedIn's 10-minute partial download carries the Complete fingerprint files, a part-1 upload would pass as zero-activity. Needs a real part-1 sample.
-6. **Abandoned staging uploads still aren't swept** — Jenn's orphaned `analytics.xlsx` from 07-17 sits in `{client}/staging/`. Harmless at current volume.
-7. **Sandbox quirks unchanged** — no pip/pytest (Josh's terminal); no SSH push; `.git/*.lock` needs the `mv` workaround before each commit. **New:** no DNS resolver either — `dig` returns "network unreachable"; use the DoH snippet in `CREDENTIALS.md`.
-8. **Untracked-by-intent files** — do not `git add`: `ORPHEUS-90_Model_Calibration_Decision_Brief_2026-06-17.md`, `Scoping_Free_Tier_And_Premium_Recommendations_2026-07-01.md`, `Survey_Closed_Beta_Feedback_2026-06-08.md`, `create_beta_survey_form.gs`, both `rubric_consistency_results_*.json`, `.claude/`, `Draft_Cohort_Rubric_2026-07-13.md`, `Draft_Unit_Narrative_Questionnaire_2026-07-13.md`, `Scoping_B2B_Cohort_Assessment_2026-07-13.md`.
+1. **A returning or advisory client completing a report is NOT an ORPHEUS-119 verification event.** The send fires only on a client's *first* completion and only under an `is_individual = true` advisor. `survey=no` in the worker log would be the one real surprise (env var not reaching the process despite being set).
+2. **`python-multipart` is now unused but still in `requirements.txt`**, deliberately, comment-flagged. Retained one deploy cycle rather than changing the Railway build in the commit that removed the endpoint (ORPHEUS-43 history). Fold the removal into the next backend commit; don't give it a dedicated deploy.
+3. **A browser on the pre-108 bundle now gets 405 on `POST /jobs`.** That window is what the shim covered and it closed deliberately — a hard refresh fixes it, but it explains any failed submit reported right after the deploy.
+4. **Resend's dashboard still lists the provider as GoDaddy** and warns about GoDaddy propagation — stale metadata from April. The zone is Vercel's now. **Do not use Resend's Auto configure button.**
+5. **Email outages are invisible from inside the product.** Both send paths swallow `EmailSendError` by design, and the invite 502 only surfaces if an advisor happens to be inviting someone. The last one ran ~10 days undetected. Monitoring scope is folded into ORPHEUS-119.
+6. **Sessions that skip the wrap cost real money.** The 07-22 cluster went five days invisible, and the 06-26 session before it forced ORPHEUS-96 to be closed retroactively. Related: **run the full Plane list at session start** — this session fetched ORPHEUS-119 directly and so missed the 112–117 drift until the wrap.
+7. **The part-1-partial sub-question is open** (on ORPHEUS-110): if LinkedIn's 10-minute partial download carries the Complete fingerprint files, a part-1 upload would pass as zero-activity. Needs a real part-1 sample.
+8. **Abandoned staging uploads still aren't swept** — Jenn's orphaned `analytics.xlsx` from 07-17 sits in `{client}/staging/`. Harmless at current volume.
+9. **Sandbox quirks unchanged** — no pip/pytest (Josh's terminal); no SSH push; `.git/*.lock` needs the `mv` workaround before each commit; no DNS resolver (use the DoH snippet in `CREDENTIALS.md`). **New:** `rm` inside the mount needs delete permission granted for the folder before it will work.
+10. **Untracked-by-intent files** — do not `git add`: `ORPHEUS-90_Model_Calibration_Decision_Brief_2026-06-17.md`, `Scoping_Free_Tier_And_Premium_Recommendations_2026-07-01.md`, `Survey_Closed_Beta_Feedback_2026-06-08.md`, `create_beta_survey_form.gs`, both `rubric_consistency_results_*.json`, `.claude/`, `Draft_Cohort_Rubric_2026-07-13.md`, `Draft_Unit_Narrative_Questionnaire_2026-07-13.md`, `Scoping_B2B_Cohort_Assessment_2026-07-13.md`.
 
 ---
 
 ## State of the repo right now
 
-No code commits this session — the fix lived entirely in the Vercel DNS zone and the Resend dashboard. This wrap commit (handoff swap + `CLAUDE.md` + `CREDENTIALS.md`) is the only unpushed commit. Working tree otherwise clean except the intentionally-untracked files in caveat 8.
+One code commit this session (`8f1b890`, pushed and deployed) plus this wrap commit. Working tree otherwise clean except the intentionally-untracked files in caveat 10.
 
-**Prod config beyond source:** the four DNS records in the Vercel zone are the only live state not captured in the repo — DNS can't be pinned in source the way migration 019 pinned the bucket config, which is exactly why the `CREDENTIALS.md` record table exists.
+**Prod config beyond source:** the four DNS records in the Vercel zone remain the only live state not captured in the repo — which is why the `CREDENTIALS.md` record table exists.
 
 Suggested push:
 
