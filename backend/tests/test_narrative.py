@@ -14,6 +14,8 @@ from backend.agents.narrative import (
     MECHANICS_INSTRUCTIONS,
     FOCUS_INSTRUCTIONS,
     EXPECTED_SECTIONS,
+    QUANTITATIVE_METRIC_LABELS,
+    SUPPRESSED_RAW_VALUE_SUB_DIMS,
     USER_PROMPT_TEMPLATE,
     NarrativeResult,
     _build_system_prompt,
@@ -448,7 +450,9 @@ class TestFormatScoredDimensions:
     def test_contains_raw_values(self):
         output = _make_scoring_output()
         text = _format_scored_dimensions(output)
-        assert "raw value: 750" in text  # History Depth
+        # ORPHEUS-117: the underlying metric is still surfaced, now carrying
+        # its unit and window rather than as a bare number.
+        assert "750 outbound actions" in text  # History Depth
 
     def test_completeness_floor_flag(self):
         output = _make_scoring_output()
@@ -1209,46 +1213,177 @@ class TestParseSubDimensions:
 
 
 # ============================================================
-# Test: _format_scored_dimensions raw_value rendering (ORPHEUS-21)
+# Test: _format_scored_dimensions raw_value rendering
+# (ORPHEUS-21 layout, relabeled by ORPHEUS-117)
 # ============================================================
 
 
 class TestFormatScoredDimensionsRawValue:
-    """Pinning the layout change that surfaces raw_value on its own
-    line — pre-ORPHEUS-21 it was an inline " (raw value: X)" suffix.
-    Sub-dim Summaries are expected to reference the raw value, so it
-    needs to be visible to Claude, not buried in parens.
+    """Pinning the layout change that surfaces the underlying metric on its
+    own line — pre-ORPHEUS-21 it was an inline " (raw value: X)" suffix.
+    Sub-dim Summaries are expected to reference the metric, so it needs to be
+    visible to Claude, not buried in parens.
+
+    ORPHEUS-117 keeps the dedicated line but replaces the bare "raw value: N"
+    with a `measured signal` line carrying the unit and measurement window.
+    Fed a number with no unit, the agent invented one and quoted it to the
+    client ("a raw archive value of 6,316 activity units").
     """
 
-    def test_integer_raw_value_formatted_without_trailing_zero(self):
+    def test_integer_metric_formatted_without_trailing_zero(self):
         output = _make_scoring_output()
         text = _format_scored_dimensions(output)
-        # History Depth raw_value = 750 (integer). Should render as "750"
-        # not "750.0".
-        assert "raw value: 750" in text
-        assert "raw value: 750.0" not in text
+        # History Depth raw_value = 750 (integer) → "750", not "750.0".
+        assert "measured signal: 750 outbound actions" in text
+        assert "750.0" not in text
 
-    def test_float_raw_value_renders_with_one_decimal(self):
+    def test_float_metric_renders_with_one_decimal(self):
         output = _make_scoring_output()
         text = _format_scored_dimensions(output)
-        # Posting Presence raw_value = 1.5 → should render as "1.5".
-        assert "raw value: 1.5" in text
+        # Posting Presence raw_value = 1.5 → "1.5", not "1.50" or "2".
+        assert "measured signal: 1.5 original posts per week" in text
 
-    def test_raw_value_on_own_line_indented(self):
-        """The new format puts raw value on its own line so Claude can
-        ground sub-dim Summaries on the metric. The previous inline
-        " (raw value: X)" form was easy to skip past."""
+    def test_large_metric_gets_thousands_separator(self):
+        """Outbound Engagement Presence raw_value = 1200. The client-facing
+        summary quotes this figure, so it should read as a human number."""
         output = _make_scoring_output()
         text = _format_scored_dimensions(output)
-        # Lookup line should NOT contain raw_value inline.
+        assert "measured signal: 1,200 engagement actions" in text
+
+    def test_metric_on_own_line_indented(self):
+        """The metric sits on its own line so Claude can ground sub-dim
+        Summaries on it. The pre-ORPHEUS-21 inline form was easy to skip."""
+        output = _make_scoring_output()
+        text = _format_scored_dimensions(output)
         history_lines = [l for l in text.splitlines() if l.strip().startswith("History Depth:")]
         assert len(history_lines) == 1
-        assert "raw value" not in history_lines[0]
-        # And a separate indented line should carry the value.
+        assert "measured signal" not in history_lines[0]
         assert any(
-            l.strip().startswith("raw value: 750")
+            l.strip().startswith("measured signal: 750 outbound actions")
             for l in text.splitlines()
         )
+
+    def test_every_metric_line_carries_a_unit_and_window(self):
+        """The whole point of ORPHEUS-117: no measured-signal line may present
+        a naked number. Each must state what is being counted and over what
+        period, so the agent never has to supply a unit itself."""
+        output = _make_scoring_output()
+        text = _format_scored_dimensions(output)
+        signal_lines = [
+            l.strip() for l in text.splitlines()
+            if l.strip().startswith("measured signal:")
+        ]
+        # Five of the six quantitative sub-dims are citeable; the sixth
+        # (Engagement Quality Score) is suppressed.
+        assert len(signal_lines) == 5
+        for line in signal_lines:
+            assert any(
+                lbl.unit in line and lbl.window in line
+                for lbl in QUANTITATIVE_METRIC_LABELS.values()
+            ), f"measured-signal line carries no registered unit/window: {line}"
+
+    def test_engagement_quality_score_raw_value_is_withheld(self):
+        """Engagement Quality Score's raw_value is a weighted internal index
+        (substantive comments + reactions x 0.25) with no client-facing
+        meaning. The fixture sets it to 480 — the score line must still
+        render, but the number must not reach the prompt."""
+        output = _make_scoring_output()
+        text = _format_scored_dimensions(output)
+        assert "Engagement Quality Score" in SUPPRESSED_RAW_VALUE_SUB_DIMS
+        assert "Engagement Quality Score: 5" in text
+        assert "480" not in text
+
+    def test_unregistered_metric_fails_closed(self):
+        """A quantitative sub-dim with no registry entry must be rendered
+        without its raw value rather than with an unlabeled one — so adding a
+        sub-dim can't silently reintroduce this bug."""
+        output = _make_scoring_output()
+        dim2 = next(
+            d for d in output.scored_dimensions.dimensions
+            if d.name == "Behavioral Signal Strength"
+        )
+        dim2.sub_dimensions[0].name = "Brand New Metric"
+        text = _format_scored_dimensions(output)
+        assert "Brand New Metric: 5" in text
+        assert "750" not in text
+
+    def test_no_internal_unit_language_anywhere(self):
+        """Regression pin on the exact phrasings observed live in job
+        b902bd06's delivered report."""
+        output = _make_scoring_output()
+        text = _format_scored_dimensions(output)
+        lowered = text.lower()
+        for phrase in ("raw value", "raw archive value", "activity units",
+                       "quality score raw"):
+            assert phrase not in lowered
+
+
+class TestQuantitativeMetricRegistry:
+    """The registry has to stay in step with the scoring engine (ORPHEUS-117).
+
+    Names are read off a real engine run rather than hand-copied, so a rename
+    or a new quantitative sub-dim shows up here instead of silently losing its
+    figure from the prompt.
+    """
+
+    def _engine_quantitative_sub_dims(self) -> set[str]:
+        from datetime import date
+
+        from backend.ingestion.types import ZipData
+        from backend.scoring.engine import score_dimension_2, score_dimension_3
+
+        ref = date(2026, 7, 20)
+        empty = ZipData()
+        return {
+            sub.name
+            for dim in (score_dimension_2(empty, ref), score_dimension_3(empty, ref))
+            for sub in dim.sub_dimensions
+        }
+
+    def test_registry_and_suppression_list_are_disjoint(self):
+        assert not (
+            set(QUANTITATIVE_METRIC_LABELS) & SUPPRESSED_RAW_VALUE_SUB_DIMS
+        )
+
+    def test_every_engine_quantitative_sub_dim_is_accounted_for(self):
+        """Each quantitative sub-dim must be either labeled or explicitly
+        suppressed. An unaccounted one still fails closed at render time, but
+        that's a silent loss of grounding — catch it here instead."""
+        accounted = set(QUANTITATIVE_METRIC_LABELS) | SUPPRESSED_RAW_VALUE_SUB_DIMS
+        assert self._engine_quantitative_sub_dims() <= accounted
+
+    def test_registry_has_no_entries_the_engine_never_emits(self):
+        assert set(QUANTITATIVE_METRIC_LABELS) <= self._engine_quantitative_sub_dims()
+
+    def test_windows_track_config_constants(self):
+        """Labels interpolate the scoring config rather than restating it, so a
+        threshold change can't desync the client-facing window from the
+        measurement."""
+        from backend.scoring import config
+
+        assert (
+            f"{config.DIM2_RECENCY_WINDOW_DAYS} days"
+            in QUANTITATIVE_METRIC_LABELS["Recency"].window
+        )
+        assert (
+            f"{config.DIM2_CONTINUITY_WINDOW_WEEKS} weeks"
+            in QUANTITATIVE_METRIC_LABELS["Continuity"].window
+        )
+
+
+class TestSystemPromptMetricCitationRules:
+    """ORPHEUS-117's prompt-side half: the agent is told which figure it may
+    cite and forbidden from inventing units for the rest."""
+
+    def test_core_rules_forbid_quoting_internal_values(self):
+        prompt = _build_system_prompt()
+        assert "never quote internal scoring values" in prompt
+        assert "do not invent a unit for it" in prompt
+
+    def test_sub_dim_summary_instruction_points_at_measured_signal(self):
+        prompt = _build_system_prompt()
+        assert "`measured signal`" in prompt
+        assert "raw metric value" not in prompt
 
 
 # ============================================================

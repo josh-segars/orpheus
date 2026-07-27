@@ -45,6 +45,7 @@ from backend.agents import DEFAULT_MODEL
 from backend.ingestion.types import ZipData
 from backend.models.scoring import ScoringStageOutput
 from backend.models.quality import DataQualityReport, IssueSeverity
+from backend.scoring import config
 
 
 class NarrativeResult(NamedTuple):
@@ -209,7 +210,7 @@ You are NOT scoring. All scores are final before you see them. Your job is inter
 ## Core rules
 
 1. Never invent data. Every claim must trace to a specific score, metric, verbatim profile content, or questionnaire answer in your input. Crucially, any claim about *specific profile content* — headline wording, what the About section does or doesn't contain, the presence or absence of a call to action, contact details, or a services offering — must trace to the verbatim Profile Content section, NOT to a score and NOT to a questionnaire answer.
-2. Never recite scores. The reader does not see numeric scores or band labels. Describe what the scores mean in plain language.
+2. Never recite scores, and never quote internal scoring values. The reader does not see numeric scores or band labels. Describe what the scores mean in plain language. Where a sub-dimension's input includes a `measured signal` line, that figure is the ONLY numeric value from the scoring layer you may cite, and you must cite it with the unit and window exactly as stated there — do not relabel it, do not convert it to a different unit or window, and do not invent a unit for it. A sub-dimension with no `measured signal` line has no citeable figure: interpret it qualitatively.
 3. Be specific, and ground specifics in what you can actually see. Reference actual headline wording, About contents, post topics, audience segments, or metric values — not generic observations that could apply to anyone. Do NOT assert the presence or absence of a specific profile element unless you can verify it directly in the verbatim Profile Content section. If a detail is not in the provided text, do not claim it is missing — you may simply not have it.
 4. The verbatim Profile Content section is ground truth. The Forward Brief data includes heuristic boolean hints (e.g. whether a call to action or contact info was detected) computed by imperfect automated matching. When a hint disagrees with what the verbatim Profile Content actually shows, the profile text wins — describe what the text shows, not what the hint says. For example, if the call-to-action hint reads "no" but the About section ends with a clear invitation to connect, treat the call to action as present.
 5. Observations, not judgments. Describe what the data shows. Do not moralize about what the client "should" be doing.
@@ -264,7 +265,7 @@ In addition to the four dimension narratives and summaries, you produce per-sub-
 Each sub-dimension narrative has up to three slots. The slot structure is **conditional on score** — slots are present or absent based on the score itself, not calibrated by tone. Do not include placeholder content for an omitted slot.
 
 **Summary** (always present, every sub-dimension, every score):
-Up to ~45 words — complete sentences, dense over long. A data-grounded observation specific to this person on this sub-dimension. For rubric sub-dimensions (Dim 1, Dim 4), reference the specific profile content or content pattern that drove the score. For quantitative sub-dimensions (Dim 2, Dim 3), the raw metric value is surfaced in the input — name it explicitly in the Summary (e.g., "Active in 11 of the last 52 weeks", or "No original posts recorded during the evaluation period").
+Up to ~45 words — complete sentences, dense over long. A data-grounded observation specific to this person on this sub-dimension. For rubric sub-dimensions (Dim 1, Dim 4), reference the specific profile content or content pattern that drove the score. For quantitative sub-dimensions (Dim 2, Dim 3), name the `measured signal` figure explicitly in the Summary, restating its unit and window in plain prose — e.g. "Active in 11 of the last 52 weeks", "You published an average of 1.5 posts a week over the past year", or, where the signal is absent, "No original posts recorded during the evaluation period". Where a quantitative sub-dimension has no `measured signal` line, describe the level qualitatively per the score calibration above and cite no number at all.
 
 **Best Practices** (only at scores 0, 1, 2, or 3):
 Up to ~35 words. A generic standard for this sub-dimension. What good looks like, evergreen, not personalized. The same Best Practices content for the same sub-dimension across reports is acceptable — this is reference content the client can return to. **Omit entirely at scores 4 and 5.** Do not include a "no changes needed" placeholder.
@@ -390,6 +391,92 @@ The cheat_sheet object is required. priorities must contain exactly 5 entries. r
 # User prompt construction
 # ============================================================
 
+class MetricLabel(NamedTuple):
+    """Human-meaningful presentation of a quantitative sub-dim's raw_value.
+
+    ORPHEUS-117. `raw_value` is an internal scoring input, not a client-facing
+    figure — but for five of the six quantitative sub-dims it happens to be a
+    real, countable quantity (actions, weeks, posts/week). What was missing was
+    the unit and the measurement window: the prompt fed a bare `raw value: 6316`
+    and the agent, having no unit to cite, invented one ("6,316 activity units")
+    and quoted it to the client.
+
+    Each entry states the unit and window explicitly so the agent has correct
+    language to reuse verbatim. Windows are sourced from `scoring.config` where
+    a constant exists, so a threshold change can't silently desync the label
+    from the measurement.
+    """
+    unit: str          # what one unit of raw_value is, as a plural noun phrase
+    window: str        # the measurement window, as a trailing prepositional phrase
+    decimals: int = 0  # display precision
+    gloss: str | None = None  # optional clarification of what is being counted
+
+
+# Keyed on the canonical SubDimensionScore.name (NOT the frontend display name).
+QUANTITATIVE_METRIC_LABELS: dict[str, MetricLabel] = {
+    "History Depth": MetricLabel(
+        unit="outbound actions",
+        window="over the trailing 12 months",
+        gloss="original posts, comments, and reactions combined",
+    ),
+    "Recency": MetricLabel(
+        unit="outbound actions",
+        window=f"in the trailing {config.DIM2_RECENCY_WINDOW_DAYS} days",
+        gloss="original posts, comments, and reactions combined",
+    ),
+    "Continuity": MetricLabel(
+        unit="active weeks",
+        window=f"out of the trailing {config.DIM2_CONTINUITY_WINDOW_WEEKS} weeks",
+        gloss=(
+            f"a week counts as active at {config.DIM2_CONTINUITY_ACTIVE_THRESHOLD} "
+            "or more posts or comments"
+        ),
+    ),
+    "Posting Presence": MetricLabel(
+        unit="original posts per week",
+        window=(
+            "averaged over the trailing "
+            f"{config.DIM2_CONTINUITY_WINDOW_WEEKS} weeks"
+        ),
+        decimals=1,
+    ),
+    "Outbound Engagement Presence": MetricLabel(
+        unit="engagement actions",
+        window="over the trailing 12 months",
+        gloss="comments and reactions on other people's content",
+    ),
+}
+
+# Quantitative sub-dims whose raw_value is a composite internal index with no
+# human unit, deliberately withheld from the prompt (ORPHEUS-117 decision
+# [Josh, 2026-07-27]). Engagement Quality Score is
+# `substantive_comments + (reactions x 0.25)` — a weighted blend that reads as
+# a precise measurement ("a raw value of 2,382.2") while measuring nothing the
+# client can act on. The agent grounds on the band/score alone here, exactly as
+# it already does for the seven rubric sub-dims.
+#
+# Listed explicitly rather than merely left out of the map so the omission is
+# legible as a decision. Either way the rendering below fails closed: an
+# unregistered raw_value never reaches the prompt, so a future quantitative
+# sub-dim must register here or in QUANTITATIVE_METRIC_LABELS to be cited.
+SUPPRESSED_RAW_VALUE_SUB_DIMS: frozenset[str] = frozenset({
+    "Engagement Quality Score",
+})
+
+
+def _format_measured_signal(name: str, raw_value: float) -> str | None:
+    """Render a labeled measured-signal line, or None when unciteable."""
+    label = QUANTITATIVE_METRIC_LABELS.get(name)
+    if label is None:
+        return None
+
+    value = f"{raw_value:,.{label.decimals}f}"
+    line = f"      measured signal: {value} {label.unit} {label.window}"
+    if label.gloss:
+        line += f" ({label.gloss})"
+    return line
+
+
 def _format_scored_dimensions(scoring_output: ScoringStageOutput) -> str:
     """Format scored dimensions as readable text for the prompt."""
     sd = scoring_output.scored_dimensions
@@ -411,17 +498,18 @@ def _format_scored_dimensions(scoring_output: ScoringStageOutput) -> str:
             parts.append(
                 f"  {sub.name}: {sub.score:.0f} / {sub.scale} [{method_label}]"
             )
-            # Surface raw_value on its own line — when present, this is the
-            # quantitative grounding the sub-dim Summary should reference
-            # directly. Inline parens (the pre-ORPHEUS-21 format) were easy
-            # for Claude to skip past; a labeled line keeps it visible.
+            # Surface the underlying metric on its own line — when present,
+            # this is the quantitative grounding the sub-dim Summary should
+            # reference directly. Inline parens (the pre-ORPHEUS-21 format)
+            # were easy for Claude to skip past; a labeled line keeps it
+            # visible. ORPHEUS-117: the line now carries the metric's unit and
+            # window (see QUANTITATIVE_METRIC_LABELS) instead of a bare number,
+            # and omits itself entirely for values that have no client-facing
+            # meaning, so the agent can never be left to invent a unit.
             if sub.raw_value is not None:
-                # Pretty-format integers without trailing .0; keep floats with
-                # one decimal so a 1.5 posts/wk reads as "1.5" not "1.50".
-                if sub.raw_value == int(sub.raw_value):
-                    parts.append(f"      raw value: {int(sub.raw_value)}")
-                else:
-                    parts.append(f"      raw value: {sub.raw_value:.1f}")
+                signal_line = _format_measured_signal(sub.name, sub.raw_value)
+                if signal_line is not None:
+                    parts.append(signal_line)
 
         parts.append("")
 
