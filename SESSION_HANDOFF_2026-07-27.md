@@ -5,7 +5,7 @@ Covers **two sessions on the same day**, updated in place rather than split into
 - **Part 1 — ORPHEUS-118 (transactional email outage): filed, fixed, closed.** Ops-only; no code commits.
 - **Part 2 — ORPHEUS-119 diagnosed, ORPHEUS-120 filed, ORPHEUS-108 closed and deployed.** One code commit (`8f1b890`).
 - **Now resolved from part 1:** the "three clients owed a report-ready email" item (it's two, and the back-send is dropped), and the standing question of whether Nicole's narratives auto-publishing was a gate failure (it wasn't).
-- **Newly surfaced during the wrap:** ORPHEUS-112–117, filed 2026-07-22 by a session that left no handoff, invisible to the canon until now.
+- **Newly surfaced during the wrap:** ORPHEUS-112–117, filed 2026-07-22 by a session that left no handoff, invisible to the canon until now. All six were read post-wrap and are now summarized in CLAUDE.md — **delivered reports state wrong numbers**, so this cluster outranks everything else open.
 - **Carried unchanged:** ORPHEUS-111, the ORPHEUS-90 Decision Log paste, ORPHEUS-107, the Andrew comms items, untracked-by-intent files.
 
 ---
@@ -65,7 +65,9 @@ Backend pytest **391 green** (was 392), frontend vitest **79 green**, `tsc -b` c
 | ORPHEUS-108 | Browser-direct upload | ✅ Done — shim deleted, deploy green |
 | ORPHEUS-119 | Report-ready email path | 🔄 In Progress — cause established; awaiting live verification + monitoring |
 | ORPHEUS-120 | Advisory draft gate doesn't hold on the read path | ⏳ Backlog (high) — **new**; dependency of 114 |
-| ORPHEUS-112–117 | Metric-accuracy cluster (bugs A/B/D/E, reconciliation gate, evidence layer) | ⏳ Backlog — 4 high; **filed 07-22, undocumented until now** |
+| ORPHEUS-117 / 112 / 113 | Raw units leak / impressions denominator / invented milestones | ⏳ Backlog (high) — **recommended first batch, in that order** |
+| ORPHEUS-114 / 115 | Reconciliation gate + unit registry / prose mislabels | ⏳ Backlog (high / medium) — 114 pairs with 120; 115 needs 114's registry |
+| ORPHEUS-116 | "What Travels" reach-driver evidence layer | ⏳ Backlog (medium) — largest scope, gated on Andrew |
 | ORPHEUS-111 | 50 MB cap vs 150 MB advisory vs 200 MB copy | ⏳ Backlog (medium) |
 | ORPHEUS-99 / 94 / 84 / 85 / 107 | (publish action / email-mismatch / invite-advisor / self-serve signup / avatar) | ⏳ Backlog, unchanged |
 | ORPHEUS-96 follow-up | CTA as sub-dim 1B criterion | ⏳ Deferred (framework, Andrew) |
@@ -85,10 +87,19 @@ Baselines: backend pytest **391 green**, frontend vitest **79 green**.
 
 ## Recommended pickup for next session
 
-1. **Triage ORPHEUS-112–117 into the canon.** Six tickets, four high, filed 07-22 with no handoff behind them — the highest-value next move is establishing what that session found and getting it into CLAUDE.md, because right now the canon is blind to a metric-accuracy cluster that includes a scoring bug affecting already-delivered reports (112, "regenerate affected reports").
-2. **ORPHEUS-120 + ORPHEUS-114 together.** Design the publish boundary once. 120 is small on its own (filter `status` for client callers in `_build_result_payload`, plus an "advisor is reviewing this" surface) but shouldn't land twice.
-3. **ORPHEUS-119's remainder** rides the next real completion — no action until then, then the monitoring sibling.
-4. Then ORPHEUS-111, ORPHEUS-107, ORPHEUS-94, ORPHEUS-99.
+All six of ORPHEUS-112–117 were read at the end of this session and summarized into CLAUDE.md's Decisions Made, so **the triage is done — next session can start implementing.** The cluster is the most consequential open work on the board: delivered reports currently state wrong numbers, and one milestone actively tells a client to get worse.
+
+1. **ORPHEUS-117 → 112 → 113, as one batch.** In that order, for real dependency reasons: 117 (raw internal units quoted verbatim in every report) goes first because 112 and 114 both assume the agent grounds on correct human metrics, and today it grounds on raw `raw_value`; 112 fixes the impressions denominator (875.4 shown vs. 2,853 true on `b902bd06`, with a second fixture in Marie's `844e179e`); 113 needs 112's corrected baseline to compute deterministic targets. **They share one acceptance test** — regenerate `b902bd06` and assert no "875", no raw units, no milestone below its own baseline. Note composites are *not* affected (this is `forward_brief_data`, not a scored input), which makes regeneration much safer than it sounds.
+2. **ORPHEUS-120 + ORPHEUS-114 together.** Design the publish boundary once. 120 is small on its own (filter `status` for client callers in `_build_result_payload`, plus an "advisor is reviewing this" surface) but shouldn't land twice, and 114's reconciliation identities are the regression net that would have caught bug A in the first place.
+3. **ORPHEUS-115** after 114 — it depends on the label registry.
+4. **ORPHEUS-119's remainder** rides the next real completion — no action until then, then the monitoring sibling.
+5. **ORPHEUS-116** last: largest scope, medium priority, gated on Andrew for format granularity. The evidence-layer-not-5th-dimension call is already locked [Josh, 2026-07-22].
+6. Then ORPHEUS-111, ORPHEUS-107, ORPHEUS-94, ORPHEUS-99.
+
+**Two decisions to make before starting the first batch:**
+
+- **Regeneration scope.** Every report with impressions carries the bad value, not just Andrew's. A re-run mints a *new* job rather than correcting the old one, so a client would see two reports; correcting in place needs a targeted stage-4 re-run instead. Scores are unaffected either way.
+- **The metric-definition caveat** ORPHEUS-112 raises: the numerator spans all live content while the denominator is posts-published-in-window, so 2,853 is an approximation rather than an identity. That's a client-facing label with a definition attached — possibly Andrew's call rather than a pure implementation detail.
 
 ---
 
