@@ -291,7 +291,9 @@ The 5 priorities should align with the forward-looking guidance in the dimension
 
 **Rhythm** — exactly 3 cadence sections in order: "Every Day", "Every Week", "Every Month". Each carries 2–4 checklist items as short imperative sentences (under 12 words each). Items are concrete behaviors the client could do at that cadence, derived from the ongoing-practice implications of the dimension narratives' forward-looking guidance.
 
-**Milestones** — 3–4 entries representing 90-day quantitative targets. Each is a `value` (short, e.g., "12", "36+", "2") + `label` (e.g., "Weeks without a gap", "Posts published", "New recommendations"). Pick milestones that map to the highest-leverage priorities and the metrics surfaced in the Forward Brief data input where possible.
+**Milestones** — 90-day quantitative targets. **You do not choose these values.** They are computed from the client's measured data and supplied to you in the "Milestone Targets" section of the input. Emit one entry per supplied target, in the order given, reproducing each `value` exactly as written — same digits, same separators, same suffix. Your only decision is the `label`: a short noun phrase (2–6 words) naming what the number measures, in the register of the rest of the report.
+
+**Labels must contain no digits.** Do not restate the client's current figure, do not write "up from X", and do not add a parenthetical comparison. The label names the metric; the value carries the number.
 
 Voice / directness / mechanics rules apply uniformly to the cheat sheet — match the register of the dimension narratives. The cheat sheet is the only structured output beyond JSON keys, but its strings still read as natural prose.
 
@@ -475,6 +477,166 @@ def _format_measured_signal(name: str, raw_value: float) -> str | None:
     if label.gloss:
         line += f" ({label.gloss})"
     return line
+
+
+class MilestoneTarget(NamedTuple):
+    """A cheat-sheet milestone whose value is computed, not generated.
+
+    ORPHEUS-113. Milestones used to be free-generated: the prompt asked the
+    agent to "pick milestones... where possible" and it duly invented both the
+    number and its framing. On b902bd06 that produced
+    `{"value": "1,100+", "label": "Avg impressions per post (up from current
+    875)"}` — anchored on the ORPHEUS-112 bad baseline and with nothing
+    requiring the target to exceed it, so against the true 2,853 the delivered
+    report instructed the client to cut his reach by 60%.
+
+    Now the value is computed here from a measured baseline and the agent may
+    only phrase the label. `target > baseline` holds by construction rather
+    than by validation, and identical input yields identical milestones.
+    """
+    key: str
+    value: str                    # display-ready target; the agent must echo it verbatim
+    label: str                    # canonical wording; the agent may reword, digits banned
+    baseline_display: str | None   # what the target grew from, for tests / ORPHEUS-114
+
+
+# 90-day growth factors, PROVISIONAL — these are target-setting judgments
+# (what is a reasonable ask of a client over one quarter?), so they are
+# Andrew's to tune, not scoring parameters. Held here rather than in
+# scoring/config.py because they shape narrative output, not the composite;
+# promoting them into config_snapshot for per-job provenance is a reasonable
+# follow-up if targets ever need to be reconstructed after the fact.
+MILESTONE_GROWTH_FACTORS: dict[str, float] = {
+    "impressions_per_post": 1.25,
+    "posts_per_week": 1.25,
+    "engagement_rate": 1.15,
+    # Followers compound slowly and the baseline is a large absolute, so a
+    # quarter asks for less than the per-post rate metrics.
+    "followers": 1.10,
+}
+
+# Fallbacks for a client with no measurable baseline to grow from — a
+# first-time or dormant member. Constants rather than agent-authored, so the
+# "every milestone value is code-owned" property holds for everyone. Used only
+# to top up to the 3-entry minimum.
+MILESTONE_STARTERS: tuple[MilestoneTarget, ...] = (
+    MilestoneTarget("weeks_with_a_post", "12", "Weeks with at least one post", None),
+    MilestoneTarget("new_recommendations", "2", "New recommendations", None),
+    MilestoneTarget("substantive_comments", "24", "Substantive comments on other posts", None),
+)
+
+
+def _rounding_step(value: float) -> float:
+    """Pick a rounding granularity that reads as a target, not a computation.
+
+    3,566 is arithmetic; 3,550 is a goal. Scales with magnitude so a small
+    baseline isn't rounded into a wildly different ask.
+    """
+    if value < 10:
+        return 0.1
+    if value < 100:
+        return 5
+    if value < 1000:
+        return 25
+    return 50
+
+
+def _growth_target(baseline: float, factor: float) -> float:
+    """Grow a baseline and round it, guaranteeing the result exceeds it.
+
+    The guarantee is the point: ORPHEUS-113's acceptance criterion is that no
+    numeric milestone falls below its own baseline, and enforcing it here makes
+    the failure unrepresentable rather than merely detected downstream.
+    """
+    step = _rounding_step(baseline * factor)
+    target = round(baseline * factor / step) * step
+    if target <= baseline:
+        # Rounding pulled the target back to or below where it started
+        # (a near-zero or slow-growth baseline). Bump one step clear.
+        target = (int(baseline / step) + 1) * step
+    return round(target, 1)
+
+
+def _fmt_int(value: float) -> str:
+    return f"{value:,.0f}"
+
+
+def _fmt_rate(value: float) -> str:
+    return f"{value:.1f}"
+
+
+def build_milestone_targets(
+    scoring_output: ScoringStageOutput,
+) -> list[MilestoneTarget]:
+    """Compute the cheat sheet's 3–4 milestone values from measured data.
+
+    Baseline-derived milestones come first, in a fixed priority order that
+    leads with the levers the client controls directly. Starters top the list
+    up to three when the data can't supply that many.
+    """
+    q = scoring_output.forward_brief_data.quantitative
+
+    # Posting cadence lives on the Posting Presence sub-dim's raw value rather
+    # than in forward_brief_data.
+    posts_per_week: float | None = None
+    for dim in scoring_output.scored_dimensions.dimensions:
+        for sub in dim.sub_dimensions:
+            if sub.name == "Posting Presence" and sub.raw_value is not None:
+                posts_per_week = sub.raw_value
+
+    targets: list[MilestoneTarget] = []
+
+    def add(key: str, baseline: float | None, label: str,
+            fmt=_fmt_int, display_baseline: str | None = None) -> None:
+        if baseline is None or baseline <= 0:
+            return
+        target = _growth_target(baseline, MILESTONE_GROWTH_FACTORS[key])
+        targets.append(MilestoneTarget(
+            key=key,
+            value=fmt(target),
+            label=label,
+            baseline_display=display_baseline or fmt(baseline),
+        ))
+
+    add("posts_per_week", posts_per_week, "Original posts per week", _fmt_rate)
+    add("impressions_per_post", q.avg_impressions_per_post,
+        "Average impressions per post")
+    add("followers", float(q.follower_count) if q.follower_count else None,
+        "Followers")
+    if q.avg_engagement_rate is not None and q.avg_engagement_rate > 0:
+        # Stored as a fraction; both baseline and target are shown as percent.
+        base_pct = q.avg_engagement_rate * 100
+        target_pct = _growth_target(base_pct, MILESTONE_GROWTH_FACTORS["engagement_rate"])
+        targets.append(MilestoneTarget(
+            key="engagement_rate",
+            value=f"{_fmt_rate(target_pct)}%",
+            label="Engagement rate",
+            baseline_display=f"{_fmt_rate(base_pct)}%",
+        ))
+
+    targets = targets[:4]
+
+    for starter in MILESTONE_STARTERS:
+        if len(targets) >= 3:
+            break
+        targets.append(starter)
+
+    return targets
+
+
+def _format_milestone_targets(targets: list[MilestoneTarget]) -> str:
+    """Render the fixed milestone values for the prompt."""
+    lines = [
+        "These are the milestone values for the cheat sheet. They are computed "
+        "from this client's measured data — you do not choose them. Emit one "
+        "milestone entry per line below, in this order, reproducing each "
+        "`value` character-for-character. You choose only the label wording, "
+        "and labels must contain no digits.",
+        "",
+    ]
+    for idx, t in enumerate(targets, start=1):
+        lines.append(f'{idx}. value: "{t.value}" | label describes: {t.label}')
+    return "\n".join(lines)
 
 
 def _format_scored_dimensions(scoring_output: ScoringStageOutput) -> str:
@@ -898,6 +1060,10 @@ This is the client's actual profile and content text — the same material the r
 ## Client Context (Questionnaire)
 
 {questionnaire}
+
+## Milestone Targets (fixed — reproduce exactly)
+
+{milestone_targets}
 {quality_section}
 ---
 
@@ -967,6 +1133,7 @@ EXPECTED_SECTIONS = {
 def _parse_narrative_response(
     raw_text: str,
     scoring_output: ScoringStageOutput | None = None,
+    milestone_targets: list[MilestoneTarget] | None = None,
 ) -> NarrativeResult:
     """Parse Claude's JSON response into a NarrativeResult.
 
@@ -1033,7 +1200,9 @@ def _parse_narrative_response(
         data.get("sub_dimensions") or [], scoring_output
     )
 
-    cheat_sheet = _parse_cheat_sheet_payload(data.get("cheat_sheet"))
+    cheat_sheet = _parse_cheat_sheet_payload(
+        data.get("cheat_sheet"), milestone_targets
+    )
 
     # ORPHEUS-96: best-effort — a missing or non-bool cta_present yields None,
     # in which case the worker leaves the heuristic flag untouched rather than
@@ -1185,7 +1354,10 @@ def _parse_sub_dimension_payload(
 _EXPECTED_CHEAT_SHEET_CADENCES = ("Every Day", "Every Week", "Every Month")
 
 
-def _parse_cheat_sheet_payload(raw: object) -> dict | None:
+def _parse_cheat_sheet_payload(
+    raw: object,
+    milestone_targets: list[MilestoneTarget] | None = None,
+) -> dict | None:
     """Validate Claude's `cheat_sheet` object into a wire-shaped dict.
 
     Best-effort posture for missing input — `None` propagates through so
@@ -1294,6 +1466,34 @@ def _parse_cheat_sheet_payload(raw: object) -> dict | None:
             )
         milestones.append({"value": value.strip(), "label": label.strip()})
 
+    # ORPHEUS-113: when computed targets are supplied, the agent's job was to
+    # echo the values and phrase the labels. Enforce both — a drifted value
+    # means the number reaching the client is no longer the one we computed,
+    # and a digit in a label is how the old bug expressed itself
+    # ("Avg impressions per post (up from current 875)"). Raising sends the
+    # agent back for a retry rather than shipping a fabricated target.
+    if milestone_targets is not None:
+        if len(milestones) != len(milestone_targets):
+            raise ValueError(
+                f"cheat_sheet.milestones must contain exactly "
+                f"{len(milestone_targets)} entries, one per supplied target "
+                f"(got {len(milestones)})."
+            )
+        for idx, (got, want) in enumerate(zip(milestones, milestone_targets)):
+            if got["value"] != want.value:
+                raise ValueError(
+                    f"cheat_sheet.milestones[{idx}].value must reproduce the "
+                    f"supplied target {want.value!r} exactly (got "
+                    f"{got['value']!r}). Milestone values are computed, not "
+                    f"chosen."
+                )
+            if any(ch.isdigit() for ch in got["label"]):
+                raise ValueError(
+                    f"cheat_sheet.milestones[{idx}].label must not contain "
+                    f"digits — the value carries the number (got "
+                    f"{got['label']!r})."
+                )
+
     return {
         "priorities": priorities,
         "rhythm": rhythm,
@@ -1363,11 +1563,16 @@ async def generate_narratives(
         "conservatively in the scores only.]"
     )
 
+    # ORPHEUS-113: milestone values are computed here and handed to the agent
+    # to phrase, not to choose. The same list validates the response.
+    milestone_targets = build_milestone_targets(scoring_output)
+
     user_message = USER_PROMPT_TEMPLATE.format(
         scored_dimensions=_format_scored_dimensions(scoring_output),
         forward_brief_data=_format_forward_brief_data(scoring_output),
         profile_excerpt=profile_excerpt,
         questionnaire=_format_questionnaire(questionnaire),
+        milestone_targets=_format_milestone_targets(milestone_targets),
         quality_section=quality_section,
     )
 
@@ -1389,7 +1594,9 @@ async def generate_narratives(
         raw_text = response.content[0].text
 
         try:
-            return _parse_narrative_response(raw_text, scoring_output)
+            return _parse_narrative_response(
+                raw_text, scoring_output, milestone_targets
+            )
         except (json.JSONDecodeError, ValueError, KeyError) as e:
             last_error = e
             if attempt < max_retries:

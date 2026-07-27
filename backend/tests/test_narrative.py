@@ -14,11 +14,18 @@ from backend.agents.narrative import (
     MECHANICS_INSTRUCTIONS,
     FOCUS_INSTRUCTIONS,
     EXPECTED_SECTIONS,
+    MILESTONE_GROWTH_FACTORS,
+    MILESTONE_STARTERS,
     QUANTITATIVE_METRIC_LABELS,
     SUPPRESSED_RAW_VALUE_SUB_DIMS,
     USER_PROMPT_TEMPLATE,
+    MilestoneTarget,
     NarrativeResult,
+    build_milestone_targets,
     _build_system_prompt,
+    _format_milestone_targets,
+    _growth_target,
+    _parse_cheat_sheet_payload,
     _parse_narrative_response,
     _format_scored_dimensions,
     _format_forward_brief_data,
@@ -1371,6 +1378,166 @@ class TestQuantitativeMetricRegistry:
         )
 
 
+class TestMilestoneTargets:
+    """ORPHEUS-113. Milestone values are computed from measured baselines, not
+    generated. The bug being closed: on b902bd06 the agent emitted
+    {"value": "1,100+", "label": "Avg impressions per post (up from current
+    875)"} — against the true 2,853 baseline that told the client to cut his
+    reach by 60%.
+    """
+
+    def test_growth_target_always_exceeds_its_baseline(self):
+        """The acceptance criterion, enforced by construction rather than by
+        validation. Swept across magnitudes because rounding is what breaks
+        this: a step wider than the growth increment pulls the target back
+        onto or under the baseline."""
+        for baseline in (0.01, 0.1, 0.5, 1, 4.9, 9.99, 10, 50, 99, 100,
+                         999, 1000, 2852.8, 14489, 872569):
+            for factor in MILESTONE_GROWTH_FACTORS.values():
+                target = _growth_target(baseline, factor)
+                assert target > baseline, (baseline, factor, target)
+
+    def test_targets_are_rounded_to_readable_goals(self):
+        # 3,200 x 1.25 = 4,000 exactly; 2,852.8 x 1.25 = 3,566 -> 3,550.
+        assert _growth_target(3200, 1.25) == 4000
+        assert _growth_target(2852.8, 1.25) == 3550
+
+    def test_fixture_profile_yields_four_computed_milestones(self):
+        targets = build_milestone_targets(_make_scoring_output())
+        assert [t.key for t in targets] == [
+            "posts_per_week", "impressions_per_post", "followers",
+            "engagement_rate",
+        ]
+        assert [t.value for t in targets] == ["1.9", "4,000", "13,750", "4.8%"]
+
+    def test_no_label_carries_a_digit(self):
+        """Labels are digit-free by construction so the supplied wording can't
+        seed the 'up from current 875' shape."""
+        for t in build_milestone_targets(_make_scoring_output()):
+            assert not any(ch.isdigit() for ch in t.label)
+        for t in MILESTONE_STARTERS:
+            assert not any(ch.isdigit() for ch in t.label)
+
+    def test_deterministic_across_calls(self):
+        a = build_milestone_targets(_make_scoring_output())
+        b = build_milestone_targets(_make_scoring_output())
+        assert a == b
+
+    def test_zero_and_missing_baselines_are_skipped(self):
+        """A baseline of 0 can't be grown from — no target is invented for it."""
+        output = _make_scoring_output()
+        q = output.forward_brief_data.quantitative
+        q.avg_impressions_per_post = 0
+        q.follower_count = None
+        q.avg_engagement_rate = None
+        targets = build_milestone_targets(output)
+        assert [t.key for t in targets][0] == "posts_per_week"
+        assert "impressions_per_post" not in [t.key for t in targets]
+        assert "followers" not in [t.key for t in targets]
+
+    def test_starters_top_up_to_three_for_a_dormant_client(self):
+        """A member with nothing measurable still gets three milestones, and
+        their values are code-owned constants rather than agent inventions."""
+        output = _make_scoring_output()
+        q = output.forward_brief_data.quantitative
+        q.avg_impressions_per_post = None
+        q.follower_count = None
+        q.avg_engagement_rate = None
+        for dim in output.scored_dimensions.dimensions:
+            for sub in dim.sub_dimensions:
+                if sub.name == "Posting Presence":
+                    sub.raw_value = 0
+        targets = build_milestone_targets(output)
+        assert len(targets) == 3
+        assert targets == list(MILESTONE_STARTERS[:3])
+
+    def test_never_exceeds_four(self):
+        assert len(build_milestone_targets(_make_scoring_output())) <= 4
+
+    def test_prompt_block_states_the_values_are_fixed(self):
+        text = _format_milestone_targets(build_milestone_targets(_make_scoring_output()))
+        assert "you do not choose them" in text
+        assert "no digits" in text
+        assert '"4,000"' in text
+
+
+class TestCheatSheetMilestoneValidation:
+    """The parser side of ORPHEUS-113 — the agent echoes values and phrases
+    labels, and drift in either direction sends it back for a retry.
+    """
+
+    TARGETS = [
+        MilestoneTarget("impressions_per_post", "3,550", "Average impressions per post", "2,853"),
+        MilestoneTarget("followers", "3,550", "Followers", "3,212"),
+        MilestoneTarget("weeks_with_a_post", "12", "Weeks with at least one post", None),
+    ]
+
+    def _payload(self, milestones):
+        return {
+            "priorities": [
+                {"title": f"Priority {i}", "action": "Do the thing."}
+                for i in range(5)
+            ],
+            "rhythm": [
+                {"cadence": c, "items": ["Item one.", "Item two."]}
+                for c in ("Every Day", "Every Week", "Every Month")
+            ],
+            "milestones": milestones,
+        }
+
+    def _valid_milestones(self):
+        return [{"value": t.value, "label": t.label} for t in self.TARGETS]
+
+    def test_matching_values_parse(self):
+        result = _parse_cheat_sheet_payload(
+            self._payload(self._valid_milestones()), self.TARGETS
+        )
+        assert [m["value"] for m in result["milestones"]] == ["3,550", "3,550", "12"]
+
+    def test_drifted_value_raises(self):
+        milestones = self._valid_milestones()
+        milestones[0]["value"] = "1,100+"
+        with pytest.raises(ValueError, match="reproduce the supplied target"):
+            _parse_cheat_sheet_payload(self._payload(milestones), self.TARGETS)
+
+    def test_label_with_a_digit_raises(self):
+        """The exact shape of the live bug: a baseline comparison smuggled
+        into the label."""
+        milestones = self._valid_milestones()
+        milestones[0]["label"] = "Avg impressions per post (up from current 875)"
+        with pytest.raises(ValueError, match="must not contain"):
+            _parse_cheat_sheet_payload(self._payload(milestones), self.TARGETS)
+
+    def test_wrong_count_raises(self):
+        with pytest.raises(ValueError, match="one per supplied target"):
+            _parse_cheat_sheet_payload(
+                self._payload(self._valid_milestones()[:2] + [
+                    {"value": "9", "label": "Extra"},
+                    {"value": "9", "label": "Another"},
+                ]),
+                self.TARGETS,
+            )
+
+    def test_reworded_label_is_accepted(self):
+        """Claude keeps the phrasing role — only digits and value drift are
+        rejected."""
+        milestones = self._valid_milestones()
+        milestones[0]["label"] = "Typical reach per post"
+        result = _parse_cheat_sheet_payload(self._payload(milestones), self.TARGETS)
+        assert result["milestones"][0]["label"] == "Typical reach per post"
+
+    def test_no_targets_supplied_keeps_legacy_best_effort_behavior(self):
+        """Callers without scoring context (and the pre-113 fixtures) still
+        parse, matching the parser's established posture."""
+        milestones = [
+            {"value": "1,100+", "label": "Avg impressions per post (up from 875)"},
+            {"value": "12", "label": "Weeks"},
+            {"value": "2", "label": "Recommendations"},
+        ]
+        result = _parse_cheat_sheet_payload(self._payload(milestones), None)
+        assert len(result["milestones"]) == 3
+
+
 class TestSystemPromptMetricCitationRules:
     """ORPHEUS-117's prompt-side half: the agent is told which figure it may
     cite and forbidden from inventing units for the rest."""
@@ -1384,6 +1551,18 @@ class TestSystemPromptMetricCitationRules:
         prompt = _build_system_prompt()
         assert "`measured signal`" in prompt
         assert "raw metric value" not in prompt
+
+    def test_milestone_instruction_removes_the_agent_s_discretion(self):
+        """ORPHEUS-113: the old instruction was 'Pick milestones... where
+        possible', which is what licensed the invented target."""
+        prompt = _build_system_prompt()
+        assert "You do not choose these values" in prompt
+        assert "Labels must contain no digits" in prompt
+        assert "Pick milestones" not in prompt
+
+    def test_user_prompt_carries_the_milestone_slot(self):
+        assert "{milestone_targets}" in USER_PROMPT_TEMPLATE
+        assert "Milestone Targets" in USER_PROMPT_TEMPLATE
 
 
 # ============================================================
