@@ -29,15 +29,19 @@ beforeEach(() => {
 })
 
 describe('LandingPage', () => {
-  it('renders the hero, about dimensions, pricing, and waitlist sections', () => {
+  it('renders the hero, about dimensions, access, and waitlist sections', () => {
     render(<LandingPage />)
-    expect(screen.getByText(/Make yours/i)).toBeInTheDocument()
+    expect(screen.getByText(/Make It/i)).toBeInTheDocument()
     expect(screen.getByText('Profile Clarity')).toBeInTheDocument()
     expect(screen.getByText('Alignment')).toBeInTheDocument()
-    // Closed-beta framing, not a price.
-    expect(screen.getByText(/Currently in closed beta/i)).toBeInTheDocument()
+    // Access framing, not a price.
+    expect(screen.getByText(/Two ways to begin/i)).toBeInTheDocument()
+    // Each offering is named twice — the access card and the interest
+    // checkbox — and the two have to keep saying the same thing.
+    expect(screen.getAllByText('Beta Assessment')).toHaveLength(2)
+    expect(screen.getAllByText('Live Cohorts')).toHaveLength(2)
     expect(
-      screen.getByRole('heading', { name: /Express Interest/i }),
+      screen.getByRole('heading', { name: /Get started/i }),
     ).toBeInTheDocument()
   })
 
@@ -73,8 +77,8 @@ describe('LandingPage', () => {
       fireEvent.change(screen.getByLabelText(/email address/i), {
         target: { value: email },
       })
-    if (beta) fireEvent.click(screen.getByLabelText(/beta access/i))
-    if (workshop) fireEvent.click(screen.getByLabelText(/live workshop/i))
+    if (beta) fireEvent.click(screen.getByLabelText(/beta assessment/i))
+    if (workshop) fireEvent.click(screen.getByLabelText(/live cohorts/i))
   }
 
   const submit = () =>

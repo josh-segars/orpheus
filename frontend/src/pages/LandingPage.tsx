@@ -9,9 +9,17 @@ import './LandingPage.css'
  *
  * Served on the www / apex host by the hostname branch in App.tsx; the product
  * app stays on app.orpheussocial.com. Single scrolling page: hero → about →
- * how it works → pricing (closed-beta framing) → waitlist capture. JS is only
- * used for the waitlist form; everything else is static, styled from the shared
- * design system (orpheus-styles.css).
+ * how it works → access (beta framing) → founders → waitlist capture. JS is
+ * only used for the waitlist form; everything else is static, styled from the
+ * shared design system (orpheus-styles.css).
+ *
+ * Copy is authored outside the repo and revised in passes; the current text
+ * follows the 2026-07-27 landing copy doc. Its vocabulary rules are load
+ * bearing, so keep them when editing: *diagnostic* is the mode of analysis,
+ * *assessment* the offering you run, *report* the document you receive; "action
+ * plan" names the function and "quick reference card" the presentation. The
+ * product is referred to by name, never as "we", and the copy carries no em
+ * dashes.
  */
 
 const APP_LOGIN_URL = 'https://app.orpheussocial.com/login'
@@ -20,7 +28,7 @@ const DIMENSIONS: { name: string; blurb: string }[] = [
   {
     name: 'Profile Clarity',
     blurb:
-      'Does your profile give a clear, accurate read of who you are and what you do?',
+      'Does your profile give a clear, accurate read of who you are, what you do, and for whom?',
   },
   {
     name: 'Signal Strength',
@@ -29,28 +37,27 @@ const DIMENSIONS: { name: string; blurb: string }[] = [
   },
   {
     name: 'Signal Quality',
-    blurb:
-      'Are you doing the kinds of things that actually carry weight, not just noise?',
+    blurb: 'Does the way you engage carry weight, or just add noise?',
   },
   {
     name: 'Alignment',
     blurb:
-      'Does what you post line up with the professional identity your profile claims?',
+      'Does what you post and engage with match the identity your profile declares?',
   },
 ]
 
 const STEPS: { title: string; body: string }[] = [
   {
     title: 'Groundwork',
-    body: 'Answer a short questionnaire and share an export of your LinkedIn profile. That is everything we need to begin.',
+    body: 'Answer a short questionnaire and upload your LinkedIn data export. Real, verified data, no scraping or inferring. Used only to run your assessment.',
   },
   {
     title: 'Your Report',
-    body: 'We measure how your professional presence is being interpreted across four dimensions — a precise picture of where you stand.',
+    body: 'Orpheus measures how your presence is being interpreted across four dimensions, showing where you stand and why.',
   },
   {
-    title: 'Quick Reference Card',
-    body: 'Your report becomes a prioritized, specific plan: the exact moves that make your presence reflect the credibility you have earned.',
+    title: 'Your Action Plan',
+    body: 'Your report becomes a prioritized plan, laid out on a quick reference card. The moves that make your presence reflect the credibility you’ve earned.',
   },
 ]
 
@@ -63,7 +70,7 @@ export function LandingPage() {
         <Hero />
         <About />
         <HowItWorks />
-        <Pricing />
+        <Access />
         <Waitlist />
       </main>
 
@@ -94,16 +101,16 @@ function LandingNav() {
 function Hero() {
   return (
     <section className="landing-hero">
-      <span className="section-eyebrow">Presence, authentically interpreted</span>
+      <span className="section-eyebrow">How You&rsquo;re Read Online</span>
       <h1 className="landing-hero-title">
-        <span className="landing-hero-title-lead">Experience Speaks</span>
+        <span className="landing-hero-title-lead">Your Presence Speaks</span>
         <br />
-        Make Yours <em>Sing</em>
+        Make It <em>Sing</em>
       </h1>
       <p className="landing-hero-sub">
-        Orpheus Social understands how your online presence is interpreted
-        and shows you exactly how to make it resonate. Not vanity metrics or
-        vague analytics. A clear diagnostic and a plan.
+        Orpheus Social shows you how your online presence is likely being read,
+        then hands you a plan to strengthen your signal. Built on
+        primary-source research, not opinion, vanity metrics, or viral hacks.
       </p>
       <div className="landing-hero-actions">
         <a className="btn-primary" href="#waitlist">
@@ -293,16 +300,19 @@ function About() {
       <div className="section-header">
         <span className="section-eyebrow">What it is</span>
         <h2 className="section-title">
-          A diagnostic for how you come across
+          See how you&rsquo;re being interpreted.
         </h2>
       </div>
       <p className="landing-body">
-        Your online presence is constantly being read by the systems that
-        decide what to surface and by the people those systems reach. Orpheus Social
-        analyzes your profile and activity and tells you how strong and coherent
-        your presence is, on a scale from <em>dissonant</em> to{' '}
-        <em>resonant</em>. Then it hands you a specific plan to help match your goals
-        with the patterns and behaviors that drive resonance.
+        Your online presence is constantly being read. First by the systems
+        that decide who sees you. Then by the people they reach. The two feed
+        each other. When your signal is clear, both read you accurately. When
+        it isn&rsquo;t, your expertise, experience, and credibility don&rsquo;t
+        come through, and the people you most want to reach may never hear you.
+      </p>
+      <p className="landing-body">
+        Orpheus makes that read visible, placing you on a scale from{' '}
+        <em>dissonant</em> to <em>resonant</em>. A diagnostic and a plan.
       </p>
       <div className="landing-dimensions">
         {DIMENSIONS.map((d) => (
@@ -312,11 +322,6 @@ function About() {
           </div>
         ))}
       </div>
-      <p className="landing-fineprint">
-        Orpheus Social is a diagnostic and a coaching tool designed to help you take
-        meaningful action to improve your overall online presence. Outcomes will vary
-        based on your goals, your current presence, and the effort you put in.
-      </p>
     </section>
   )
 }
@@ -326,7 +331,7 @@ function HowItWorks() {
     <section className="landing-section" id="how">
       <div className="section-header">
         <span className="section-eyebrow">How it works</span>
-        <h2 className="section-title">Three steps, one clear picture</h2>
+        <h2 className="section-title">Three steps, one clear picture.</h2>
       </div>
       <div className="landing-steps">
         {STEPS.map((s, i) => (
@@ -341,34 +346,31 @@ function HowItWorks() {
   )
 }
 
-function Pricing() {
+function Access() {
   return (
-    <section className="landing-section" id="pricing">
+    <section className="landing-section" id="access">
       <div className="section-header">
-        <span className="section-eyebrow">Pricing</span>
-        <h2 className="section-title">Currently in closed beta</h2>
+        <span className="section-eyebrow">Access</span>
+        <h2 className="section-title">Two ways to begin</h2>
       </div>
       <div className="landing-pricing-cards">
         <div className="landing-pricing-card">
-          <span className="landing-pricing-tag">Invitation only</span>
-          <p className="landing-pricing-lead">Closed Beta</p>
+          <span className="landing-pricing-tag">Available now</span>
+          <p className="landing-pricing-lead">Beta Assessment</p>
           <p className="landing-pricing-body">
-            We are onboarding a small group of members and refining the
-            experience with them directly. Plans and pricing will be announced
-            as we open up more broadly — join the waitlist and we will reach out
-            with an invitation and early details.
+            Run the full assessment, get your report and action plan, and help
+            shape the product. Free during beta, in exchange for your honest
+            feedback. Pricing comes later.
           </p>
         </div>
 
         <div className="landing-pricing-card">
-          <span className="landing-pricing-tag">Pre-release · 4 weeks</span>
-          <p className="landing-pricing-lead">Live Workshop</p>
+          <span className="landing-pricing-tag">Pre-release</span>
+          <p className="landing-pricing-lead">Live Cohorts</p>
           <p className="landing-pricing-body">
-            A four-week live program for a small group of individuals with
-            similar backgrounds, looking for personal, hands-on guidance to
-            improve their online presence together. Currently pre-release —
-            express your interest and we will share the details as it takes
-            shape.
+            A four-week live program for a small group with similar backgrounds:
+            hands-on guidance and peer-to-peer work on your online presence.
+            Express interest to get details and pricing.
           </p>
         </div>
       </div>
@@ -388,6 +390,10 @@ function Waitlist() {
   const firstValid = firstName.trim().length > 0
   const lastValid = lastName.trim().length > 0
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())
+  // The stored values stay canonical while the client-facing labels move with
+  // the copy (same split as SUB_DIM_DISPLAY_NAMES): the 2026-07-27 pass renamed
+  // these to "Beta Assessment" and "Live Cohorts", but renaming the persisted
+  // strings would orphan every waitlist row written before it.
   const interests = [
     ...(betaAccess ? ['beta_access'] : []),
     ...(liveWorkshop ? ['live_workshop'] : []),
@@ -409,16 +415,22 @@ function Waitlist() {
 
   return (
     <section className="landing-section landing-waitlist" id="waitlist">
+      <p className="landing-founders">
+        Built by Andrew Segars, a former diplomat who spent his career helping
+        leaders interpret and act on strategy and policy, and Josh Segars, a
+        former Chief Experience Officer and user-centered product designer.
+      </p>
+
       <div className="section-header">
         <span className="section-eyebrow">Get early access</span>
-        <h2 className="section-title">Express Interest</h2>
+        <h2 className="section-title">Get started</h2>
       </div>
 
       {mutation.isSuccess ? (
         <div className="landing-waitlist-success" role="status">
           <p className="landing-waitlist-success-title">Thanks, {firstName.trim()}.</p>
           <p className="landing-waitlist-success-body">
-            You&rsquo;re on the list — we&rsquo;ll be in touch at{' '}
+            You&rsquo;re on the list. Orpheus Social will be in touch at{' '}
             <strong>{mutation.data.email}</strong> with next steps.
           </p>
         </div>
@@ -430,7 +442,7 @@ function Waitlist() {
                 className="landing-waitlist-label"
                 htmlFor="waitlist-first-name"
               >
-                First Name
+                First name
               </label>
               <input
                 id="waitlist-first-name"
@@ -448,7 +460,7 @@ function Waitlist() {
                 className="landing-waitlist-label"
                 htmlFor="waitlist-last-name"
               >
-                Last Name
+                Last name
               </label>
               <input
                 id="waitlist-last-name"
@@ -465,7 +477,7 @@ function Waitlist() {
 
           <div className="landing-waitlist-field">
             <label className="landing-waitlist-label" htmlFor="waitlist-email">
-              Email Address
+              Email address
             </label>
             <input
               id="waitlist-email"
@@ -492,7 +504,7 @@ function Waitlist() {
                 onChange={(e) => setBetaAccess(e.target.checked)}
                 disabled={mutation.isPending}
               />
-              <span>Beta Access</span>
+              <span>Beta Assessment</span>
             </label>
             <label className="landing-checkbox">
               <input
@@ -501,7 +513,7 @@ function Waitlist() {
                 onChange={(e) => setLiveWorkshop(e.target.checked)}
                 disabled={mutation.isPending}
               />
-              <span>Live Workshop</span>
+              <span>Live Cohorts</span>
             </label>
           </fieldset>
 
@@ -529,8 +541,7 @@ function Waitlist() {
           </button>
 
           <p className="landing-waitlist-note">
-            We&rsquo;ll only use your details to contact you about Orpheus
-            Social.
+            Your details will only be used to contact you about Orpheus Social.
           </p>
         </form>
       )}

@@ -142,9 +142,9 @@ function WaitlistSection() {
           <span className="admin-waitlist-stats">
             {entries.length} signup{entries.length === 1 ? '' : 's'}
             {' · '}
-            {betaCount} beta access
+            {betaCount} beta assessment
             {' · '}
-            {workshopCount} live workshop
+            {workshopCount} live cohorts
           </span>
         )}
       </h2>
@@ -236,10 +236,12 @@ function WaitlistTable({
 }
 
 // Display labels for the migration-018 interests values. Unknown values
-// (the column is extensible without migration) fall through verbatim.
+// (the column is extensible without migration) fall through verbatim. The
+// labels track the landing page copy while the stored values stay canonical,
+// so these two renamed in the 2026-07-27 pass and the values did not.
 const WAITLIST_INTEREST_LABELS: Record<string, string> = {
-  beta_access: 'Beta access',
-  live_workshop: 'Live workshop',
+  beta_access: 'Beta assessment',
+  live_workshop: 'Live cohorts',
 }
 
 function formatWaitlistName(entry: AdminWaitlistEntry): string {

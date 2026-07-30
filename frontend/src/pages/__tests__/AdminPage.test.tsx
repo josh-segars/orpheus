@@ -320,16 +320,16 @@ describe('AdminPage', () => {
     expect(
       screen.getByRole('heading', { level: 2, name: /waitlist/i }),
     ).toBeInTheDocument()
-    // Header stats: 2 signups, 2 beta access, 1 live workshop.
+    // Header stats: 2 signups, 2 beta assessment, 1 live cohorts.
     expect(
-      screen.getByText(/2 signups · 2 beta access · 1 live workshop/i),
+      screen.getByText(/2 signups · 2 beta assessment · 1 live cohorts/i),
     ).toBeInTheDocument()
     // Named row.
     expect(screen.getByText('Paula Prospect')).toBeInTheDocument()
     expect(screen.getByText('prospect@example.com')).toBeInTheDocument()
     // Interest values render with display labels, not raw enum values.
-    expect(screen.getAllByText('Beta access').length).toBe(2)
-    expect(screen.getByText('Live workshop')).toBeInTheDocument()
+    expect(screen.getAllByText('Beta assessment').length).toBe(2)
+    expect(screen.getByText('Live cohorts')).toBeInTheDocument()
     expect(screen.queryByText('beta_access')).not.toBeInTheDocument()
     // Email-only (migration-017-era) row: name column falls back to a dash.
     expect(screen.getByText('emailonly@example.com')).toBeInTheDocument()
@@ -340,7 +340,7 @@ describe('AdminPage', () => {
     renderAdmin()
     expect(screen.getByText(/no signups yet/i)).toBeInTheDocument()
     expect(
-      screen.getByText(/0 signups · 0 beta access · 0 live workshop/i),
+      screen.getByText(/0 signups · 0 beta assessment · 0 live cohorts/i),
     ).toBeInTheDocument()
   })
 })

@@ -312,13 +312,20 @@
   color: var(--accent);
   font-weight: 600;
 }
-.landing-fineprint {
-  font-family: 'Source Sans 3', 'Source Sans 3 Fallback', sans-serif;
-  font-size: 14px;
+/* Founder credibility line, sitting directly above the interest form. Reads a
+   step quieter than .landing-body. Replaced .landing-fineprint, which held the
+   outcomes-will-vary expectations paragraph the 2026-07-27 copy pass dropped. */
+.landing-founders {
+  font-family: 'Source Serif 4', 'Source Serif 4 Fallback', serif;
+  font-size: 17px;
+  font-weight: 400;
+  font-variation-settings: 'opsz' 17;
   color: var(--text-muted);
-  line-height: 1.6;
+  line-height: 1.65;
   max-width: 720px;
   margin: 0;
+  text-align: center;
+  align-self: center;
 }
 
 /* ── Dimensions grid (About) ──────────────────────────────────── */
