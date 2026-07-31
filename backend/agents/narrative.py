@@ -510,10 +510,22 @@ MILESTONE_GROWTH_FACTORS: dict[str, float] = {
     "impressions_per_post": 1.25,
     "posts_per_week": 1.25,
     "engagement_rate": 1.15,
-    # Followers compound slowly and the baseline is a large absolute, so a
-    # quarter asks for less than the per-post rate metrics.
+    # Followers is the one metric whose target is derived from its measured
+    # TREND rather than from a multiple of the baseline (see
+    # _followers_target), so this factor multiplies the projected 90-day gain,
+    # not the follower count. It only applies as a fallback multiplier on the
+    # absolute baseline when no growth rate was measured.
     "followers": 1.10,
 }
+
+# Weeks in the 90-day milestone horizon, used to project a measured weekly rate
+# across the milestone window.
+MILESTONE_HORIZON_WEEKS = 13
+
+# Stretch applied to the projected 90-day follower gain. 1.25 asks for a
+# quarter more than the client's current trajectory would deliver on its own.
+# PROVISIONAL, Andrew's to tune alongside MILESTONE_GROWTH_FACTORS.
+FOLLOWER_TREND_STRETCH = 1.25
 
 # Fallbacks for a client with no measurable baseline to grow from — a
 # first-time or dormant member. Constants rather than agent-authored, so the
@@ -554,6 +566,49 @@ def _growth_target(baseline: float, factor: float) -> float:
         # Rounding pulled the target back to or below where it started
         # (a near-zero or slow-growth baseline). Bump one step clear.
         target = (int(baseline / step) + 1) * step
+    return round(target, 1)
+
+
+def _followers_target(
+    follower_count: float,
+    growth_per_week: float | None,
+) -> float:
+    """Project the follower target from the trend, not from the count.
+
+    Andrew's live review (2026-07-31) caught the flat-multiplier version
+    contradicting the report's own arithmetic: 3,212 followers growing at 17.5
+    a week projects to ~3,440 over 90 days, but 3,212 x 1.10 rounded to 3,550 —
+    a target that doesn't follow from the growth rate printed a few lines above
+    it. Both figures appear in the same report, so the client can do the sum.
+
+    The deeper problem is that a flat multiplier can also land *below* the
+    trend: 3,000 followers growing at 50 a week reach ~3,650 unaided, while
+    3,000 x 1.10 is 3,300 — a milestone asking the client to do worse than
+    nothing. That is ORPHEUS-113's bug re-emerging one level up, and the
+    `target > baseline` guarantee doesn't catch it because 3,300 does exceed
+    3,000. The guarantee we actually want here is `target > projection`.
+
+    So the target is the measured weekly rate carried across the horizon and
+    stretched. When no growth rate was measured, fall back to the flat
+    multiplier — there is no trend to be inconsistent with.
+    """
+    if growth_per_week is None or growth_per_week <= 0:
+        return _growth_target(
+            follower_count, MILESTONE_GROWTH_FACTORS["followers"]
+        )
+
+    projected_gain = growth_per_week * MILESTONE_HORIZON_WEEKS
+    raw = follower_count + projected_gain * FOLLOWER_TREND_STRETCH
+
+    step = _rounding_step(raw)
+    target = round(raw / step) * step
+
+    # Rounding must not pull the target back onto or under the unaided
+    # projection — that would reintroduce the very inconsistency this exists
+    # to prevent.
+    natural = follower_count + projected_gain
+    if target <= natural:
+        target = (int(natural / step) + 1) * step
     return round(target, 1)
 
 
@@ -601,8 +656,18 @@ def build_milestone_targets(
     add("posts_per_week", posts_per_week, "Original posts per week", _fmt_rate)
     add("impressions_per_post", q.avg_impressions_per_post,
         "Average impressions per post")
-    add("followers", float(q.follower_count) if q.follower_count else None,
-        "Followers")
+
+    # Followers is trend-derived rather than a multiple of the count, so it
+    # doesn't go through `add` — see _followers_target for why.
+    if q.follower_count:
+        followers_baseline = float(q.follower_count)
+        target = _followers_target(followers_baseline, q.follower_growth_rate)
+        targets.append(MilestoneTarget(
+            key="followers",
+            value=_fmt_int(target),
+            label="Followers",
+            baseline_display=_fmt_int(followers_baseline),
+        ))
     if q.avg_engagement_rate is not None and q.avg_engagement_rate > 0:
         # Stored as a fraction; both baseline and target are shown as percent.
         base_pct = q.avg_engagement_rate * 100

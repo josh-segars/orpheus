@@ -14,7 +14,9 @@ from backend.agents.narrative import (
     MECHANICS_INSTRUCTIONS,
     FOCUS_INSTRUCTIONS,
     EXPECTED_SECTIONS,
+    FOLLOWER_TREND_STRETCH,
     MILESTONE_GROWTH_FACTORS,
+    MILESTONE_HORIZON_WEEKS,
     MILESTONE_STARTERS,
     QUANTITATIVE_METRIC_LABELS,
     SUPPRESSED_RAW_VALUE_SUB_DIMS,
@@ -23,6 +25,7 @@ from backend.agents.narrative import (
     NarrativeResult,
     build_milestone_targets,
     _build_system_prompt,
+    _followers_target,
     _format_milestone_targets,
     _growth_target,
     _parse_cheat_sheet_payload,
@@ -1408,7 +1411,9 @@ class TestMilestoneTargets:
             "posts_per_week", "impressions_per_post", "followers",
             "engagement_rate",
         ]
-        assert [t.value for t in targets] == ["1.9", "4,000", "13,750", "4.8%"]
+        # Followers is trend-derived (12,500 + 45.2/wk x 13 x 1.25), not
+        # 12,500 x 1.10 — see TestFollowersMilestoneTrend.
+        assert [t.value for t in targets] == ["1.9", "4,000", "13,250", "4.8%"]
 
     def test_no_label_carries_a_digit(self):
         """Labels are digit-free by construction so the supplied wording can't
@@ -1459,6 +1464,76 @@ class TestMilestoneTargets:
         assert "you do not choose them" in text
         assert "no digits" in text
         assert '"4,000"' in text
+
+
+class TestFollowersMilestoneTrend:
+    """The followers target is derived from the measured growth rate, not from
+    a multiple of the follower count.
+
+    Andrew's live review (2026-07-31) caught the flat-multiplier version
+    contradicting the report's own arithmetic on job 0007607e: 3,212 followers
+    at 17.5/week projects to ~3,440 over 90 days, but 3,212 x 1.10 rounded to
+    3,550. Both numbers print in the same report.
+
+    The sharper problem is that a flat multiplier can land BELOW the trend,
+    asking the client to do worse than nothing — ORPHEUS-113's bug one level up,
+    which `target > baseline` cannot catch.
+    """
+
+    def test_andrews_live_case(self):
+        # 3,212 + 17.5 x 13 x 1.25 = 3,496.4 -> 3,500, clear of natural 3,440.
+        assert _followers_target(3212, 17.5) == 3500
+
+    def test_flat_multiplier_undershoot_is_fixed(self):
+        """3,000 followers at 50/week reach ~3,650 unaided. The old flat 1.10
+        gave 3,300 — a target below the client's own trajectory."""
+        natural = 3000 + 50 * 13
+        assert _growth_target(3000, MILESTONE_GROWTH_FACTORS["followers"]) < natural
+        assert _followers_target(3000, 50) > natural
+
+    def test_target_always_beats_the_unaided_projection(self):
+        """The guarantee that actually matters for this metric. Swept because
+        rounding is what breaks it — a step wider than the stretch increment
+        pulls the target back onto the projection."""
+        for baseline in (10, 95, 500, 999, 1000, 3212, 25000, 872569):
+            for rate in (0.1, 0.5, 1, 5, 17.5, 50, 250, 2000):
+                target = _followers_target(baseline, rate)
+                assert target > baseline + rate * 13, (baseline, rate, target)
+
+    def test_no_growth_rate_falls_back_to_the_flat_multiplier(self):
+        """Nothing to be inconsistent with when the rate wasn't measured."""
+        expected = _growth_target(3212, MILESTONE_GROWTH_FACTORS["followers"])
+        assert _followers_target(3212, None) == expected
+        assert _followers_target(3212, 0) == expected
+
+    def test_horizon_and_stretch_are_configurable_constants(self):
+        assert MILESTONE_HORIZON_WEEKS == 13
+        assert FOLLOWER_TREND_STRETCH > 1.0
+
+    def test_reads_the_growth_rate_off_forward_brief_data(self):
+        """End-to-end through the builder, not just the helper."""
+        output = _make_scoring_output()
+        q = output.forward_brief_data.quantitative
+        q.follower_count = 3212
+        q.follower_growth_rate = 17.5
+        followers = next(
+            t for t in build_milestone_targets(output) if t.key == "followers"
+        )
+        assert followers.value == "3,500"
+        assert followers.baseline_display == "3,212"
+
+    def test_collision_with_the_impressions_target_no_longer_occurs(self):
+        """Andrew also flagged both targets rendering as 3,550 and read it as
+        field bleed. It was a rounding coincidence; the trend derivation
+        separates them on his data as a side effect."""
+        output = _make_scoring_output()
+        q = output.forward_brief_data.quantitative
+        q.follower_count = 3212
+        q.follower_growth_rate = 17.5
+        q.avg_impressions_per_post = 2852.8
+        values = {t.key: t.value for t in build_milestone_targets(output)}
+        assert values["followers"] == "3,500"
+        assert values["impressions_per_post"] == "3,550"
 
 
 class TestCheatSheetMilestoneValidation:
