@@ -201,7 +201,7 @@ does the same thing.
 | **Stripe** | Self-serve billing (post-beta — ORPHEUS-40) | Not provisioned yet. Account creation deferred until ORPHEUS-40 picks up. |
 | **PagerDuty / OpsGenie** | On-call alerting | Not provisioned. Single-engineer project, manual monitoring for now. |
 | **Sentry / error tracking** | Backend error tracking | Not provisioned. Railway logs + Supabase logs are the current ground truth. |
-| **Analytics / product telemetry** | Client behavior tracking | Not provisioned. Product is currently outcome-measured by Andrew, not telemetered. |
+| **Analytics / product telemetry** | Aggregate site + performance analytics | **Provisioned — corrected 2026-08-04.** Vercel Web Analytics + Speed Insights ship in the frontend bundle (ORPHEUS-79/80): `@vercel/analytics` + `@vercel/speed-insights` in `frontend/package.json`, mounted in `main.tsx` *above* `<App />` so they run on the marketing host as well as the portal. Cookieless, no device storage, rotating daily visitor hash. No separate credential — it rides the Vercel project, toggled per-project in the Vercel dashboard. This row previously read "Not provisioned," which was wrong from the moment ORPHEUS-79 shipped; it must stay accurate because Privacy Policy §4.2/§15 disclose it. No other product telemetry exists (no Sentry, PostHog, GA, Segment). |
 | **Domain registrar** | `orpheussocial.com` ownership | GoDaddy. Nameservers delegated to Vercel — see the DNS section above before changing anything. |
 
 ---
