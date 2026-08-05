@@ -14,7 +14,7 @@
 }
 
 .reports-in-flight-note {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Orpheus Sans', sans-serif;
   font-size: 15px;
   color: var(--text-muted);
   white-space: nowrap;
@@ -47,7 +47,7 @@
 }
 
 .report-row-date {
-  font-family: 'Source Serif 4', serif;
+  font-family: 'Orpheus Serif', serif;
   font-size: 19px;
   color: var(--text-strong);
   flex: 0 0 auto;
@@ -55,7 +55,7 @@
 
 .report-row-action {
   margin-left: auto;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Orpheus Sans', sans-serif;
   font-size: 15px;
   color: var(--primary);
   white-space: nowrap;
@@ -63,7 +63,7 @@
 
 .report-row-note {
   margin-left: auto;
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Orpheus Sans', sans-serif;
   font-size: 14px;
   color: var(--text-muted);
 }
@@ -72,7 +72,7 @@
 
 .report-status-chip,
 .report-band-chip {
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Orpheus Sans', sans-serif;
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
