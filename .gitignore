@@ -45,3 +45,19 @@ Signal_Score_Dimensions_Reference_*.md
 # Vite production build output + HMR timestamp files — generated, never commit.
 frontend/dist/
 frontend/vite.config.ts.timestamp-*.mjs
+
+# Working scratchpads, experiment output, and per-developer state —
+# untracked by intent. Rationale lives in the rolling SESSION_HANDOFF;
+# enforced here so `git add -A` cannot sweep them in. It did once
+# (2026-05-29, recovered via force-push) and orpheus-session-wrap's
+# step 7 still instructs `git add -A`, so memory is not a sufficient
+# guard. Patterns checked against `git ls-files` for zero clashes with
+# tracked files — Decision_*, Spec_* and ORPHEUS-96_repro_* stay tracked.
+Draft_*.md
+Scoping_*.md
+Survey_*.md
+ORPHEUS-*_Decision_Brief_*.md
+rubric_consistency_results_*.json
+create_beta_survey_form.gs
+outputs/
+.claude/settings.local.json
