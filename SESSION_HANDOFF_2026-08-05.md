@@ -2,7 +2,7 @@
 
 ORPHEUS-123 is implemented and locally verified but **deliberately not closed**. Replaces `SESSION_HANDOFF_2026-08-03.md`, retired in this commit:
 
-- **ORPHEUS-123 (self-host fonts) built end to end** — 28 files modified, 11 added in `fonts/`. Left **In Progress**, not Done: nothing is deployed, and closing on unpushed code is the 07-27 mistake.
+- **ORPHEUS-123 (self-host fonts) shipped and closed.** Built, pushed as `0d9420f`, and verified in production before moving to Done — it was deliberately held In Progress until the deployed hosts were measured, because closing on unpushed code is the 07-27 mistake.
 - **`0cb9878` (2026-08-04) is folded in here.** That commit was never covered by a handoff — the 08-03 one predates it and no 08-04 handoff exists. It corrects two false claims in the source-of-truth docs; the account-deletion one is dangerous enough to restate below.
 - **Three of ORPHEUS-123's own premises were wrong**, including one that would have produced an actual licence violation if followed as written.
 - **A four-ticket GDPR batch (124-127) surrounds this work** and is untouched.
@@ -23,6 +23,12 @@ ORPHEUS-123 is implemented and locally verified but **deliberately not closed**.
 Google's `css2` URL pins a **weight per file**, which is why the old path was five files: serif 500/700/900 at 58.1 + 58.8 + 55.4 KB, sans 400/600 at 17.4 each. One self-hosted variable file per family covers every weight, so self-hosting was always going to be *smaller* — there was never a payload increase to trade against the privacy fix. The remaining savings came from dropping OpenType features nothing references (`onum`/`frac`/`sups`/`subs`, 32 KB per serif face), **not** from touching `opsz`.
 
 Files: 8 woff2 (two slices per face on Google's exact `latin`/`latin-ext` ranges), both OFL texts, and `fonts/build_fonts.py` which reproduces the whole set and **asserts no Reserved Font Name survives**, failing rather than emitting a misnamed file.
+
+**Measured in production after deploy**, from the running app's own `performance.getEntriesByType('resource')` and `document.fonts` on the authenticated `/reports` route — not from a screenshot:
+
+- `googleFontRequests: NONE` across all 12 resources. The only non-same-origin requests are the Railway API and `media.licdn.com` for client avatars.
+- The faces genuinely **load** rather than silently falling back: `OrpheusSans-Roman.latin` 26,712 B + `OrpheusSerif-Roman.latin` 109,444 B = **136,156 B / 133.0 KB critical path**, each an exact byte match to the committed file, and `document.fonts` reports them `loaded`. This was the failure mode worth ruling out — a 404 would leave the CSS still naming "Orpheus Sans" while text rendered in the ORPHEUS-80 fallback, which is metric-tuned closely enough to pass a glance.
+- **Every `latin-ext` slice reports `unloaded`** — the `unicode-range` split works, so a plain-ASCII page never pays for the extended set.
 
 ---
 
@@ -74,7 +80,7 @@ Josh's own commit, already pushed, from the 08-03 privacy/ToS review. Restating 
 
 | Ticket | Title | Status |
 |---|---|---|
-| ORPHEUS-123 | Self-host the brand typefaces | 🔄 **In Progress** — built + locally verified; needs push, then DevTools on both hosts |
+| ORPHEUS-123 | Self-host the brand typefaces | ✅ **Done** — `0d9420f`, verified live: zero Google requests, 133.0 KB vs 207.1 KB |
 | ORPHEUS-124 | Self-service account deletion | ⏳ Backlog — **new 08-04**; blocked on the real FK behaviour above, not the claimed cascade |
 | ORPHEUS-125 | Publish Privacy Policy + ToS in-product | ⏳ Backlog (high) — **new 08-04**; owns the §9 rewrite that 123 unblocks |
 | ORPHEUS-126 | Upload consent / re-base lawful basis | ⏳ Backlog — **new 08-04** |
@@ -94,10 +100,9 @@ Baselines: backend pytest **434 green** (untouched this session — no backend f
 
 ## Pending — your manual steps
 
-1. **Push.** Two commits: `0d9420f` (ORPHEUS-123) and this wrap.
-2. **`rm SESSION_HANDOFF_2026-08-03.md`.** Its deletion is committed, but the sandbox can't unlink inside the mount so the file is still on disk as untracked. Left there it will trip the "multiple handoff files" check at next session start.
-3. **Then finish 123's acceptance:** DevTools on `app.orpheussocial.com` **and** the marketing host showing zero `fonts.googleapis.com` / `fonts.gstatic.com` requests, and confirm `/assets/Orpheus*.woff2` actually serve. Then it can move to Done. Railway is irrelevant here — this is a Vercel-only change.
-4. **Delete two double-escaped Plane comments** — ORPHEUS-123 picked up a fresh one this session before I corrected it (the good repost sits directly below, and says so). ORPHEUS-117's and possibly ORPHEUS-118's are still there from prior sessions.
+1. ~~Push, retire the old handoff, finish 123's acceptance~~ — **all done 2026-08-06.** All three commits are on `origin/main`, the 08-03 handoff is gone from disk, and 123's acceptance was measured on the deployed app (see below).
+2. **Delete the surplus Plane comments.** ORPHEUS-123 ended up with **three near-identical closing comments** — `8c788533`, `012bfaed`, `6a6c67ce` — plus one double-escaped progress comment earlier in the thread. Keep one closing comment (`6a6c67ce` is the best organised) and delete the rest. ORPHEUS-117's and possibly ORPHEUS-118's double-escaped duplicates are still there from prior sessions.
+3. **Apply the `orpheus-session-wrap` skill corrections** if they haven't synced everywhere — step 7, the compliance-drafts gotcha, and the verification checklist. See caveat 3.
 5. **ORPHEUS-125 owns the Privacy Policy §9 rewrite.** The font-CDN paragraph now describes something that doesn't happen. The drafts are untracked at repo root.
 6. **Andrew's live report `0007607e` still carries the pre-`861d581` followers milestone** (3,550, not 3,500). `c2df921` corrects it in place.
 7. **Decision Log paste (ORPHEUS-90)** — still owed (`outputs/DecisionLog_ORPHEUS-90_Model_Calibration_2026-06-24.md`). Carried since 06-24; worth deciding whether it's going to happen.
@@ -107,12 +112,11 @@ Baselines: backend pytest **434 green** (untouched this session — no backend f
 
 ## Recommended pickup for next session
 
-1. **Close out ORPHEUS-123** — it's two DevTools checks after the push, nothing more.
-2. **ORPHEUS-120 + ORPHEUS-114 together**, per the standing cross-link — design the publish boundary once. 120 is small alone but shouldn't land twice, and 114's reconciliation identities are the regression net.
-3. **ORPHEUS-121 rides 114** — `QUANTITATIVE_METRIC_LABELS` is already the first five entries of 114's unit registry; promote and extend rather than start fresh.
-4. **ORPHEUS-125 next if the compliance thread is the priority** — it's high, it's the batch's publication gate, and 123 just removed one of its open items.
-5. **ORPHEUS-124 needs the FK correction above baked into its design** before anyone writes an `auth.admin.delete_user()` call.
-6. ORPHEUS-115 after 114; ORPHEUS-119's remainder rides the next real first-time completion; ORPHEUS-116 last.
+1. **ORPHEUS-120 + ORPHEUS-114 together**, per the standing cross-link — design the publish boundary once. 120 is small alone but shouldn't land twice, and 114's reconciliation identities are the regression net.
+2. **ORPHEUS-121 rides 114** — `QUANTITATIVE_METRIC_LABELS` is already the first five entries of 114's unit registry; promote and extend rather than start fresh.
+3. **ORPHEUS-125 next if the compliance thread is the priority** — it's high, it's the batch's publication gate, and 123 just removed one of its open items.
+4. **ORPHEUS-124 needs the FK correction above baked into its design** before anyone writes an `auth.admin.delete_user()` call.
+5. ORPHEUS-115 after 114; ORPHEUS-119's remainder rides the next real first-time completion; ORPHEUS-116 last.
 
 ---
 
@@ -140,10 +144,11 @@ Baselines: backend pytest **434 green** (untouched this session — no backend f
 
 ## State of the repo right now
 
-Two commits this session, deliberately split rather than rolled up so the font change stays independently revertible — matching the repo's pattern of keeping code and bookkeeping apart (`da591f2` was code-only, `ca0fa6a` handoff-only):
+Three commits this session, deliberately split rather than rolled up so the font change stays independently revertible — matching the repo's pattern of keeping code and bookkeeping apart (`da591f2` was code-only, `ca0fa6a` handoff-only). **All pushed; `origin/main` is at `784e527`.**
 
 - **`0d9420f`** — ORPHEUS-123: the font work plus the doc updates (39 files, +760/-261)
-- **this wrap commit** — adds this handoff, retires `SESSION_HANDOFF_2026-08-03.md`
+- **`0f6c3ff`** — this handoff; retires `SESSION_HANDOFF_2026-08-03.md`
+- **`784e527`** — `.gitignore` protection for the untracked-by-intent set (caveat 3)
 
 Both carry `Co-Authored-By` / `Claude-Session` trailers, which no prior commit in this repo uses — amend them off if log uniformity matters more.
 
@@ -153,11 +158,7 @@ Both carry `Co-Authored-By` / `Claude-Session` trailers, which no prior commit i
 
 **Prod config beyond source:** the four DNS records in the Vercel zone remain the only live state not captured in the repo — hence the `CREDENTIALS.md` record table.
 
-Suggested push:
-
-```bash
-cd ~/git/orpheus && git push origin main
-```
+Nothing left to push.
 
 ---
 
