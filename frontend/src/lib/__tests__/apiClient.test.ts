@@ -8,7 +8,7 @@
  * AbortController cancellation still surfaces as the original AbortError,
  * and a real non-2xx HTTP response still throws ApiError as before.
  */
-import { apiGet, ApiError, NetworkError } from '../apiClient'
+import { apiDelete, apiGet, ApiError, NetworkError } from '../apiClient'
 
 describe('apiClient transport failures (ORPHEUS-86)', () => {
   afterEach(() => {
@@ -39,5 +39,45 @@ describe('apiClient transport failures (ORPHEUS-86)', () => {
       } as Response),
     )
     await expect(apiGet('/session')).rejects.toBeInstanceOf(ApiError)
+  })
+})
+
+describe('apiDelete (ORPHEUS-124)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('carries the response body through an ApiError on non-2xx', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: async () => ({ detail: 'roster is non-empty' }),
+      } as Response),
+    )
+    await expect(apiDelete('/account')).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 409,
+      body: { detail: 'roster is non-empty' },
+    })
+  })
+
+  it('returns undefined on a 204 and JSON otherwise', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, status: 204 } as Response),
+    )
+    await expect(apiDelete('/account')).resolves.toBeUndefined()
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ deleted: true }),
+      } as Response),
+    )
+    await expect(apiDelete('/account')).resolves.toEqual({ deleted: true })
   })
 })

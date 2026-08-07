@@ -19,6 +19,13 @@ export function LoginPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+  // Set by AccountPage's post-deletion redirect (ORPHEUS-124). Router
+  // state rather than a query param so a shared/bookmarked URL can't
+  // replay the notice.
+  const accountDeleted = Boolean(
+    (location.state as { accountDeleted?: boolean } | null)?.accountDeleted,
+  )
+
   // Pull error info out of the URL hash on first render. Supabase populates
   // both ?error and #error depending on how the upstream provider replies;
   // we look in both places.
@@ -64,6 +71,16 @@ export function LoginPage() {
           behalf, and your LinkedIn data is shared only as part of your existing engagement
           with Andrew.
         </p>
+
+        {accountDeleted && (
+          <div className="login-notice" role="status">
+            <div className="login-notice-label">Account deleted</div>
+            <div className="login-notice-body">
+              Your account and its data have been deleted. Thanks for
+              trying Orpheus Social.
+            </div>
+          </div>
+        )}
 
         {errorMessage && (
           <div className="login-error" role="alert">

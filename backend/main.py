@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import get_settings
+from backend.routers import account as account_router
 from backend.routers import admin as admin_router
 from backend.routers import advisor as advisor_router
 from backend.routers import clients as clients_router
@@ -41,6 +42,7 @@ app.include_router(clients_router.accept_router)
 app.include_router(session_router.router)
 app.include_router(advisor_router.router)
 app.include_router(admin_router.router)
+app.include_router(account_router.router)
 
 
 @app.get("/health")

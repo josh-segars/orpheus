@@ -1,0 +1,99 @@
+/* AccountPage — Danger Zone (ORPHEUS-124).
+ *
+ * Uses the canonical dark-mode role tokens. The danger accents lean on
+ * --issue (red), which ORPHEUS-70 deliberately decoupled from the
+ * (now-magenta) pip-1 so it stays the app's error tone.
+ */
+
+.danger-zone {
+  border: 1px solid var(--issue);
+  border-radius: 10px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.danger-zone-title {
+  font-family: 'Orpheus Serif', 'Orpheus Serif Fallback', serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin: 0;
+}
+
+.danger-zone-body {
+  color: var(--text-body);
+  font-size: 15px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.danger-zone-button {
+  align-self: flex-start;
+  padding: 10px 22px;
+  border-radius: 10px;
+  border: 1px solid var(--issue);
+  background: transparent;
+  color: var(--issue);
+  font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.danger-zone-button:hover:not(:disabled) {
+  background: var(--issue);
+  color: #ffffff;
+}
+
+.danger-zone-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.danger-zone-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.danger-zone-confirm-label {
+  color: var(--text-muted);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.danger-zone-confirm-input {
+  max-width: 260px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--text-strong);
+  font-size: 15px;
+}
+
+.danger-zone-confirm-input:focus {
+  outline: none;
+  border-color: var(--issue);
+}
+
+.danger-zone-confirm-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.danger-zone-error {
+  border: 1px solid var(--issue);
+  border-radius: 10px;
+  padding: 12px 16px;
+  color: var(--text-body);
+  font-size: 14px;
+  line-height: 1.5;
+}

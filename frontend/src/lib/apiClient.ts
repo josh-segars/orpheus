@@ -231,6 +231,41 @@ export async function apiPatchJson<T>(
   return (await res.json()) as T
 }
 
+/**
+ * DELETE a resource. Added for DELETE /account (ORPHEUS-124) — the
+ * first delete endpoint in the API. Tolerates a 204 (no body) as well
+ * as a JSON body, since destructive endpoints commonly return either.
+ *
+ * Same error shape as the other verbs — non-2xx throws an `ApiError`
+ * carrying the parsed body so callers can extract `body.detail`
+ * (the 409 advisor-roster guard message renders verbatim).
+ */
+export async function apiDelete<T>(
+  path: string,
+  signal?: AbortSignal,
+): Promise<T | undefined> {
+  const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...(await authHeaders()),
+  }
+
+  const res = await safeFetch(url, { method: 'DELETE', headers, signal })
+  if (!res.ok) {
+    let body: unknown = null
+    try {
+      body = await res.json()
+    } catch {
+      // body wasn't JSON — fine, leave null
+    }
+    throw new ApiError(`DELETE ${path} failed: ${res.status}`, res.status, body)
+  }
+  if (res.status === 204) {
+    return undefined
+  }
+  return (await res.json()) as T
+}
+
 // `apiPostMultipart` was removed 2026-07-27 with the legacy multipart
 // POST /jobs (ORPHEUS-108). The upload flow now PUTs both files straight to
 // Supabase Storage via supabase-js `uploadToSignedUrl`, so no request this
