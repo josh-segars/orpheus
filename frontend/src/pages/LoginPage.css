@@ -193,7 +193,15 @@
 }
 
 .login-consent-label a {
+  /* Brand the document links — without an explicit color these render
+     browser-default blue, the only unbranded element on the screen. */
+  color: var(--primary);
   text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.login-consent-label a:hover {
+  color: var(--primary-hover);
 }
 
 .login-consent-prompt {
