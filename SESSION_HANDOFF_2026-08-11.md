@@ -2,11 +2,12 @@
 
 Replaces `SESSION_HANDOFF_2026-08-05.md` — all the threads it described are closed in code or have moved into CLAUDE.md "Decisions Made":
 
-- **The 2026-08-04 GDPR batch is nearly closed.** ORPHEUS-123 (fonts) closed 08-06; **ORPHEUS-124 (self-service deletion) shipped 08-07 and closed 08-10** after live production validation; **ORPHEUS-125 (publish Privacy Policy + ToS) closed 08-11** — both documents are live on both hosts; **ORPHEUS-126 (Route A consent capture) is live** and In Progress only for its per-upload leg. ORPHEUS-127 (DSR runbook) is the batch's one remaining open ticket.
+- **The 2026-08-04 GDPR batch is nearly closed.** ORPHEUS-123 (fonts) closed 08-06; **ORPHEUS-124 (self-service deletion) shipped 08-07 and closed 08-10** after live production validation; **ORPHEUS-125 (publish Privacy Policy + ToS) closed 08-11** — both documents are live on both hosts; **ORPHEUS-126 (Route A consent capture) is live** and In Progress only for its per-upload leg. ORPHEUS-127 (DSR runbook) **closed in part 3** — the batch is now fully closed except 126's event-gated leg.
 - **Two parallel streams converged today.** This session carried 124 → docs → 125; a second Claude session (`ef20462`, Opus) built 126's consent capture. The seams held — the effective-date coupling it left as an OPEN ITEM was honored exactly — but its backend tests had never run (no pytest in that sandbox) and its migration was committed unapplied. Both were caught here; see the caveats.
 - **A live sign-in outage happened and was fixed inside ~30 minutes** (`d076e7f`). The mechanism is caveat 1 below — the single most transferable lesson of the day.
 - **Carried unchanged:** the ORPHEUS-114 / 120 / 121 / 115 / 116 cluster, ORPHEUS-119's live-verification remainder, ORPHEUS-111, the ORPHEUS-90 Decision Log paste, the Andrew comms items.
 - **Part 2 (same day, second session):** ORPHEUS-128 filed, shipped (`dabe77c`, pushed), and closed — the report page's hidden numeric scores are gone and the ORPHEUS-122 sr-only open thread is resolved. Section below.
+- **Part 3 (same day, third session, cloud):** ORPHEUS-127 shipped (`719f2f8`, pushed) and closed — the DSR runbook, every query executed against production before it was written down. Section below.
 
 ---
 
@@ -48,6 +49,16 @@ The ORPHEUS-122 open thread, decided and shipped in one session [Josh, 2026-08-1
 
 ---
 
+## ORPHEUS-127 — data-subject request runbook (part 3, closed 08-11)
+
+`Runbook_Data_Subject_Requests_2026-08-11.md` at the repo root (`719f2f8`, with the CLAUDE.md Pointers link in the same commit; dated by write date per the naming convention, not the ticket's 2026-08-04 name). Covers intake + identity verification with the GDPR 30-day / CCPA 45-day clocks; the identity-resolution query; erasure as two paths — self-service (ORPHEUS-124, preferred since signing in *is* the verification) and the ordered manual procedure mirroring `backend/routers/account.py` (roster guard → storage sweep incl. `staging/` → clients row → advisors row → waitlist → auth user **last**); the post-erasure verification query with a dedicated `orphaned_clients` arm for the SET-NULL trap; a single-JSON access/portability package; rectification (manual UPDATE for `display_name`/`email` until ORPHEUS-42); restriction via `status='inactive'`; and the DSR log template.
+
+**Every query ran against production 2026-08-11 (Supabase MCP, cloud session) before it was written down:** resolution surfaced the ORPHEUS-94 mismatch live — Josh's clients row matched via `user_id` under a different email; the access package assembled 14/14 keys for a real account; the orphan catcher was proven against an inserted-then-removed scratch `user_id IS NULL` row (caught, then all-zero re-run); the roster guard counted 11 non-self clients, correctly blocking. `terms_acceptances` (migration 020, post-dates the ticket) is in the package, the sweep, and the FK-trap table.
+
+**Two placement decisions [Josh saw both in-session]:** the filename date, and the DSR log kept **out of the repo** — a log of who exercised privacy rights is itself personal data — living in Shared Canon / 06_Operations as a create-on-first-use sheet. Nothing to create until the first request arrives.
+
+---
+
 ## Status at a glance
 
 | Ticket | Title | Status |
@@ -55,7 +66,7 @@ The ORPHEUS-122 open thread, decided and shipped in one session [Josh, 2026-08-1
 | ORPHEUS-124 | Self-service account deletion | ✅ Done — `1d4e7e5`, live-validated |
 | ORPHEUS-125 | Publish Privacy Policy + ToS in-product | ✅ Done — `4dae89d` + `d5efb26`, all 6 criteria live |
 | ORPHEUS-126 | Capture upload consent (Route A) | 🔄 In Progress — live; closes on the next real submission's `upload_consent_at` |
-| ORPHEUS-127 | Data-subject request runbook | ⏳ Backlog — the batch's last open ticket; now mostly documentation of shipped mechanisms |
+| ORPHEUS-127 | Data-subject request runbook | ✅ Done — `719f2f8` (part 3), all queries production-tested |
 | ORPHEUS-128 | Hidden numeric score removal + audit | ✅ Done — `dabe77c`, pushed, closed same day |
 | ORPHEUS-114 | Reconciliation gate + metric source/unit registry | ⏳ Backlog (high) — standing top code recommendation |
 | ORPHEUS-120 | Advisory draft gate doesn't hold on the read path | ⏳ Backlog (high) — pair with 114 |
@@ -65,7 +76,7 @@ The ORPHEUS-122 open thread, decided and shipped in one session [Josh, 2026-08-1
 | ORPHEUS-111 | Upload size caps misaligned | ⏳ Backlog (medium) |
 | ORPHEUS-99 / 94 / 84 / 85 / 107 | unchanged | ⏳ Backlog |
 
-Baselines: backend pytest **460 green**, frontend vitest **124 green**, `tsc -b` + vite production build clean. **Measured, not carried** — this session ran in a cloud container with working pip/pytest/npm (see caveat 5). Josh's terminal run should match 460. Part 2 re-confirmed on-device: vitest 124 green, `tsc -b` clean (frontend-only change; backend untouched).
+Baselines: backend pytest **460 green**, frontend vitest **124 green**, `tsc -b` + vite production build clean. **Measured, not carried** — this session ran in a cloud container with working pip/pytest/npm (see caveat 5). Josh's terminal run should match 460. Part 2 re-confirmed on-device: vitest 124 green, `tsc -b` clean (frontend-only change; backend untouched). Part 3 was docs-only (runbook + doc refreshes) — both baselines carry unchanged.
 
 ---
 
@@ -83,9 +94,8 @@ Baselines: backend pytest **460 green**, frontend vitest **124 green**, `tsc -b`
 
 ## Recommended pickup for next session
 
-1. **ORPHEUS-127 (DSR runbook)** if the compliance thread should finish — it got dramatically easier this week: erasure = shipped self-service deletion, access/portability = documented manual path in §12.5, and the runbook mostly writes down what now exists. Closes the batch.
-2. **ORPHEUS-120 + 114 together (121 rides)** — the standing code recommendation, unchanged since 08-05: design the publish boundary once; 114's reconciliation identities are the regression net.
-3. ORPHEUS-126 closes itself on the next real submission (item 1 above); 119 likewise event-gated. Neither is a work ticket.
+1. **ORPHEUS-120 + 114 together (121 rides)** — the standing code recommendation, unchanged since 08-05 and now the unambiguous top of the board: design the publish boundary once; 114's reconciliation identities are the regression net. (ORPHEUS-127 closed in part 3, so the compliance thread no longer competes for the slot.)
+2. ORPHEUS-126 closes itself on the next real submission (pending item 1 below); 119 likewise event-gated. Neither is a work ticket.
 
 ---
 
@@ -109,7 +119,7 @@ Baselines: backend pytest **460 green**, frontend vitest **124 green**, `tsc -b`
 
 ## State of the repo right now
 
-Nine commits since the 08-05 handoff (incl. the part-1 wrap `4cacb15`), all pushed; the part-2 wrap commit is the only thing left to push after this file lands:
+Eleven commits since the 08-05 handoff (incl. the part-1 wrap `4cacb15` and the part-2 wrap `8105cce`), all pushed; the part-3 wrap commit is the only thing left to push after this file lands:
 
 - **`4fe4a19`** (08-06) — handoff bookkeeping: 123 closed
 - **`1d4e7e5`** (08-07) — ORPHEUS-124: self-service account deletion
@@ -119,6 +129,8 @@ Nine commits since the 08-05 handoff (incl. the part-1 wrap `4cacb15`), all push
 - **`1cbcefb`** (08-11) — branded consent links
 - **`d5efb26`** (08-11) — legal-page chrome + scroll reset
 - **`dabe77c`** (08-11 part 2) — ORPHEUS-128: remove hidden numeric scores from the report page
+- **`8105cce`** (08-11 part 2) — part-2 session handoff
+- **`719f2f8`** (08-11 part 3) — ORPHEUS-127: the data-subject request runbook + CLAUDE.md pointer
 
 **Prod config beyond source:** the four DNS records in the Vercel zone (unchanged), and migration 020 applied to the cloud DB via the Supabase MCP (2026-08-11) — the migrations folder and the live schema agree today; caveat 3 is about keeping it that way.
 
