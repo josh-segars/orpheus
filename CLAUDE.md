@@ -61,6 +61,7 @@ If any of those fail, see `CREDENTIALS.md` for the system-by-system inventory.
 - **External systems / credentials** — `CREDENTIALS.md` (Plane, Supabase, Railway, Vercel, Resend, LinkedIn Developer, GitHub, Anthropic).
 - **Naming, commits, Plane workflow** — `CONVENTIONS.md` (file naming patterns, commit message format, ticket states, page categories, handoff workflow).
 - **Local-dev setup** — `SETUP_phase1_local_auth.md` (one-time onboarding: install Supabase CLI, create the dev LinkedIn app, apply migrations 001 + 011 + 012).
+- **Data-subject requests (GDPR/CCPA)** — `Runbook_Data_Subject_Requests_2026-08-11.md` (ORPHEUS-127: erasure / access / portability procedures with production-tested SQL, the `clients.user_id` SET-NULL trap, and the DSR log). Read it before honouring any privacy-rights email to `contact@orpheussocial.com`.
 
 ### 5. Sandbox quirks worth knowing
 
