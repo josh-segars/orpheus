@@ -115,4 +115,28 @@ describe('captureTermsAcceptanceFromUrl', () => {
     expect(captureTermsAcceptanceFromUrl()).toBeNull()
     expect(readPendingTermsAcceptance()).toBeNull()
   })
+
+  it('preserves the hash fragment — the OAuth tokens live there (2026-08-11 sign-in loop)', () => {
+    // Supabase's implicit flow returns the session in the fragment:
+    //   /?terms_v=…&privacy_v=…#access_token=…&refresh_token=…
+    // and parses it asynchronously AFTER this module-load-time capture
+    // runs. The original implementation rebuilt the URL without the
+    // hash, erasing the tokens before they were ever read — every fresh
+    // production sign-in bounced back to /login. The fragment must
+    // survive the strip.
+    window.history.replaceState(
+      {},
+      '',
+      '/?terms_v=2026-08-11&privacy_v=2026-08-11#access_token=tok123&refresh_token=ref456',
+    )
+    const captured = captureTermsAcceptanceFromUrl()
+    expect(captured).toEqual({
+      termsVersion: '2026-08-11',
+      privacyVersion: '2026-08-11',
+    })
+    expect(window.location.search).toBe('')
+    expect(window.location.hash).toBe(
+      '#access_token=tok123&refresh_token=ref456',
+    )
+  })
 })

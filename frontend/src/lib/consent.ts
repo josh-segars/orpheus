@@ -142,12 +142,22 @@ export function captureTermsAcceptanceFromUrl(): PendingTermsAcceptance | null {
   // Strip only our own params, preserving anything else on the URL (the
   // invitation flow's ?token= lands on a different route, but a future
   // param shouldn't be collateral damage).
+  //
+  // The HASH FRAGMENT must survive this rewrite. Supabase's implicit
+  // OAuth flow returns the session tokens in the fragment
+  // (`/?terms_v=…#access_token=…`), and supabase-js parses them
+  // asynchronously *after* this module-load-time code runs — a
+  // replaceState that rebuilds the URL without window.location.hash
+  // erases the tokens first, no session is ever established, and every
+  // fresh sign-in bounces back to /login (live incident, 2026-08-11).
   try {
     params.delete(TERMS_VERSION_QUERY_KEY)
     params.delete(PRIVACY_VERSION_QUERY_KEY)
     const remaining = params.toString()
     const cleaned =
-      window.location.pathname + (remaining ? `?${remaining}` : '')
+      window.location.pathname +
+      (remaining ? `?${remaining}` : '') +
+      window.location.hash
     window.history.replaceState(null, '', cleaned)
   } catch {
     // Leaving the params in the bar is cosmetic; the capture already
