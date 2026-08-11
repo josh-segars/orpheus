@@ -1,33 +1,16 @@
 /* Legal document pages — /privacy and /terms (ORPHEUS-125).
  *
- * Long-form reading surface on the canonical dark theme. Serif for the
- * document voice (matching report narratives), generous measure, quiet
- * tables. Public on both hosts, so it must stand alone without the
- * portal shell.
+ * Layout (nav / main-interior / footer) comes from the shared design
+ * system; this file styles only the long-form document typography.
+ * Serif for the document voice (matching report narratives), quiet
+ * tables, standard tokens.
  */
 
-.legal-shell {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-page);
-}
-
-.legal-header {
-  padding: 28px clamp(24px, 6vw, 64px) 0;
-}
-
-.legal-wordmark {
-  display: inline-flex;
-  gap: 6px;
+.legal-nav-home {
   text-decoration: none;
 }
 
 .legal-document {
-  flex: 1;
-  width: min(760px, calc(100% - 48px));
-  margin: 0 auto;
-  padding: 24px 0 72px;
   font-family: 'Orpheus Serif', 'Orpheus Serif Fallback', serif;
   color: var(--text-body);
   font-size: 16px;
@@ -39,7 +22,7 @@
   font-variation-settings: 'opsz' 34;
   line-height: 1.2;
   color: var(--text-strong);
-  margin: 24px 0 8px;
+  margin: 0 0 8px;
 }
 
 .legal-document h2 {
@@ -65,9 +48,13 @@
 }
 
 .legal-document a {
-  color: var(--accent);
+  color: var(--primary);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.legal-document a:hover {
+  color: var(--primary-hover);
 }
 
 .legal-document ul,
