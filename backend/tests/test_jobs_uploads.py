@@ -163,10 +163,14 @@ class _Chain:
 class FakeSupabase:
     def __init__(
         self,
-        responses: list[dict[str, Any]],
+        responses: list[dict[str, Any]] | None = None,
         storage: FakeStorage | None = None,
     ) -> None:
-        self.responses = list(responses)
+        # `responses` defaults to empty for tests whose handler path must
+        # reject before any Supabase call is made (the ORPHEUS-126 consent
+        # gate cases) — those tests assert nothing is touched, so an empty
+        # response queue doubles as the tripwire.
+        self.responses = list(responses or [])
         self.inserts: list[tuple[str, Any]] = []
         self.upserts: list[tuple[str, Any]] = []
         self.updates: list[tuple[str, Any]] = []

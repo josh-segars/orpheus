@@ -1,7 +1,15 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render as rtlRender, screen, fireEvent } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 
 import { LandingPage } from '../LandingPage'
+
+// ORPHEUS-125: the footer's legal links are react-router <Link>s now, so
+// the page needs a Router in the tree. Thin wrapper keeps the call sites
+// unchanged.
+function render(ui: React.ReactElement) {
+  return rtlRender(<MemoryRouter>{ui}</MemoryRouter>)
+}
 
 // Mock the waitlist hook so the page never touches Supabase. The mutation
 // object is mutable per-test so we can drive idle / success states.

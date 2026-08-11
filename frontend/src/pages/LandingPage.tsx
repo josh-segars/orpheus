@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 
+import { PRIVACY_PATH, TERMS_PATH } from '../lib/consent'
 import { useJoinWaitlist } from '../hooks/useWaitlist'
 import signalReport from '../assets/animation-screen.jpg'
 import './LandingPage.css'
@@ -558,8 +560,11 @@ function LandingFooter() {
       </div>
       <div className="footer-links">
         <a href={APP_LOGIN_URL}>Sign in</a>
-        <a href="#">Terms of Service</a>
-        <a href="#">Confidentiality</a>
+        {/* Real legal links (ORPHEUS-125) — /privacy and /terms are
+            registered on the marketing host's route tree too, so these
+            resolve without leaving the host. */}
+        <Link to={TERMS_PATH}>Terms of Service</Link>
+        <Link to={PRIVACY_PATH}>Privacy Policy</Link>
         <span>Copyright &copy; 2026 All Rights Reserved.</span>
       </div>
     </footer>

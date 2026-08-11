@@ -1,0 +1,102 @@
+/* Legal document pages — /privacy and /terms (ORPHEUS-125).
+ *
+ * Long-form reading surface on the canonical dark theme. Serif for the
+ * document voice (matching report narratives), generous measure, quiet
+ * tables. Public on both hosts, so it must stand alone without the
+ * portal shell.
+ */
+
+.legal-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-page);
+}
+
+.legal-header {
+  padding: 28px clamp(24px, 6vw, 64px) 0;
+}
+
+.legal-wordmark {
+  display: inline-flex;
+  gap: 6px;
+  text-decoration: none;
+}
+
+.legal-document {
+  flex: 1;
+  width: min(760px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 24px 0 72px;
+  font-family: 'Orpheus Serif', 'Orpheus Serif Fallback', serif;
+  color: var(--text-body);
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.legal-document h1 {
+  font-size: clamp(28px, 4vw, 36px);
+  font-variation-settings: 'opsz' 34;
+  line-height: 1.2;
+  color: var(--text-strong);
+  margin: 24px 0 8px;
+}
+
+.legal-document h2 {
+  font-size: 22px;
+  font-variation-settings: 'opsz' 24;
+  color: var(--text-strong);
+  margin: 40px 0 12px;
+}
+
+.legal-document h3 {
+  font-size: 17px;
+  color: var(--text-strong);
+  margin: 28px 0 8px;
+}
+
+.legal-document p {
+  margin: 0 0 14px;
+}
+
+.legal-document strong {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.legal-document a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.legal-document ul,
+.legal-document ol {
+  margin: 0 0 16px;
+  padding-left: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.legal-document table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 20px;
+  font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
+  font-size: 14px;
+}
+
+.legal-document th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-strong);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 12px 8px 0;
+}
+
+.legal-document td {
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+  padding: 10px 12px 10px 0;
+}

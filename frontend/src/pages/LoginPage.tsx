@@ -103,10 +103,14 @@ export function LoginPage() {
         </div>
 
         <h1 className="login-title">Sign in to your portal</h1>
+        {/* ORPHEUS-125: the last advisory-era sentence ("…your existing
+            engagement with Andrew") retired — the product is self-serve
+            and the documents linked below now say what actually happens
+            to the data. */}
         <p className="login-blurb">
-          Orpheus uses your LinkedIn account to authenticate you. We never post on your
-          behalf, and your LinkedIn data is shared only as part of your existing engagement
-          with Andrew.
+          Orpheus uses your LinkedIn account to authenticate you. How we
+          collect, use, and protect your data is described in the documents
+          below.
         </p>
 
         {accountDeleted && (

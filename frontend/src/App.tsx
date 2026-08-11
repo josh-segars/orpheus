@@ -11,6 +11,8 @@ import { isMarketingHost } from './lib/host'
 import { hasSeenWelcome } from './lib/welcomeFlag'
 import { LandingPage } from './pages/LandingPage'
 import { AccountPage } from './pages/AccountPage'
+import { PrivacyPolicyPage } from './pages/legal/PrivacyPolicyPage'
+import { TermsOfServicePage } from './pages/legal/TermsOfServicePage'
 import { AdminPage } from './pages/AdminPage'
 import { AnalysisPage } from './pages/AnalysisPage'
 import { CheatSheetPage } from './pages/CheatSheetPage'
@@ -39,6 +41,12 @@ export default function App() {
     return (
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        {/* Published legal documents (ORPHEUS-125) — public on BOTH hosts.
+            GDPR Arts. 12-13 want the privacy information reachable at the
+            point of collection, and the marketing host's interest form is
+            a collection point. */}
+        <Route path="/privacy" element={<PrivacyPolicyPage />} />
+        <Route path="/terms" element={<TermsOfServicePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     )
@@ -67,6 +75,12 @@ export default function App() {
 
       {/* Public auth route — its own shell */}
       <Route path="/login" element={<LoginPage />} />
+
+      {/* Published legal documents (ORPHEUS-125) — public, no auth. The
+          /login consent checkbox (ORPHEUS-126) links here in a new tab,
+          so these must resolve for signed-out visitors. */}
+      <Route path="/privacy" element={<PrivacyPolicyPage />} />
+      <Route path="/terms" element={<TermsOfServicePage />} />
 
       {/* Invitation landing — public, side-effect-only redirect into LinkedIn OAuth.
           MUST sit outside ProtectedRoute: the visitor is by definition not yet
