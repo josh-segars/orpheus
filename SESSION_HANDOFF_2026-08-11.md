@@ -6,6 +6,7 @@ Replaces `SESSION_HANDOFF_2026-08-05.md` — all the threads it described are cl
 - **Two parallel streams converged today.** This session carried 124 → docs → 125; a second Claude session (`ef20462`, Opus) built 126's consent capture. The seams held — the effective-date coupling it left as an OPEN ITEM was honored exactly — but its backend tests had never run (no pytest in that sandbox) and its migration was committed unapplied. Both were caught here; see the caveats.
 - **A live sign-in outage happened and was fixed inside ~30 minutes** (`d076e7f`). The mechanism is caveat 1 below — the single most transferable lesson of the day.
 - **Carried unchanged:** the ORPHEUS-114 / 120 / 121 / 115 / 116 cluster, ORPHEUS-119's live-verification remainder, ORPHEUS-111, the ORPHEUS-90 Decision Log paste, the Andrew comms items.
+- **Part 2 (same day, second session):** ORPHEUS-128 filed, shipped (`dabe77c`, pushed), and closed — the report page's hidden numeric scores are gone and the ORPHEUS-122 sr-only open thread is resolved. Section below.
 
 ---
 
@@ -41,6 +42,12 @@ This session's contributions to the stream: first execution of its 20 backend te
 
 ---
 
+## ORPHEUS-128 — hidden numeric scores removed (part 2, closed 08-11)
+
+The ORPHEUS-122 open thread, decided and shipped in one session [Josh, 2026-08-11]: bands are the composite display in every modality, assistive tech included. `dabe77c` deletes the ORPHEUS-51 sr-only "— composite score N of 100" span from the report hero `<h1>` and drops the "— score N of 100" clause from `BandPillRow`'s aria-label (unused `score` prop removed). No color-only regression — the band label is the announcement. The ORPHEUS-51 test pin retargeted into a negative sweep (no score text anywhere, every aria-label checked); prototype backported. Audit of all client-facing surfaces found **no other leaks**. Two observations recorded on the ticket, not fixed: sub-dim pips are `aria-hidden` (visible 1–5 ratings never announced — the inverse gap), and `GET /jobs/{id}` still carries `composite`/`normalized_score` in JSON (devtools-visible; backend contract change if ever wanted).
+
+---
+
 ## Status at a glance
 
 | Ticket | Title | Status |
@@ -49,6 +56,7 @@ This session's contributions to the stream: first execution of its 20 backend te
 | ORPHEUS-125 | Publish Privacy Policy + ToS in-product | ✅ Done — `4dae89d` + `d5efb26`, all 6 criteria live |
 | ORPHEUS-126 | Capture upload consent (Route A) | 🔄 In Progress — live; closes on the next real submission's `upload_consent_at` |
 | ORPHEUS-127 | Data-subject request runbook | ⏳ Backlog — the batch's last open ticket; now mostly documentation of shipped mechanisms |
+| ORPHEUS-128 | Hidden numeric score removal + audit | ✅ Done — `dabe77c`, pushed, closed same day |
 | ORPHEUS-114 | Reconciliation gate + metric source/unit registry | ⏳ Backlog (high) — standing top code recommendation |
 | ORPHEUS-120 | Advisory draft gate doesn't hold on the read path | ⏳ Backlog (high) — pair with 114 |
 | ORPHEUS-121 | Narrative agent fabricates aggregate counts | ⏳ Backlog (high) — rides 114 |
@@ -57,7 +65,7 @@ This session's contributions to the stream: first execution of its 20 backend te
 | ORPHEUS-111 | Upload size caps misaligned | ⏳ Backlog (medium) |
 | ORPHEUS-99 / 94 / 84 / 85 / 107 | unchanged | ⏳ Backlog |
 
-Baselines: backend pytest **460 green**, frontend vitest **124 green**, `tsc -b` + vite production build clean. **Measured, not carried** — this session ran in a cloud container with working pip/pytest/npm (see caveat 5). Josh's terminal run should match 460.
+Baselines: backend pytest **460 green**, frontend vitest **124 green**, `tsc -b` + vite production build clean. **Measured, not carried** — this session ran in a cloud container with working pip/pytest/npm (see caveat 5). Josh's terminal run should match 460. Part 2 re-confirmed on-device: vitest 124 green, `tsc -b` clean (frontend-only change; backend untouched).
 
 ---
 
@@ -69,7 +77,7 @@ Baselines: backend pytest **460 green**, frontend vitest **124 green**, `tsc -b`
 4. **Tim's confirmation list for the published Privacy Policy §11 and §7/§9 claims:** MFA on all infrastructure accounts; "logging and monitoring of administrative-access events" (only app logs exist today — soften or build); "a documented incident-response process" (write the one-pager or drop "documented"); the Anthropic commercial-agreement sentence (training prohibition + retention limits); the 90-day backup window (plan-dependent); DPA/SCC close-out per his vendor assessment. Text edits, if any, follow the caveat-2 version-bump discipline.
 5. **ORPHEUS-90 Decision Log paste** — carried since 06-24 (`outputs/DecisionLog_ORPHEUS-90_Model_Calibration_2026-06-24.md`); decide whether it will ever happen.
 6. **Empty `_to_delete/`** at repo root — session-transfer artifacts plus files retired from the repo root this week; review and delete the folder.
-7. **Andrew comms, carried:** (a) Nicole's report is the first real-client exercise of the ORPHEUS-63 score-0 posture; (b) Jenn hasn't retried since the MIME fix — her orphaned `staging/` upload from 07-17 is also still in the bucket; (c) Jodie needs an onboarding nudge; (d) ORPHEUS-120's open question — should the feedback ask wait for advisory publication at all? (e) the ORPHEUS-122 sr-only composite-score question; (f) growth factors + the ORPHEUS-112 metric-definition caveat.
+7. **Andrew comms, carried:** (a) Nicole's report is the first real-client exercise of the ORPHEUS-63 score-0 posture; (b) Jenn hasn't retried since the MIME fix — her orphaned `staging/` upload from 07-17 is also still in the bucket; (c) Jodie needs an onboarding nudge; (d) ORPHEUS-120's open question — should the feedback ask wait for advisory publication at all? (e) ~~the ORPHEUS-122 sr-only composite-score question~~ — resolved by ORPHEUS-128 (removed, part 2); (f) growth factors + the ORPHEUS-112 metric-definition caveat.
 
 ---
 
@@ -101,7 +109,7 @@ Baselines: backend pytest **460 green**, frontend vitest **124 green**, `tsc -b`
 
 ## State of the repo right now
 
-Seven commits since the 08-05 handoff, all pushed; the wrap commit is the only thing left to push after this file lands:
+Nine commits since the 08-05 handoff (incl. the part-1 wrap `4cacb15`), all pushed; the part-2 wrap commit is the only thing left to push after this file lands:
 
 - **`4fe4a19`** (08-06) — handoff bookkeeping: 123 closed
 - **`1d4e7e5`** (08-07) — ORPHEUS-124: self-service account deletion
@@ -110,6 +118,7 @@ Seven commits since the 08-05 handoff, all pushed; the wrap commit is the only t
 - **`d076e7f`** (08-11) — the caveat-1 sign-in fix
 - **`1cbcefb`** (08-11) — branded consent links
 - **`d5efb26`** (08-11) — legal-page chrome + scroll reset
+- **`dabe77c`** (08-11 part 2) — ORPHEUS-128: remove hidden numeric scores from the report page
 
 **Prod config beyond source:** the four DNS records in the Vercel zone (unchanged), and migration 020 applied to the cloud DB via the Supabase MCP (2026-08-11) — the migrations folder and the live schema agree today; caveat 3 is about keeping it that way.
 
