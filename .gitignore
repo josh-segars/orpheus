@@ -61,3 +61,7 @@ rubric_consistency_results_*.json
 create_beta_survey_form.gs
 outputs/
 .claude/settings.local.json
+
+# Session-transfer scratch: files staged for manual deletion (the device
+# bridge cannot unlink; deletions become moves into this folder).
+_to_delete/
