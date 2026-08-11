@@ -37,15 +37,19 @@ Decisions (current assumptions, accepted):
 """
 
 import json
+import logging
 from typing import NamedTuple
 
 from anthropic import Anthropic
 
 from backend.agents import DEFAULT_MODEL
+from backend.agents import prose_numbers
 from backend.ingestion.types import ZipData
 from backend.models.scoring import ScoringStageOutput
 from backend.models.quality import DataQualityReport, IssueSeverity
 from backend.scoring import config, registry
+
+logger = logging.getLogger(__name__)
 
 
 class NarrativeResult(NamedTuple):
@@ -1604,8 +1608,25 @@ async def generate_narratives(
         quality_section=quality_section,
     )
 
+    # ORPHEUS-121: whitelist of citable figures, built once per call from
+    # the same values the prompt renders. Checked after every successful
+    # parse; a fabricated aggregate ("2,394 total comments" against inputs
+    # that contain no such value) rejects the response.
+    number_whitelist = prose_numbers.build_number_whitelist(
+        scoring_output, milestone_targets
+    )
+
     last_error = None
+    violation_note: str | None = None
     for attempt in range(1 + max_retries):
+        # On a prose-number retry the violation is appended to the user
+        # message — an identical-prompt retry is near-worthless against a
+        # model that confidently invented a number once; naming the
+        # offending figures lets it self-correct.
+        content = (
+            user_message if violation_note is None
+            else user_message + violation_note
+        )
         response = client.messages.create(
             model=model,
             # Bumped from 4096 to 8192 in ORPHEUS-21. Post-ORPHEUS-68 the
@@ -1616,19 +1637,55 @@ async def generate_narratives(
             # (ORPHEUS-65 ran the larger high-score payload clean).
             max_tokens=8192,
             system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
+            messages=[{"role": "user", "content": content}],
         )
 
         raw_text = response.content[0].text
 
         try:
-            return _parse_narrative_response(
+            result = _parse_narrative_response(
                 raw_text, scoring_output, milestone_targets
             )
         except (json.JSONDecodeError, ValueError, KeyError) as e:
             last_error = e
             if attempt < max_retries:
                 continue
+            break
+
+        # ORPHEUS-121: prose-number gate. Mode resolved at call time —
+        # block (default) rejects and retries; log records and serves;
+        # off skips. Rejected tokens are always logged for the audit trail.
+        gate_mode = prose_numbers.prose_gate_mode()
+        if gate_mode != "off":
+            violations = prose_numbers.find_unwhitelisted_numbers(
+                prose_numbers.client_facing_strings(result), number_whitelist
+            )
+            if violations:
+                summary = prose_numbers.describe_violations(violations)
+                logger.warning(
+                    "Prose-number gate (%s): unwhitelisted figures — %s",
+                    gate_mode, summary,
+                )
+                if gate_mode == "block":
+                    last_error = ValueError(
+                        "Prose quotes figures not present in the report "
+                        f"inputs: {summary}"
+                    )
+                    if attempt < max_retries:
+                        violation_note = (
+                            "\n\n## Correction required\n\n"
+                            "Your previous response quoted numbers that do "
+                            "not appear anywhere in the data above: "
+                            f"{summary}. Every figure you cite must be a "
+                            "value explicitly provided in this prompt — do "
+                            "not derive, total, or recall numbers from "
+                            "context. Regenerate the full response, quoting "
+                            "only figures present in the input."
+                        )
+                        continue
+                    break
+
+        return result
 
     raise ValueError(
         f"Failed to parse narrative response after {1 + max_retries} attempts. "

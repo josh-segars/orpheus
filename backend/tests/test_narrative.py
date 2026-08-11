@@ -2030,3 +2030,277 @@ class TestCoveragePromptBlock:
         output.forward_brief_data.coverage = None
         text = _format_forward_brief_data(output)
         assert "DATA COVERAGE" not in text
+
+
+# ============================================================
+# Test: Prose-number gate (ORPHEUS-121)
+# ============================================================
+#
+# The narrative agent fabricates aggregates: job 301ba109 said "2,394 total
+# comments" (2,437 parsed / 2,365 usable / 1,815 in-window — matches
+# nothing) and "331 posts in the archive" (actual 341). Every number in
+# client-facing prose must match a whitelisted measured value, a computed
+# milestone, or a structural allowance; otherwise generation rejects and
+# retries with the violation fed back into the prompt.
+
+import re  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
+
+from backend.agents.narrative import generate_narratives  # noqa: E402
+from backend.agents import prose_numbers as pn  # noqa: E402
+from backend.models.scoring import (  # noqa: E402
+    DateExclusion as _DateExclusion,
+    ForwardBriefCoverage as _ForwardBriefCoverage,
+)
+
+
+def _narrative_result_with(sections: dict[str, str]) -> NarrativeResult:
+    base = {
+        "Profile Signal Clarity": "The profile reads clearly.",
+        "Behavioral Signal Strength": "Activity is consistent.",
+        "Behavioral Signal Quality": "Engagement is substantive.",
+        "Profile-Behavior Alignment": "Content matches identity.",
+    }
+    base.update(sections)
+    return NarrativeResult(
+        sections=base,
+        summaries={k: "Short teaser." for k in base},
+        sub_dimensions={},
+        cheat_sheet=None,
+    )
+
+
+def _output_301ba109_shaped():
+    """Fixture mirroring the 301ba109 inputs the fabrications violated:
+    341 posts in the archive (112 in window), 2,437 comment rows with 72
+    unparseable."""
+    output = _make_scoring_output()
+    output.forward_brief_data.coverage = _ForwardBriefCoverage(
+        posts_in_window=112,
+        top_posts_covered=50,
+        shares=_DateExclusion(unparseable=0, empty=0, total_rows=341),
+        comments=_DateExclusion(unparseable=72, empty=0, total_rows=2437),
+        reactions=_DateExclusion(unparseable=0, empty=0, total_rows=4389),
+    )
+    return output
+
+
+class TestProseNumberGate:
+
+    def _whitelist(self, output=None):
+        return pn.build_number_whitelist(output or _output_301ba109_shaped())
+
+    def test_fabricated_comment_count_rejected(self):
+        """Regression pin: 2,394 matches no input value → violation."""
+        result = _narrative_result_with({
+            "Behavioral Signal Strength":
+                "You recorded 2,394 total comments across the archive.",
+        })
+        violations = pn.find_unwhitelisted_numbers(
+            pn.client_facing_strings(result), self._whitelist()
+        )
+        assert ("section:Behavioral Signal Strength", "2,394") in violations
+
+    def test_fabricated_post_count_rejected(self):
+        """Regression pin: 331 (actual 341) → violation."""
+        result = _narrative_result_with({
+            "Behavioral Signal Strength": "With 331 posts in the archive.",
+        })
+        violations = pn.find_unwhitelisted_numbers(
+            pn.client_facing_strings(result), self._whitelist()
+        )
+        assert ("section:Behavioral Signal Strength", "331") in violations
+
+    def test_labelled_inputs_pass(self):
+        """Every figure the prompt hands the agent is quotable — including
+        comma-grouped, rounded, and percentage renderings."""
+        result = _narrative_result_with({
+            "Behavioral Signal Strength": (
+                "Your 12,500 followers grew by 45.2 per week; your content "
+                "reached 285,000 unique members, averaging 3,200 impressions "
+                "per post at a 4.2% engagement rate. Your top post earned "
+                "28,500 impressions. Of 2,437 comment rows, 72 were excluded; "
+                "341 posts sit in the archive, 112 inside the window."
+            ),
+        })
+        violations = pn.find_unwhitelisted_numbers(
+            pn.client_facing_strings(result), self._whitelist()
+        )
+        assert violations == []
+
+    def test_structural_numbers_pass(self):
+        result = _narrative_result_with({
+            "Profile Signal Clarity": (
+                "Over the next 90 days, commit to 2 posts a week — a 0-5 "
+                "scale rating improves with 3 to 5 substantive comments. "
+                "By 2027 the trailing 365 days will reflect it. The top 50 "
+                "posts cap applies."
+            ),
+        })
+        violations = pn.find_unwhitelisted_numbers(
+            pn.client_facing_strings(result), self._whitelist()
+        )
+        assert violations == []
+
+    def test_word_numbers_never_tokenize(self):
+        result = _narrative_result_with({
+            "Profile Signal Clarity":
+                "Post three to five times a week for twelve weeks.",
+        })
+        violations = pn.find_unwhitelisted_numbers(
+            pn.client_facing_strings(result), self._whitelist()
+        )
+        assert violations == []
+
+    def test_composite_is_not_whitelisted(self):
+        """ORPHEUS-128: bands are the client display. The agent quoting the
+        composite (77.6 in this fixture) is a rejection we want."""
+        result = _narrative_result_with({
+            "Profile Signal Clarity": "Your composite score of 77.6 shows.",
+        })
+        violations = pn.find_unwhitelisted_numbers(
+            pn.client_facing_strings(result), self._whitelist()
+        )
+        assert ("section:Profile Signal Clarity", "77.6") in violations
+
+    def test_suppressed_sub_dim_raw_value_not_whitelisted(self):
+        """Engagement Quality Score's raw value (480) is suppressed from the
+        prompt (ORPHEUS-117) — quoting it must reject."""
+        result = _narrative_result_with({
+            "Behavioral Signal Quality": "A raw value of 480 was recorded.",
+        })
+        violations = pn.find_unwhitelisted_numbers(
+            pn.client_facing_strings(result), self._whitelist()
+        )
+        assert ("section:Behavioral Signal Quality", "480") in violations
+
+    def test_registered_sub_dim_raw_values_pass(self):
+        result = _narrative_result_with({
+            "Behavioral Signal Strength":
+                "You logged 750 outbound actions, 120 recently, across 42 "
+                "active weeks at 1.5 posts per week, with 1,200 engagement "
+                "actions.",
+        })
+        violations = pn.find_unwhitelisted_numbers(
+            pn.client_facing_strings(result), self._whitelist()
+        )
+        assert violations == []
+
+    def test_milestone_targets_whitelisted(self):
+        from backend.agents.narrative import build_milestone_targets
+
+        output = _output_301ba109_shaped()
+        targets = build_milestone_targets(output)
+        whitelist = pn.build_number_whitelist(output, targets)
+        for t in targets:
+            for tok in re.findall(r"\d[\d,]*(?:\.\d+)?", t.value):
+                normalized = tok.replace(",", "")
+                if "." in normalized:
+                    normalized = normalized.rstrip("0").rstrip(".")
+                assert normalized in whitelist, (t.key, tok)
+
+    def test_gate_mode_defaults_to_block(self, monkeypatch):
+        monkeypatch.delenv("PROSE_NUMBER_GATE", raising=False)
+        assert pn.prose_gate_mode() == "block"
+        monkeypatch.setenv("PROSE_NUMBER_GATE", "log")
+        assert pn.prose_gate_mode() == "log"
+        monkeypatch.setenv("PROSE_NUMBER_GATE", "nonsense")
+        assert pn.prose_gate_mode() == "block"
+
+
+class _FakeAnthropicClient:
+    """Queue of raw response texts; records every create() call's kwargs."""
+
+    def __init__(self, texts: list[str]) -> None:
+        self._texts = list(texts)
+        self.calls: list[dict] = []
+        self.messages = SimpleNamespace(create=self._create)
+
+    def _create(self, **kwargs):
+        self.calls.append(kwargs)
+        text = self._texts.pop(0)
+        return SimpleNamespace(content=[SimpleNamespace(text=text)])
+
+
+def _full_response_json(strength_narrative: str) -> str:
+    """A parse-valid response: 4 sections + the 13 sub-dim entries, no
+    cheat_sheet (absent is valid — best-effort posture)."""
+    return json.dumps({
+        "sections": [
+            {"section": "Profile Signal Clarity", "summary": "Clear teaser.",
+             "narrative": "The profile presents a clear identity. " * 5},
+            {"section": "Behavioral Signal Strength", "summary": "Teaser.",
+             "narrative": strength_narrative},
+            {"section": "Behavioral Signal Quality", "summary": "Teaser.",
+             "narrative": "Engagement quality holds up well. " * 5},
+            {"section": "Profile-Behavior Alignment", "summary": "Teaser.",
+             "narrative": "Content matches the declared identity. " * 5},
+        ],
+        "sub_dimensions": _valid_sub_dim_payload(),
+    })
+
+
+class TestProseNumberGateInGenerateNarratives:
+    """The gate wired into the retry loop: reject → violation fed back into
+    the next attempt's user message → clean retry returns."""
+
+    @pytest.mark.asyncio
+    async def test_fabrication_rejected_then_clean_retry_returns(self, monkeypatch):
+        monkeypatch.delenv("PROSE_NUMBER_GATE", raising=False)
+        fabricated = _full_response_json(
+            "You made 2,394 total comments across the archive. " * 3
+        )
+        clean = _full_response_json(
+            "Your activity shows 12,500 followers growing steadily. " * 3
+        )
+        client = _FakeAnthropicClient([fabricated, clean])
+        output = _output_301ba109_shaped()
+
+        result = await generate_narratives(client, output, questionnaire={})
+
+        assert "12,500 followers" in result.sections["Behavioral Signal Strength"]
+        assert len(client.calls) == 2
+        # The retry's user message carries the correction block naming the
+        # offending token.
+        retry_message = client.calls[1]["messages"][0]["content"]
+        first_message = client.calls[0]["messages"][0]["content"]
+        assert "Correction required" in retry_message
+        assert "2,394" in retry_message
+        assert "Correction required" not in first_message
+
+    @pytest.mark.asyncio
+    async def test_persistent_fabrication_exhausts_retries(self, monkeypatch):
+        monkeypatch.delenv("PROSE_NUMBER_GATE", raising=False)
+        fabricated = _full_response_json("Exactly 2,394 total comments. " * 3)
+        client = _FakeAnthropicClient([fabricated] * 3)
+        output = _output_301ba109_shaped()
+
+        with pytest.raises(ValueError) as exc:
+            await generate_narratives(client, output, questionnaire={})
+
+        assert "2,394" in str(exc.value)
+        assert len(client.calls) == 3
+
+    @pytest.mark.asyncio
+    async def test_log_mode_serves_despite_violation(self, monkeypatch):
+        monkeypatch.setenv("PROSE_NUMBER_GATE", "log")
+        fabricated = _full_response_json("Exactly 2,394 total comments. " * 3)
+        client = _FakeAnthropicClient([fabricated])
+        output = _output_301ba109_shaped()
+
+        result = await generate_narratives(client, output, questionnaire={})
+
+        assert "2,394" in result.sections["Behavioral Signal Strength"]
+        assert len(client.calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_clean_first_attempt_single_call(self, monkeypatch):
+        monkeypatch.delenv("PROSE_NUMBER_GATE", raising=False)
+        clean = _full_response_json("Steady, consistent posting. " * 5)
+        client = _FakeAnthropicClient([clean])
+        output = _output_301ba109_shaped()
+
+        result = await generate_narratives(client, output, questionnaire={})
+
+        assert result.sections
+        assert len(client.calls) == 1
