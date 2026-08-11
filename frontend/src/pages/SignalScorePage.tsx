@@ -10,6 +10,7 @@ import type {
   SignalBand,
   SubDimensionScore,
 } from '../types/scoring'
+import type { Methodology } from '../types/job'
 import wavesDissonant from '../assets/wave-1-dissonant.png'
 import wavesUntuned from '../assets/wave-2-untuned.png'
 import wavesTuning from '../assets/wave-3-tuning.png'
@@ -176,6 +177,14 @@ export function SignalScorePage() {
           the retired Forward Brief, rendered as data instead of prose. */}
       {scoring.forward_brief_data && (
         <MetricsBlock data={scoring.forward_brief_data} />
+      )}
+
+      {/* Methodology (ORPHEUS-114 f) — how the score is computed: dimension
+          weights + the band ladder, from the job's own config snapshot.
+          Generic scale facts only; never the client's own numbers
+          (ORPHEUS-128 — bands are the composite display). */}
+      {job.result.methodology && (
+        <MethodologyBlock methodology={job.result.methodology} />
       )}
 
       {/* Actions — flow is Signal Score → Cheat Sheet (ORPHEUS-69).
@@ -598,6 +607,66 @@ function MetricsBlock({ data }: { data: ForwardBriefData }) {
               </span>
               <span className="metrics-signal-label">{s.label}</span>
               <span className="sr-only">{s.on ? ' — yes' : ' — no'}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  )
+}
+
+/**
+ * Methodology section (ORPHEUS-114 f) — "How this score is computed".
+ * Renders the dimension weights and the signal-band ladder from the job's
+ * own config snapshot (per-run accurate; thresholds are PROVISIONAL and can
+ * move between calibrations). Semantic list markup, no aria-hidden content,
+ * no sr-only numerics; every number shown is a generic scale fact (35%,
+ * "65–79") — never the client's composite or contributions (ORPHEUS-128).
+ */
+function MethodologyBlock({ methodology }: { methodology: Methodology }) {
+  const bands = methodology.bands
+  const bandRange = (i: number): string => {
+    const next = bands[i + 1]
+    return next ? `${bands[i].min}–${next.min - 1}` : `${bands[i].min}+`
+  }
+  return (
+    <section className="methodology-block" aria-label="How this score is computed">
+      <div className="section-header signal-section-header">
+        <div className="section-eyebrow">Methodology</div>
+        <h2 className="section-title">How This Score Is Computed</h2>
+      </div>
+      <p className="methodology-intro">
+        Your report blends four dimensions into one composite, each weighted
+        by how strongly it shapes what LinkedIn&rsquo;s systems can read from
+        a profile. The composite maps to a signal band &mdash; the band is
+        what your report shows.
+      </p>
+      <div className="methodology-section">
+        <div className="metrics-section-label">Dimension Weights</div>
+        <ul className="methodology-weights">
+          {Object.entries(methodology.dimension_weights).map(
+            ([name, weight]) => (
+              <li key={name} className="methodology-weight-row">
+                <span className="methodology-weight-name">
+                  {dimDisplayName(name)}
+                </span>
+                <span className="methodology-weight-value">
+                  {Math.round(weight * 100)}%
+                </span>
+              </li>
+            ),
+          )}
+        </ul>
+      </div>
+      <div className="methodology-section">
+        <div className="metrics-section-label">Signal Bands</div>
+        <ul className="methodology-bands">
+          {bands.map((band, i) => (
+            <li key={band.name} className="methodology-band-row">
+              <span className={`band-pill band-pill-static methodology-band-pill-${i + 1}`}>
+                {band.name}
+              </span>
+              <span className="methodology-band-range">{bandRange(i)}</span>
             </li>
           ))}
         </ul>

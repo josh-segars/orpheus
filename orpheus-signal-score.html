@@ -326,6 +326,48 @@
     }
     .detail-section-list li { margin-bottom: 4px; }
 
+    /* ── Methodology block (ORPHEUS-114 f) ──────────────────────
+       "How this score is computed": dimension weights + the band
+       ladder. Generic scale facts only (ORPHEUS-128). */
+    .methodology-block {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      width: 100%;
+      margin-bottom: 40px;
+    }
+    .methodology-intro {
+      font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--text-muted);
+      margin: 0;
+    }
+    .methodology-section { display: flex; flex-direction: column; gap: 12px; }
+    .methodology-weights, .methodology-bands {
+      list-style: none; margin: 0; padding: 0;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .methodology-weight-row, .methodology-band-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; padding: 10px 16px;
+      border: 1px solid var(--border); border-radius: 10px;
+    }
+    .methodology-weight-name {
+      font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
+      font-size: 15px; color: var(--text-body);
+    }
+    .methodology-weight-value, .methodology-band-range {
+      font-family: 'Orpheus Serif', 'Orpheus Serif Fallback', serif;
+      font-size: 17px; font-variation-settings: 'opsz' 20;
+      color: var(--text-strong); font-variant-numeric: tabular-nums;
+    }
+    .methodology-band-pill-1 { background-color: var(--pip-1); }
+    .methodology-band-pill-2 { background-color: var(--pip-2); }
+    .methodology-band-pill-3 { background-color: var(--pip-3); }
+    .methodology-band-pill-4 { background-color: var(--pip-4); }
+    .methodology-band-pill-5 { background-color: var(--pip-5); }
+
     /* ── Metrics block (ORPHEUS-69) ─────────────────────────────
        Structured forward_brief_data at the bottom of the page. Two
        sections: "Audience & Reach" (stat grid + breakdown lists) and
@@ -867,6 +909,36 @@
           <li class="metrics-signal"><span class="metrics-signal-mark" aria-hidden="true"><svg class="metrics-signal-icon" viewBox="0 0 24 24" width="14" height="14"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg></span><span class="metrics-signal-label">Services section listed</span></li>
           <li class="metrics-signal metrics-signal-on"><span class="metrics-signal-mark" aria-hidden="true"><svg class="metrics-signal-icon" viewBox="0 0 24 24" width="14" height="14"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.42z" fill="currentColor"/></svg></span><span class="metrics-signal-label">Contact info visible</span></li>
           <li class="metrics-signal metrics-signal-on"><span class="metrics-signal-mark" aria-hidden="true"><svg class="metrics-signal-icon" viewBox="0 0 24 24" width="14" height="14"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.42z" fill="currentColor"/></svg></span><span class="metrics-signal-label">Engagement spread across your network</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Methodology (ORPHEUS-114 f) — how the score is computed: dimension
+         weights + the band ladder. Generic scale facts only; never the
+         client's own numbers (ORPHEUS-128). -->
+    <section class="methodology-block" aria-label="How this score is computed">
+      <div class="section-header signal-section-header">
+        <div class="section-eyebrow">Methodology</div>
+        <h2 class="section-title">How This Score Is Computed</h2>
+      </div>
+      <p class="methodology-intro">Your report blends four dimensions into one composite, each weighted by how strongly it shapes what LinkedIn&rsquo;s systems can read from a profile. The composite maps to a signal band &mdash; the band is what your report shows.</p>
+      <div class="methodology-section">
+        <div class="metrics-section-label">Dimension Weights</div>
+        <ul class="methodology-weights">
+          <li class="methodology-weight-row"><span class="methodology-weight-name">Profile Clarity</span><span class="methodology-weight-value">35%</span></li>
+          <li class="methodology-weight-row"><span class="methodology-weight-name">Signal Strength</span><span class="methodology-weight-value">30%</span></li>
+          <li class="methodology-weight-row"><span class="methodology-weight-name">Signal Quality</span><span class="methodology-weight-value">20%</span></li>
+          <li class="methodology-weight-row"><span class="methodology-weight-name">Alignment</span><span class="methodology-weight-value">15%</span></li>
+        </ul>
+      </div>
+      <div class="methodology-section">
+        <div class="metrics-section-label">Signal Bands</div>
+        <ul class="methodology-bands">
+          <li class="methodology-band-row"><span class="band-pill methodology-band-pill-1">Dissonant</span><span class="methodology-band-range">0&ndash;24</span></li>
+          <li class="methodology-band-row"><span class="band-pill methodology-band-pill-2">Untuned</span><span class="methodology-band-range">25&ndash;44</span></li>
+          <li class="methodology-band-row"><span class="band-pill methodology-band-pill-3">Tuning</span><span class="methodology-band-range">45&ndash;64</span></li>
+          <li class="methodology-band-row"><span class="band-pill methodology-band-pill-4">Tuned</span><span class="methodology-band-range">65&ndash;79</span></li>
+          <li class="methodology-band-row"><span class="band-pill methodology-band-pill-5">Resonant</span><span class="methodology-band-range">80+</span></li>
         </ul>
       </div>
     </section>

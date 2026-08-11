@@ -615,7 +615,9 @@ async def get_job(
             is_advisory, is_published = _report_publication(supabase, job_id)
             gated = is_advisory and not is_published
         if not gated:
-            payload = _build_result_payload(supabase, job_id)
+            payload = _build_result_payload(
+                supabase, job_id, config_snapshot=row.get("config_snapshot")
+            )
 
     return Job(
         id=str(row["id"]),
@@ -908,7 +910,9 @@ def _report_publication(supabase, job_id: str) -> tuple[bool, bool]:
     return (is_advisory, is_published)
 
 
-def _build_result_payload(supabase, job_id: str) -> dict | None:
+def _build_result_payload(
+    supabase, job_id: str, config_snapshot: dict | None = None
+) -> dict | None:
     """Join scoring + narratives rows into the JobResultPayload dict.
 
     Returns None when the worker hasn't finished writing either half —
@@ -1021,6 +1025,51 @@ def _build_result_payload(supabase, job_id: str) -> dict | None:
         # denormalized jobs.data_limited flag instead). Absent/unparseable
         # → data_limited: false with no notices (graceful, never 500s).
         "quality": _build_quality_summary(supabase, job_id),
+        # ORPHEUS-114 (f): generic methodology facts for the client-facing
+        # "How this score is computed" block. Riding the payload means a
+        # gated in-review viewer (ORPHEUS-120) never receives it.
+        "methodology": _build_methodology(config_snapshot),
+    }
+
+
+def _build_methodology(config_snapshot: dict | None) -> dict:
+    """Generic scoring-methodology facts for the report page (ORPHEUS-114 f).
+
+    Sourced from the job's own config_snapshot (reproducibility — the
+    weights/bands that actually scored this job), falling back to the live
+    scoring config for pre-snapshot rows, marked `"snapshot": false`.
+
+    Deliberately EXCLUDES the client's composite and the per-dimension
+    contributions/normalized scores: weights and band thresholds are
+    generic scale facts; contributions are the client's own numbers, and
+    surfacing them here would reintroduce the ORPHEUS-128 leak through the
+    methodology door. Bands render as `{name, min}` ladders — half-open
+    lower bounds per ORPHEUS-95; the stored `hi` is documentation only.
+    """
+    from backend.scoring import config as scoring_config
+
+    weights: dict | None = None
+    bands_raw: dict | None = None
+    snapshot_used = False
+    if isinstance(config_snapshot, dict):
+        scoring_block = config_snapshot.get("scoring") or {}
+        weights = scoring_block.get("dimension_weights")
+        bands_raw = scoring_block.get("bands")
+        snapshot_used = bool(weights and bands_raw)
+
+    if not snapshot_used:
+        weights = dict(scoring_config.DIMENSION_WEIGHTS)
+        bands_raw = {name: [lo, hi] for name, lo, hi in scoring_config.SIGNAL_BANDS}
+
+    bands = sorted(
+        ({"name": name, "min": bounds[0]} for name, bounds in bands_raw.items()),
+        key=lambda b: b["min"],
+    )
+    return {
+        "dimension_weights": weights,
+        "bands": bands,
+        "formula": "weighted_normalized_sum",
+        "snapshot": snapshot_used,
     }
 
 

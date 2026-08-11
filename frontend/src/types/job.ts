@@ -17,10 +17,31 @@ export interface ReportQuality {
   notices: string[]
 }
 
+/** ORPHEUS-114 (f): one rung of the band ladder — half-open lower bounds. */
+export interface MethodologyBand {
+  name: string
+  min: number
+}
+
+/**
+ * ORPHEUS-114 (f): generic scoring-methodology facts for the report page's
+ * "How this score is computed" section. Deliberately carries no
+ * client-specific numbers (bands are the client display, ORPHEUS-128).
+ * `snapshot` is true when sourced from the job's own config_snapshot.
+ */
+export interface Methodology {
+  dimension_weights: Record<string, number>
+  bands: MethodologyBand[]
+  formula: string
+  snapshot: boolean
+}
+
 export interface JobResultPayload {
   scoring: ScoringStageOutput
   narratives: Narratives
   quality?: ReportQuality
+  /** ORPHEUS-114 (f) — absent on cached pre-114 responses. */
+  methodology?: Methodology
 }
 
 export interface Job {

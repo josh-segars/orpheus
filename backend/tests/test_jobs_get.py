@@ -1197,3 +1197,88 @@ async def test_pending_job_skips_publication_check():
     assert result.result is None
     assert result.in_review is False
     assert fake.tables_queried == ["jobs"]
+
+
+# --------------------------------------------------------------------------- #
+# Methodology block — ORPHEUS-114 (f)
+# --------------------------------------------------------------------------- #
+#
+# Generic scoring facts (dimension weights + band ladder) ride the result
+# payload for the report page's "How this score is computed" section. The
+# client's own composite/contributions are deliberately excluded — bands
+# are the client display (ORPHEUS-128), and a gated in-review viewer never
+# receives the payload at all.
+
+
+def _snapshot_fixture() -> dict[str, Any]:
+    return {
+        "version_label": "2026-Q2",
+        "scoring": {
+            "dimension_weights": {
+                "Profile Signal Clarity": 0.35,
+                "Behavioral Signal Strength": 0.30,
+                "Behavioral Signal Quality": 0.20,
+                "Profile-Behavior Alignment": 0.15,
+            },
+            "bands": {
+                "Dissonant": [0, 24],
+                "Untuned": [25, 44],
+                "Tuning": [45, 64],
+                "Tuned": [65, 79],
+                "Resonant": [80, 100],
+            },
+        },
+    }
+
+
+class TestMethodologyBlock:
+
+    def test_built_from_snapshot(self):
+        m = jobs_router._build_methodology(_snapshot_fixture())
+        assert m["snapshot"] is True
+        assert m["dimension_weights"]["Profile Signal Clarity"] == 0.35
+        assert [b["name"] for b in m["bands"]] == [
+            "Dissonant", "Untuned", "Tuning", "Tuned", "Resonant",
+        ]
+        assert [b["min"] for b in m["bands"]] == [0, 25, 45, 65, 80]
+        assert m["formula"] == "weighted_normalized_sum"
+
+    def test_falls_back_to_live_config_without_snapshot(self):
+        m = jobs_router._build_methodology(None)
+        assert m["snapshot"] is False
+        assert sum(m["dimension_weights"].values()) == pytest.approx(1.0)
+        assert len(m["bands"]) == 5
+
+    def test_excludes_client_numbers(self):
+        """No composite, contribution, or normalized score sneaks in —
+        the ORPHEUS-128 leak must not reopen through the methodology door."""
+        m = jobs_router._build_methodology(_snapshot_fixture())
+        assert set(m.keys()) == {
+            "dimension_weights", "bands", "formula", "snapshot",
+        }
+
+    @pytest.mark.asyncio
+    async def test_payload_carries_methodology_from_job_snapshot(self):
+        job_row = _job_row(
+            job_id=JOB_1_ID, client_id=CLIENT_1_ID, status_value="complete"
+        )
+        job_row["config_snapshot"] = _snapshot_fixture()
+        fake = FakeSupabase(
+            responses=[
+                {"data": [job_row]},
+                {"data": [_report_row()]},
+                {"data": [_score_row(job_id=JOB_1_ID)]},
+                {"data": _minimal_dim_narratives()},
+            ]
+        )
+
+        with _patch_supabase(fake):
+            result = await jobs_router.get_job(
+                job_id=JOB_1_ID,
+                roles=_client_roles(CLIENT_1_ID),
+            )
+
+        assert result.result is not None
+        methodology = result.result["methodology"]
+        assert methodology["snapshot"] is True
+        assert methodology["dimension_weights"]["Behavioral Signal Strength"] == 0.30
