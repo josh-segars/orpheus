@@ -7,10 +7,13 @@
  *
  * Coverage scope:
  *   - hero renders the composite band label as the h1
- *   - the composite numeric score is sr-only inside the hero (a11y)
+ *   - no numeric score reaches the page in ANY modality — visible text or
+ *     assistive-tech strings (ORPHEUS-128 retires the ORPHEUS-51 sr-only
+ *     numeric fallback; bands are the display in every modality)
  *   - hero img uses the band-keyed waveform asset (band → asset mapping)
  *   - each dimension renders its name + a band-pills row with a
- *     dimension-aware aria-label (sr-only fallback for color-only band)
+ *     dimension-aware, band-only aria-label (text fallback for the
+ *     color-only pill row)
  *   - sub-dimension rows render with their 5-pip rating displays and
  *     expand to reveal Summary / Best Practices / Improvements
  *   - dimension cards show the always-visible summary with a read more /
@@ -82,19 +85,29 @@ function renderSignalScorePage() {
 describe('SignalScorePage', () => {
   it('renders the composite band as the hero headline', () => {
     renderSignalScorePage()
-    // The h1's accessible name now combines the visible band label with
-    // the sr-only composite-score string; match the visible substring.
+    // Post-ORPHEUS-128 the h1's accessible name is the band label alone —
+    // the sr-only composite-score suffix is retired.
     expect(
-      screen.getByRole('heading', { level: 1, name: /Tuning/i }),
+      screen.getByRole('heading', { level: 1, name: /^Tuning$/i }),
     ).toBeInTheDocument()
   })
 
-  it('exposes the composite numeric score as sr-only text inside the hero heading (ORPHEUS-51)', () => {
+  it('exposes no numeric score anywhere on the page — visible or assistive (ORPHEUS-128)', () => {
     renderSignalScorePage()
-    // demoJob.scoring.scored_dimensions.composite is 58.
-    expect(
-      screen.getByText(/composite score 58 of 100/i),
-    ).toBeInTheDocument()
+    // Retargets the ORPHEUS-51 sr-only pin: the composite (fixture value
+    // 58) and per-dimension scores must not render in any modality.
+    // Bands-not-numbers is the product principle; numeric scores are
+    // advisor/admin-only.
+    expect(screen.queryByText(/composite score/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/of 100/i)).not.toBeInTheDocument()
+    // No sr-only or aria-label string may smuggle a score either — sweep
+    // every aria-label in the rendered tree for score phrasing.
+    for (const el of Array.from(document.querySelectorAll('[aria-label]'))) {
+      expect(el.getAttribute('aria-label')).not.toMatch(/score|of 100/i)
+    }
+    // The hero heading carries no hidden text beyond the band label.
+    const h1 = screen.getByRole('heading', { level: 1 })
+    expect(h1.textContent?.trim()).toBe('Tuning')
   })
 
   it('uses the band-keyed waveform asset for the hero (ORPHEUS-51)', () => {
@@ -122,13 +135,14 @@ describe('SignalScorePage', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('renders a 5-pill band row per dimension with a score-aware aria-label (ORPHEUS-51)', () => {
+  it('renders a 5-pill band row per dimension with a band-only aria-label (ORPHEUS-128)', () => {
     renderSignalScorePage()
     // Each dimension card's band-pills group has aria-label of the form
-    // "<DimName> band: <Band> — score <N> of 100"; match the shape
+    // "<DimName> band: <Band>" — no numeric score clause (ORPHEUS-128
+    // dropped the ORPHEUS-51 "— score N of 100" suffix); match the shape
     // rather than any specific dimension name.
     const groups = screen.getAllByRole('group', {
-      name: /band: .* score \d+ of 100/i,
+      name: /band: (Dissonant|Untuned|Tuning|Tuned|Resonant)$/,
     })
     expect(groups).toHaveLength(4)
   })
@@ -148,9 +162,8 @@ describe('SignalScorePage', () => {
       'Profile-Behavior Alignment': 'Alignment',
     }
     for (const dim of demoJob.result!.scoring.scored_dimensions.dimensions) {
-      const numeric = Math.round(dim.normalized_score * 100)
       const expected = new RegExp(
-        `^${displayNames[dim.name] ?? dim.name} band: ${dim.band} — score ${numeric} of 100$`,
+        `^${displayNames[dim.name] ?? dim.name} band: ${dim.band}$`,
       )
       expect(
         screen.getByRole('group', { name: expected }),

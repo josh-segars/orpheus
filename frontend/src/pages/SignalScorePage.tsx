@@ -88,7 +88,7 @@ export function SignalScorePage() {
   }
 
   const { scoring, narratives } = job.result
-  const { composite, band, dimensions } = scoring.scored_dimensions
+  const { band, dimensions } = scoring.scored_dimensions
 
   // Advisor viewing a client who isn't themselves → name the subject.
   const isAdvisor = Boolean(sessionRolesQuery.data?.advisor_id)
@@ -106,9 +106,11 @@ export function SignalScorePage() {
     <main className="main-interior signal-main">
       {/* Score hero — contained inside main-interior. Band-keyed waveform
           is a billboard that overflows the column horizontally and bleeds
-          vertically into the dimensions area below. Composite score
-          number is sr-only; the band label is the only visible composite
-          display per the "clients see bands" product principle. */}
+          vertically into the dimensions area below. The band label is the
+          only composite display in every modality — visually AND to
+          assistive tech — per the "clients see bands" product principle
+          (ORPHEUS-128; the ORPHEUS-51 sr-only numeric fallback is retired).
+          Numeric scores stay advisor/admin-only. */}
       <section className="score-hero" aria-labelledby="score-hero-band">
         <img
           src={bandToWaveform(band)}
@@ -120,9 +122,6 @@ export function SignalScorePage() {
           <div className="score-hero-eyebrow">{heroEyebrow}</div>
           <h1 className="score-hero-band" id="score-hero-band">
             {band}
-            <span className="sr-only">
-              {' '}&mdash; composite score {Math.round(composite)} of 100
-            </span>
           </h1>
         </div>
       </section>
@@ -242,11 +241,7 @@ function DimensionCard({ dimension, narrative }: DimensionCardProps) {
     <div className="dimension-card">
       <div className="dim-header">
         <div className="dim-name">{displayName}</div>
-        <BandPillRow
-          activeBand={dimBand}
-          dimensionName={displayName}
-          score={dimension.normalized_score}
-        />
+        <BandPillRow activeBand={dimBand} dimensionName={displayName} />
       </div>
       {summary ? (
         <>
@@ -292,17 +287,16 @@ function DimensionCard({ dimension, narrative }: DimensionCardProps) {
 interface BandPillRowProps {
   activeBand: SignalBand
   dimensionName: string
-  /** Dimension's normalized 0-1 score; surfaced to assistive tech alongside the band label. */
-  score: number
 }
 
-function BandPillRow({ activeBand, dimensionName, score }: BandPillRowProps) {
-  const numericScore = Math.round(score * 100)
+function BandPillRow({ activeBand, dimensionName }: BandPillRowProps) {
+  // Band only, no numeric score — clients see bands in every modality
+  // (ORPHEUS-128). The aria-label keeps the color-only pill row accessible.
   return (
     <div
       className="band-pills"
       role="group"
-      aria-label={`${dimensionName} band: ${activeBand} — score ${numericScore} of 100`}
+      aria-label={`${dimensionName} band: ${activeBand}`}
     >
       {BAND_ORDER.map((b) => (
         <span
