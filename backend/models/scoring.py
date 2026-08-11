@@ -192,7 +192,15 @@ class QualitativeFlags(BaseModel):
 
 
 class ForwardBriefQuantitative(BaseModel):
-    """Quantitative computed fields for Forward Brief."""
+    """Quantitative computed fields for Forward Brief.
+
+    ORPHEUS-114: the operand fields (post_count, total_impressions,
+    total_engagements, net_new_followers, followers_weeks_observed,
+    discovery_impressions) persist the values the derived ratios are built
+    from, so the reconciliation identities can be checked against stored
+    data and prose figures trace to labelled inputs. All Optional — rows
+    written before ORPHEUS-114 lack them and must keep validating.
+    """
     # From XLSX
     follower_count: Optional[int] = None
     follower_growth_rate: Optional[float] = Field(
@@ -234,12 +242,85 @@ class ForwardBriefQuantitative(BaseModel):
     zero_post_week_pct: Optional[float] = Field(
         None, description="Proportion of weeks with zero posts"
     )
+    # --- ORPHEUS-114 operands (persisted so identities are checkable) ---
+    post_count: Optional[int] = Field(
+        None,
+        description=(
+            "Original posts published inside the trailing 365-day scoring "
+            "window (ZIP Shares.csv, parseable dates only) — the "
+            "avg_impressions_per_post denominator (ORPHEUS-112)"
+        ),
+    )
+    total_impressions: Optional[int] = Field(
+        None,
+        description="sum(ENGAGEMENT daily impressions) over the export window",
+    )
+    total_engagements: Optional[int] = Field(
+        None,
+        description="sum(ENGAGEMENT daily engagements) over the export window",
+    )
+    net_new_followers: Optional[int] = Field(
+        None,
+        description="sum(FOLLOWERS daily new_followers) over the export window",
+    )
+    followers_weeks_observed: Optional[float] = Field(
+        None,
+        description=(
+            "len(FOLLOWERS daily rows) / 7 — the follower_growth_rate "
+            "denominator"
+        ),
+    )
+    discovery_impressions: Optional[int] = Field(
+        None,
+        description=(
+            "DISCOVERY sheet impressions summary cell — LinkedIn's own "
+            "total, cross-checked against total_impressions by the "
+            "reconciliation gate (was parsed-but-unread before ORPHEUS-114)"
+        ),
+    )
+
+
+class DateExclusion(BaseModel):
+    """Per-file date-quality coverage: how many rows scoring can't use.
+
+    ORPHEUS-114 (d). `unparseable` counts rows with a non-empty Date that
+    no known format parses (the same predicate scoring uses, via the shared
+    DATE_FORMATS); `empty` counts rows with no Date at all — previously
+    dropped silently before any count was taken. `total_rows` is every row
+    parsed from the CSV.
+    """
+    unparseable: int = 0
+    empty: int = 0
+    total_rows: int = 0
+
+
+class ForwardBriefCoverage(BaseModel):
+    """Coverage/exclusion facts about the metrics (ORPHEUS-114 d).
+
+    Formalizes what the narrative previously surfaced ad hoc ("72
+    unparseable comment dates"; per-post reach exists for only the top-50
+    analytics cap). Rendered as labelled prompt lines so coverage claims in
+    prose trace to inputs, and whitelisted by the ORPHEUS-121 prose gate.
+    """
+    posts_in_window: int = 0
+    top_posts_covered: int = Field(
+        0,
+        description=(
+            "len(XLSX TOP POSTS rows) — LinkedIn caps the export at 50, so "
+            "per-post reach exists for at most 50 of posts_in_window posts"
+        ),
+    )
+    shares: DateExclusion = DateExclusion()
+    comments: DateExclusion = DateExclusion()
+    reactions: DateExclusion = DateExclusion()
 
 
 class ForwardBriefData(BaseModel):
     """Complete Forward Brief structured data output."""
     quantitative: ForwardBriefQuantitative
     qualitative_flags: QualitativeFlags
+    # ORPHEUS-114 (d): None on rows written before the coverage facts existed.
+    coverage: Optional[ForwardBriefCoverage] = None
 
 
 # --- Top-level scoring stage output ---

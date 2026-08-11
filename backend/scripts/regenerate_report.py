@@ -63,6 +63,7 @@ from backend.agents.narrative import (  # noqa: E402
 from backend.ingestion.types import XlsxData, ZipData  # noqa: E402
 from backend.models.quality import DataQualityReport  # noqa: E402
 from backend.scoring.engine import resolve_ref_date, run_scoring  # noqa: E402
+from backend.scoring.reconciliation import check_reconciliation  # noqa: E402
 from backend.workers.processor import (  # noqa: E402
     _merge_dim_summaries,
     _merge_sub_dim_narratives,
@@ -289,6 +290,12 @@ def verify(scoring_output, narrative_result, milestone_targets, stale_values) ->
     """Return a list of failures; empty means the acceptance test passed."""
     failures: list[str] = []
     strings = _client_facing_strings(scoring_output, narrative_result)
+
+    # ORPHEUS-114: an in-place regeneration is held to the same
+    # reconciliation identities the worker enforces pre-persist.
+    for r in check_reconciliation(scoring_output.forward_brief_data):
+        if not r.ok:
+            failures.append(f"reconciliation {r.name}: {r.detail}")
 
     # ORPHEUS-117: no internal scoring unit reaches the client.
     for where, text in strings:

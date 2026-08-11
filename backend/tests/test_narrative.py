@@ -1917,3 +1917,116 @@ class TestParseCheatSheet:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestForwardBriefRegistry:
+    """ORPHEUS-114 (a+b): the forward-brief prompt block renders from the
+    metric registry — one owner for labels, units, and denominators across
+    both labelling layers — and the registry stays in step with the model."""
+
+    def test_every_rendered_field_has_a_spec(self):
+        """Every scalar ForwardBriefQuantitative field the prompt renders
+        must be registered; every registered key must be a real field."""
+        from backend.models.scoring import ForwardBriefQuantitative
+        from backend.scoring import registry
+
+        model_fields = set(ForwardBriefQuantitative.model_fields)
+        assert set(registry.FORWARD_BRIEF_METRICS) <= model_fields
+
+    def test_rates_carry_explicit_denominators(self):
+        """Bug C: every rate metric states its denominator."""
+        from backend.scoring import registry
+
+        for key in (
+            "follower_growth_rate",
+            "avg_impressions_per_post",
+            "avg_engagement_rate",
+        ):
+            assert registry.FORWARD_BRIEF_METRICS[key].denominator, key
+
+    def test_prompt_lines_carry_denominator_language(self):
+        """The rendered prompt line for each rate names what it divides by —
+        '17.5/week' and '875/day' can no longer sit side by side as peers."""
+        output = _make_scoring_output()
+        text = _format_forward_brief_data(output)
+        assert "original posts published in the scoring window" in text
+        assert "weeks observed in the analytics export" in text
+
+    def test_operands_render_when_present(self):
+        output = _make_scoring_output()
+        q = output.forward_brief_data.quantitative
+        q.total_impressions = 319511
+        q.net_new_followers = 913
+        q.post_count = 112
+        text = _format_forward_brief_data(output)
+        assert "Total impressions: 319,511" in text
+        assert "Net new followers: 913" in text
+        assert "Original posts in scoring window: 112" in text
+
+    def test_operands_omitted_when_absent(self):
+        """Pre-114 stored rows lack operands — no line renders for them."""
+        output = _make_scoring_output()
+        text = _format_forward_brief_data(output)
+        assert "Total impressions:" not in text
+        assert "Net new followers:" not in text
+
+    def test_suppressed_partition_still_owned_by_registry(self):
+        """SUPPRESSED_RAW_VALUE_SUB_DIMS now lives in the registry; the
+        narrative adapter must stay identical to it."""
+        from backend.scoring import registry
+
+        assert QUANTITATIVE_METRIC_LABELS is registry.SUB_DIM_METRICS
+        assert SUPPRESSED_RAW_VALUE_SUB_DIMS is registry.SUPPRESSED_SUB_DIMS
+
+    def test_every_registered_metric_names_a_golden_source(self):
+        """ORPHEUS-114 (a): the golden-source map — every metric states
+        which file/sheet owns it."""
+        from backend.scoring import registry
+
+        all_specs = list(registry.FORWARD_BRIEF_METRICS.values()) + list(
+            registry.SUB_DIM_METRICS.values()
+        )
+        for spec in all_specs:
+            assert spec.source, spec.key
+            assert ("XLSX" in spec.source) or ("ZIP" in spec.source) or (
+                "total_impressions" in spec.source
+            ), f"{spec.key} source doesn't name its owning file: {spec.source}"
+
+
+class TestCoveragePromptBlock:
+    """ORPHEUS-114 (d): coverage facts render as labelled prompt lines so
+    coverage claims in prose trace to inputs the agent was handed."""
+
+    def _output_with_coverage(self):
+        from backend.models.scoring import DateExclusion, ForwardBriefCoverage
+
+        output = _make_scoring_output()
+        output.forward_brief_data.coverage = ForwardBriefCoverage(
+            posts_in_window=112,
+            top_posts_covered=50,
+            shares=DateExclusion(unparseable=0, empty=0, total_rows=341),
+            comments=DateExclusion(unparseable=72, empty=0, total_rows=2437),
+            reactions=DateExclusion(unparseable=0, empty=0, total_rows=4389),
+        )
+        return output
+
+    def test_top_50_cap_rendered(self):
+        text = _format_forward_brief_data(self._output_with_coverage())
+        assert "DATA COVERAGE" in text
+        assert "top 50 of 112 posts" in text
+        assert "caps per-post data at 50" in text
+
+    def test_exclusion_counts_rendered_with_totals(self):
+        """The '72 unparseable comment dates' figure the narrative used to
+        surface ad hoc is now a labelled input line."""
+        text = _format_forward_brief_data(self._output_with_coverage())
+        assert "Comments excluded for missing/unparseable dates: 72 of 2,437" in text
+        # Files with nothing excluded stay silent — no zero-noise lines.
+        assert "Posts excluded" not in text
+        assert "Reactions excluded" not in text
+
+    def test_no_coverage_block_on_pre_114_rows(self):
+        output = _make_scoring_output()
+        output.forward_brief_data.coverage = None
+        text = _format_forward_brief_data(output)
+        assert "DATA COVERAGE" not in text

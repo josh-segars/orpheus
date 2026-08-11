@@ -45,7 +45,7 @@ from backend.agents import DEFAULT_MODEL
 from backend.ingestion.types import ZipData
 from backend.models.scoring import ScoringStageOutput
 from backend.models.quality import DataQualityReport, IssueSeverity
-from backend.scoring import config
+from backend.scoring import config, registry
 
 
 class NarrativeResult(NamedTuple):
@@ -393,77 +393,15 @@ The cheat_sheet object is required. priorities must contain exactly 5 entries. r
 # User prompt construction
 # ============================================================
 
-class MetricLabel(NamedTuple):
-    """Human-meaningful presentation of a quantitative sub-dim's raw_value.
-
-    ORPHEUS-117. `raw_value` is an internal scoring input, not a client-facing
-    figure — but for five of the six quantitative sub-dims it happens to be a
-    real, countable quantity (actions, weeks, posts/week). What was missing was
-    the unit and the measurement window: the prompt fed a bare `raw value: 6316`
-    and the agent, having no unit to cite, invented one ("6,316 activity units")
-    and quoted it to the client.
-
-    Each entry states the unit and window explicitly so the agent has correct
-    language to reuse verbatim. Windows are sourced from `scoring.config` where
-    a constant exists, so a threshold change can't silently desync the label
-    from the measurement.
-    """
-    unit: str          # what one unit of raw_value is, as a plural noun phrase
-    window: str        # the measurement window, as a trailing prepositional phrase
-    decimals: int = 0  # display precision
-    gloss: str | None = None  # optional clarification of what is being counted
-
-
-# Keyed on the canonical SubDimensionScore.name (NOT the frontend display name).
-QUANTITATIVE_METRIC_LABELS: dict[str, MetricLabel] = {
-    "History Depth": MetricLabel(
-        unit="outbound actions",
-        window="over the trailing 12 months",
-        gloss="original posts, comments, and reactions combined",
-    ),
-    "Recency": MetricLabel(
-        unit="outbound actions",
-        window=f"in the trailing {config.DIM2_RECENCY_WINDOW_DAYS} days",
-        gloss="original posts, comments, and reactions combined",
-    ),
-    "Continuity": MetricLabel(
-        unit="active weeks",
-        window=f"out of the trailing {config.DIM2_CONTINUITY_WINDOW_WEEKS} weeks",
-        gloss=(
-            f"a week counts as active at {config.DIM2_CONTINUITY_ACTIVE_THRESHOLD} "
-            "or more posts or comments"
-        ),
-    ),
-    "Posting Presence": MetricLabel(
-        unit="original posts per week",
-        window=(
-            "averaged over the trailing "
-            f"{config.DIM2_CONTINUITY_WINDOW_WEEKS} weeks"
-        ),
-        decimals=1,
-    ),
-    "Outbound Engagement Presence": MetricLabel(
-        unit="engagement actions",
-        window="over the trailing 12 months",
-        gloss="comments and reactions on other people's content",
-    ),
-}
-
-# Quantitative sub-dims whose raw_value is a composite internal index with no
-# human unit, deliberately withheld from the prompt (ORPHEUS-117 decision
-# [Josh, 2026-07-27]). Engagement Quality Score is
-# `substantive_comments + (reactions x 0.25)` — a weighted blend that reads as
-# a precise measurement ("a raw value of 2,382.2") while measuring nothing the
-# client can act on. The agent grounds on the band/score alone here, exactly as
-# it already does for the seven rubric sub-dims.
-#
-# Listed explicitly rather than merely left out of the map so the omission is
-# legible as a decision. Either way the rendering below fails closed: an
-# unregistered raw_value never reaches the prompt, so a future quantitative
-# sub-dim must register here or in QUANTITATIVE_METRIC_LABELS to be cited.
-SUPPRESSED_RAW_VALUE_SUB_DIMS: frozenset[str] = frozenset({
-    "Engagement Quality Score",
-})
+# ORPHEUS-114: the metric registry (backend/scoring/registry.py) is now the
+# single owner of units, windows, denominators, and golden sources for BOTH
+# labelling layers — the sub-dim measured-signal lines below (ORPHEUS-117)
+# and the forward-brief block (previously hand-written f-strings). These two
+# names are kept as thin adapters so the ORPHEUS-117 call sites and test
+# pins survive; the fail-closed rendering behavior is unchanged: an
+# unregistered quantitative sub-dim's raw_value never reaches the prompt.
+QUANTITATIVE_METRIC_LABELS = registry.SUB_DIM_METRICS
+SUPPRESSED_RAW_VALUE_SUB_DIMS = registry.SUPPRESSED_SUB_DIMS
 
 
 def _format_measured_signal(name: str, raw_value: float) -> str | None:
@@ -744,28 +682,31 @@ def _format_scored_dimensions(scoring_output: ScoringStageOutput) -> str:
 
 
 def _format_forward_brief_data(scoring_output: ScoringStageOutput) -> str:
-    """Format Forward Brief data as readable text for the prompt."""
+    """Format Forward Brief data as readable text for the prompt.
+
+    ORPHEUS-114: scalar metric lines are rendered from the registry
+    (backend/scoring/registry.py), so every value carries its label, unit,
+    and — for rates — its explicit denominator (bug C: "17.5/week" and
+    "875/day" used to sit side by side as peers). The agent quotes these
+    lines to the client verbatim, which is exactly why they must be right
+    at the source.
+    """
     fb = scoring_output.forward_brief_data
     q = fb.quantitative
     flags = fb.qualitative_flags
     parts = []
 
+    def _metric_lines(specs) -> list[str]:
+        lines = []
+        for spec in specs:
+            value = getattr(q, spec.key, None)
+            if value is not None:
+                lines.append(registry.format_metric_line(spec, value))
+        return lines
+
     # Quantitative — XLSX
     parts.append("=== REACH & AUDIENCE (from Analytics) ===")
-    if q.follower_count is not None:
-        parts.append(f"Followers: {q.follower_count:,}")
-    if q.follower_growth_rate is not None:
-        parts.append(f"New followers/week: {q.follower_growth_rate:.1f}")
-    if q.unique_members_reached is not None:
-        parts.append(f"Unique members reached: {q.unique_members_reached:,}")
-    if q.avg_impressions_per_post is not None:
-        # Thousands separator: post-ORPHEUS-112 this runs to four figures on
-        # an active profile, and the agent quotes it to the client verbatim.
-        parts.append(f"Avg impressions/post: {q.avg_impressions_per_post:,.0f}")
-    if q.avg_engagement_rate is not None:
-        parts.append(f"Avg engagement rate: {q.avg_engagement_rate:.1%}")
-    if q.top_post_impressions is not None:
-        parts.append(f"Top post impressions: {q.top_post_impressions:,}")
+    parts.extend(_metric_lines(registry.REACH_METRICS))
 
     if q.audience_seniority:
         parts.append("")
@@ -792,12 +733,34 @@ def _format_forward_brief_data(scoring_output: ScoringStageOutput) -> str:
     # Quantitative — ZIP
     parts.append("")
     parts.append("=== BEHAVIORAL DEPTH (from Archive) ===")
-    if q.avg_comment_length_words is not None:
-        parts.append(f"Avg comment length: {q.avg_comment_length_words:.1f} words")
-    if q.longest_posting_gap_weeks is not None:
-        parts.append(f"Longest posting gap: {q.longest_posting_gap_weeks} weeks")
-    if q.zero_post_week_pct is not None:
-        parts.append(f"Zero-post weeks: {q.zero_post_week_pct:.0%}")
+    parts.extend(_metric_lines(registry.BEHAVIORAL_METRICS))
+
+    # ORPHEUS-114 (d): coverage/exclusion facts as labelled inputs, so
+    # prose like "72 unparseable comment dates" or "per-post reach exists
+    # for only the top 50 posts" traces to a line the agent was handed
+    # rather than an aggregate it worked out (the ORPHEUS-121 failure
+    # class). These counts also join the prose-number whitelist.
+    cov = fb.coverage
+    if cov is not None:
+        parts.append("")
+        parts.append("=== DATA COVERAGE ===")
+        if cov.top_posts_covered and cov.posts_in_window:
+            parts.append(
+                f"Per-post reach data: top {cov.top_posts_covered} of "
+                f"{cov.posts_in_window} posts in the scoring window "
+                "(the analytics export caps per-post data at 50)"
+            )
+        for label, exc in (
+            ("posts", cov.shares),
+            ("comments", cov.comments),
+            ("reactions", cov.reactions),
+        ):
+            excluded = exc.unparseable + exc.empty
+            if excluded and exc.total_rows:
+                parts.append(
+                    f"{label.capitalize()} excluded for missing/unparseable "
+                    f"dates: {excluded:,} of {exc.total_rows:,} in the archive"
+                )
 
     # Qualitative flags
     parts.append("")

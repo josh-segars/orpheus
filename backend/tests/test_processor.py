@@ -288,3 +288,87 @@ class TestStageScoringPhotoOverride:
             .visual_professionalism.photo_present
             is False
         )
+
+
+class TestStageScoringReconciliationGate:
+    """ORPHEUS-114: stage_scoring blocks on failed reconciliation identities
+    BEFORE the scores upsert — a bad derived metric never persists."""
+
+    _DIM1 = {n: 3 for n in [
+        "Headline Clarity", "About Section Coherence",
+        "Experience Description Quality", "Profile Completeness",
+        "Identity Clarity",
+    ]}
+    _DIM4 = {"Topic Consistency": 3, "Profile-Content Coherence": 3}
+
+    def _rigged_output(self):
+        """Real scoring output with a bug-A-shaped inconsistency injected."""
+        import asyncio
+        from datetime import date
+
+        from backend.ingestion.types import ZipData
+        from backend.scoring.engine import run_scoring
+
+        output = run_scoring(
+            zip_data=ZipData(),
+            xlsx_data=None,
+            dim1_rubric_scores=self._DIM1,
+            dim4_rubric_scores=self._DIM4,
+            ref_date=date(2026, 7, 18),
+        )
+        q = output.forward_brief_data.quantitative
+        q.avg_impressions_per_post = 875.4   # the ORPHEUS-112 bad value
+        q.post_count = 112
+        q.total_impressions = 319511
+        return output
+
+    def test_reconciliation_failure_raises_and_skips_upsert(self):
+        import asyncio
+        from unittest.mock import MagicMock, patch
+
+        import pytest as _pytest
+
+        from backend.ingestion.types import ZipData
+        from backend.scoring.reconciliation import ReconciliationError
+        from backend.workers import processor as processor_mod
+
+        supabase = MagicMock()
+        rigged = self._rigged_output()
+
+        with patch.object(processor_mod, "run_scoring", return_value=rigged):
+            with _pytest.raises(ReconciliationError) as exc:
+                asyncio.run(
+                    stage_scoring(
+                        zip_data=ZipData(),
+                        xlsx_data=None,
+                        dim1_scores=self._DIM1,
+                        dim4_scores=self._DIM4,
+                        job_id="job-recon",
+                        supabase=supabase,
+                    )
+                )
+
+        # The error names the failed identity — it becomes error_message.
+        assert "impressions_per_post_x_post_count" in str(exc.value)
+        # Nothing was persisted: no scores upsert, no config_snapshot write.
+        supabase.table.assert_not_called()
+
+    def test_clean_output_still_persists(self):
+        import asyncio
+        from unittest.mock import MagicMock
+
+        from backend.ingestion.types import ZipData
+
+        supabase = MagicMock()
+        result = asyncio.run(
+            stage_scoring(
+                zip_data=ZipData(),  # no operands → identities skip → pass
+                xlsx_data=None,
+                dim1_scores=self._DIM1,
+                dim4_scores=self._DIM4,
+                job_id="job-clean",
+                supabase=supabase,
+            )
+        )
+        assert result is not None
+        supabase.table.assert_any_call("scores")

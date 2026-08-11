@@ -41,7 +41,7 @@ from backend.ingestion.types import (
 )
 from backend.models.scoring import (
     SignalBand, ConfidenceLabel, ScoringMethod, SubDimensionScore,
-    DimensionScore,
+    DimensionScore, ForwardBriefData,
 )
 
 
@@ -1073,3 +1073,145 @@ class TestRunScoring:
         assert "scored_dimensions" in parsed
         assert "forward_brief_data" in parsed
         assert parsed["scored_dimensions"]["band"] in [b.value for b in SignalBand]
+
+
+class TestForwardBriefOperandsAndCoverage:
+    """ORPHEUS-114: the engine persists the operands its derived ratios are
+    built from (post_count, total_impressions, total_engagements,
+    net_new_followers, followers_weeks_observed, discovery_impressions) and
+    the coverage facts (top-50 cap, per-file date exclusions), so the
+    reconciliation identities are checkable against stored data."""
+
+    @staticmethod
+    def _shares(dates):
+        return [
+            ShareItem(date=d.isoformat(), share_commentary="post body")
+            for d in dates
+        ]
+
+    def _golden_inputs(self):
+        """Andrew-shaped window: 112 posts, 319,511 impressions, 8,655
+        engagements, +913 net followers over 365 daily rows."""
+        ref = date(2026, 7, 18)
+        engagement = [
+            EngagementRow(
+                date=(ref - timedelta(days=i)).isoformat(),
+                impressions=(319511 - 364) if i == 0 else 1,
+                engagements=(8655 - 364) if i == 0 else 1,
+            )
+            for i in range(365)
+        ]
+        followers_rows = [
+            FollowersRow(
+                date=(ref - timedelta(days=i)).isoformat(),
+                new_followers=(913 - 364) if i == 0 else 1,
+            )
+            for i in range(365)
+        ]
+        posts = [ref - timedelta(days=i * 3) for i in range(112)]
+        xlsx = XlsxData(
+            discovery=DiscoverySummary(
+                period="7/21/2025 - 7/20/2026",
+                impressions=319511,
+                members_reached=67063,
+            ),
+            engagement=engagement,
+            followers=FollowersData(total_followers=3212, rows=followers_rows),
+            top_posts=[
+                TopPostItem(post_url=f"url{i}", impressions=18479 - i * 300)
+                for i in range(50)
+            ],
+        )
+        zip_data = ZipData(
+            shares=self._shares(posts),
+            raw_behavioral_row_counts={
+                "shares": 341,      # 341 in archive, 112 in window
+                "comments": 2437,   # the 301ba109 totals
+                "reactions": 4389,
+            },
+        )
+        return zip_data, xlsx, ref
+
+    def test_operands_persisted(self):
+        zip_data, xlsx, ref = self._golden_inputs()
+        fb = compute_forward_brief(zip_data, xlsx, ref)
+        q = fb.quantitative
+        assert q.post_count == 112
+        assert q.total_impressions == 319511
+        assert q.total_engagements == 8655
+        assert q.net_new_followers == 913
+        assert q.followers_weeks_observed == round(365 / 7.0, 2)
+        assert q.discovery_impressions == 319511
+
+    def test_operands_reconcile_with_derived_metrics(self):
+        """The engine's own output must pass its own reconciliation gate."""
+        from backend.scoring.reconciliation import check_reconciliation
+
+        zip_data, xlsx, ref = self._golden_inputs()
+        fb = compute_forward_brief(zip_data, xlsx, ref)
+        failures = [r for r in check_reconciliation(fb) if not r.ok]
+        assert failures == []
+
+    def test_coverage_populated(self):
+        zip_data, xlsx, ref = self._golden_inputs()
+        fb = compute_forward_brief(zip_data, xlsx, ref)
+        cov = fb.coverage
+        assert cov is not None
+        assert cov.posts_in_window == 112
+        assert cov.top_posts_covered == 50  # the analytics top-50 cap
+        # 341 raw rows in the archive; the fixture retains only the 112
+        # in-window ShareItems, so the remaining 229 read as empty-date
+        # drops (the parser's only drop condition).
+        assert cov.shares.total_rows == 341
+        assert cov.shares.empty == 341 - 112
+        assert cov.shares.unparseable == 0
+
+    def test_no_xlsx_still_populates_zip_side(self):
+        zip_data, _, ref = self._golden_inputs()
+        fb = compute_forward_brief(zip_data, None, ref)
+        q = fb.quantitative
+        assert q.post_count == 112
+        assert q.total_impressions is None
+        assert fb.coverage is not None
+        assert fb.coverage.top_posts_covered == 0
+
+    def test_old_jsonb_shape_still_validates(self):
+        """Rows persisted before ORPHEUS-114 lack operands and coverage —
+        they must keep deserializing (all new fields Optional)."""
+        old_shape = {
+            "quantitative": {
+                "follower_count": 3212,
+                "avg_impressions_per_post": 2852.8,
+            },
+            "qualitative_flags": {
+                "viewer_actor_affinity": {
+                    "concentrated": False, "top_targets": [],
+                },
+                "visual_professionalism": {"photo_present": True},
+                "engagement_invitation": {
+                    "services_present": False,
+                    "contact_visible": False,
+                    "cta_in_about": False,
+                },
+            },
+        }
+        fb = ForwardBriefData.model_validate(old_shape)
+        assert fb.quantitative.post_count is None
+        assert fb.coverage is None
+
+    def test_unparseable_dates_counted_with_scorings_own_predicate(self):
+        """Coverage counts unparseable via the shared DATE_FORMATS — the
+        same predicate scoring uses to exclude rows."""
+        ref = date(2026, 7, 18)
+        shares = self._shares([ref - timedelta(days=i) for i in range(10)])
+        shares.append(ShareItem(date="not-a-date", share_commentary="x"))
+        zip_data = ZipData(
+            shares=shares,
+            raw_behavioral_row_counts={"shares": 13},  # 2 empty-date dropped
+        )
+        fb = compute_forward_brief(zip_data, None, ref)
+        cov = fb.coverage
+        assert cov.shares.total_rows == 13
+        assert cov.shares.unparseable == 1
+        assert cov.shares.empty == 2  # 13 raw - 11 retained
+        assert cov.posts_in_window == 10  # unparseable row doesn't count

@@ -401,11 +401,19 @@ def parse_archive_filename(
 
 
 def _check_date_parseable(date_str: str) -> bool:
-    """Check if a date string is parseable by the scoring engine."""
+    """Check if a date string is parseable by the scoring engine.
+
+    Uses the shared DATE_FORMATS (ORPHEUS-114) so "unparseable" here always
+    matches what `engine._parse_date` will actually reject — the two lists
+    used to be duplicated and could drift, silently changing the exclusion
+    counts without changing scoring.
+    """
     if not date_str or not date_str.strip():
         return False
     from datetime import datetime
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%m/%d/%Y", "%b %d, %Y", "%B %d, %Y"):
+
+    from backend.scoring.dates import DATE_FORMATS
+    for fmt in DATE_FORMATS:
         try:
             datetime.strptime(date_str.strip(), fmt)
             return True
@@ -421,12 +429,14 @@ def _find_date_range(items_with_dates: list[dict]) -> tuple[str | None, str | No
     Returns (earliest, latest) as ISO strings, or (None, None).
     """
     from datetime import datetime
+
+    from backend.scoring.dates import DATE_FORMATS
     dates = []
     for item in items_with_dates:
         d = item.get("date", "")
         if not d:
             continue
-        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%m/%d/%Y", "%b %d, %Y", "%B %d, %Y"):
+        for fmt in DATE_FORMATS:
             try:
                 dates.append(datetime.strptime(d.strip(), fmt).date())
                 break
@@ -719,6 +729,13 @@ def parse_zip(source: bytes | str | Path) -> tuple[ZipData, DataQualityReport]:
             shares=_parse_shares(share_rows),
             comments=_parse_comments(comment_rows),
             reactions=_parse_reactions(reaction_rows),
+            # ORPHEUS-114 (d): raw counts before empty-Date rows are dropped,
+            # so coverage facts can state the export's true row totals.
+            raw_behavioral_row_counts={
+                "shares": len(share_rows),
+                "comments": len(comment_rows),
+                "reactions": len(reaction_rows),
+            },
         )
 
         # Record counts

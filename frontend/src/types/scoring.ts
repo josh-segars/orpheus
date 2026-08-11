@@ -120,11 +120,36 @@ export interface ForwardBriefQuantitative {
   avg_comment_length_words: number | null
   longest_posting_gap_weeks: number | null
   zero_post_week_pct: number | null
+  /** ORPHEUS-114 operands — absent on rows scored before the registry. */
+  post_count?: number | null
+  total_impressions?: number | null
+  total_engagements?: number | null
+  net_new_followers?: number | null
+  followers_weeks_observed?: number | null
+  discovery_impressions?: number | null
+}
+
+/** ORPHEUS-114 (d): per-file date-quality coverage. */
+export interface DateExclusion {
+  unparseable: number
+  empty: number
+  total_rows: number
+}
+
+/** ORPHEUS-114 (d): coverage/exclusion facts about the metrics. */
+export interface ForwardBriefCoverage {
+  posts_in_window: number
+  top_posts_covered: number
+  shares: DateExclusion
+  comments: DateExclusion
+  reactions: DateExclusion
 }
 
 export interface ForwardBriefData {
   quantitative: ForwardBriefQuantitative
   qualitative_flags: QualitativeFlags
+  /** ORPHEUS-114 (d) — absent on rows scored before the coverage facts. */
+  coverage?: ForwardBriefCoverage | null
 }
 
 export interface ScoringStageOutput {

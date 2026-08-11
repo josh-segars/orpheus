@@ -20,6 +20,8 @@ from backend.models.scoring import (
     SubDimensionScore,
     DimensionScore,
     ScoredDimensions,
+    DateExclusion,
+    ForwardBriefCoverage,
     ForwardBriefData,
     ForwardBriefQuantitative,
     QualitativeFlags,
@@ -30,6 +32,7 @@ from backend.models.scoring import (
     ScoringStageOutput,
 )
 from backend.scoring import config
+from backend.scoring.dates import DATE_FORMATS
 
 
 # ============================================================
@@ -39,17 +42,15 @@ from backend.scoring import config
 def _parse_date(date_str: str) -> date | None:
     """Parse a date string from LinkedIn export data.
 
-    LinkedIn uses several formats across CSVs:
-    - "2025-03-17 11:12:43" (ISO datetime — Shares, Comments, Reactions)
-    - "2025-03-17" (ISO date)
-    - "03/17/2025" (US)
-    - "Mar 17, 2025"
+    Formats live in backend/scoring/dates.py (ORPHEUS-114) — shared with
+    the quality validator's `_check_date_parseable` so "unparseable" means
+    the same thing to the exclusion counts as it does to scoring.
     Returns None if unparseable.
     """
     if not date_str or not date_str.strip():
         return None
     date_str = date_str.strip()
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%m/%d/%Y", "%b %d, %Y", "%B %d, %Y"):
+    for fmt in DATE_FORMATS:
         try:
             return datetime.strptime(date_str, fmt).date()
         except ValueError:
@@ -571,7 +572,57 @@ def compute_forward_brief(
     """
     quant = _compute_forward_brief_quantitative(zip_data, xlsx_data, ref_date)
     flags = _compute_qualitative_flags(zip_data, photo_present_override)
-    return ForwardBriefData(quantitative=quant, qualitative_flags=flags)
+    coverage = _compute_coverage(zip_data, xlsx_data, ref_date)
+    return ForwardBriefData(
+        quantitative=quant, qualitative_flags=flags, coverage=coverage
+    )
+
+
+def _compute_coverage(
+    zip_data: ZipData,
+    xlsx_data: XlsxData | None,
+    ref_date: date,
+) -> ForwardBriefCoverage:
+    """Coverage/exclusion facts about the metrics (ORPHEUS-114 d).
+
+    Formalizes what the narrative previously surfaced ad hoc: the top-50
+    per-post reach cap (len(TOP POSTS) vs posts in window was computed
+    nowhere) and the per-file date exclusions. Uses the same `_parse_date`
+    predicate scoring uses — via the shared DATE_FORMATS — so "unparseable"
+    here can't drift from what scoring actually excludes.
+
+    Empty-Date rows are dropped by the CSV parsers before ZipData exists,
+    so the empty counts come from `zip_data.raw_behavioral_row_counts`
+    (recorded at parse time since ORPHEUS-114). On stored data ingested
+    before that field existed, raw counts fall back to the retained counts
+    and empty reads 0 — accurate as far as it goes.
+    """
+    cutoff = ref_date - timedelta(days=365)
+    posts_in_window = sum(
+        1
+        for item in zip_data.shares
+        if (d := _parse_date(item.date)) and d >= cutoff
+    )
+
+    raw_counts = zip_data.raw_behavioral_row_counts or {}
+
+    def _exclusion(key: str, items) -> DateExclusion:
+        retained = len(items)
+        unparseable = sum(1 for it in items if _parse_date(it.date) is None)
+        total = raw_counts.get(key, retained)
+        return DateExclusion(
+            unparseable=unparseable,
+            empty=max(0, total - retained),
+            total_rows=total,
+        )
+
+    return ForwardBriefCoverage(
+        posts_in_window=posts_in_window,
+        top_posts_covered=len(xlsx_data.top_posts) if xlsx_data else 0,
+        shares=_exclusion("shares", zip_data.shares),
+        comments=_exclusion("comments", zip_data.comments),
+        reactions=_exclusion("reactions", zip_data.reactions),
+    )
 
 
 def _compute_forward_brief_quantitative(
@@ -598,6 +649,10 @@ def _compute_forward_brief_quantitative(
         if d and d >= cutoff:
             post_dates.append(d)
     posts_in_window = len(post_dates)
+    # ORPHEUS-114: persist the denominator so the reconciliation identity
+    # (avg_impressions_per_post × post_count ≈ total_impressions) is
+    # checkable against stored data, and prose figures trace to inputs.
+    fields["post_count"] = posts_in_window
 
     # --- From XLSX ---
     if xlsx_data:
@@ -607,14 +662,25 @@ def _compute_forward_brief_quantitative(
             total_new = sum(r.new_followers for r in xlsx_data.followers.rows)
             weeks = len(xlsx_data.followers.rows) / 7.0  # rows are daily
             fields["follower_growth_rate"] = round(total_new / weeks, 1) if weeks > 0 else 0.0
+            # ORPHEUS-114 operands for identity 2.
+            fields["net_new_followers"] = total_new
+            fields["followers_weeks_observed"] = round(weeks, 2)
 
         # Discovery summary
         fields["unique_members_reached"] = xlsx_data.discovery.members_reached or None
+        # ORPHEUS-114: LinkedIn's own impressions total from the DISCOVERY
+        # sheet — parsed since day one but never read until now. The
+        # reconciliation gate cross-checks it against sum(ENGAGEMENT
+        # dailies): the two come from the same export and should agree.
+        fields["discovery_impressions"] = xlsx_data.discovery.impressions or None
 
         # Engagement metrics
         if xlsx_data.engagement:
             total_impressions = sum(r.impressions for r in xlsx_data.engagement)
             total_engagements = sum(r.engagements for r in xlsx_data.engagement)
+            # ORPHEUS-114 operands for identities 1 and 3.
+            fields["total_impressions"] = total_impressions
+            fields["total_engagements"] = total_engagements
             # ORPHEUS-112: divide by posts published in the window, taken from
             # the ZIP. The ENGAGEMENT sheet is one row per calendar DAY and
             # carries no post count at all, so the previous denominator —

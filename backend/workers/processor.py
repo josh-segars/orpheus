@@ -29,6 +29,7 @@ from backend.ingestion.zip_parser import parse_zip
 from backend.ingestion.xlsx_parser import parse_xlsx
 from backend.scoring.engine import run_scoring, resolve_ref_date
 from backend.scoring.config import build_config_snapshot
+from backend.scoring.reconciliation import assert_reconciled
 from backend.agents.rubric import score_rubrics
 from backend.agents.narrative import generate_narratives, NarrativeResult
 from backend.models.scoring import ScoringStageOutput
@@ -229,6 +230,15 @@ async def stage_scoring(
     logger.info(
         f"[{job_id}] Score: {sd.composite:.1f} / 100 — {sd.band.value}"
     )
+
+    # ORPHEUS-114: reconciliation gate — derived metrics must reconcile to
+    # their operands BEFORE anything is persisted. A failure raises
+    # ReconciliationError, which rides the worker's normal retry loop;
+    # deterministic input means all attempts fail the same way, so the job
+    # lands `failed` with every failed identity in error_message and no
+    # scores row is ever written. Blocking + flagging per the ticket:
+    # failures block, every identity's outcome is logged.
+    assert_reconciled(result.forward_brief_data, job_id=job_id)
 
     # Save scores to database (upsert for retry safety)
     supabase.table("scores").upsert({

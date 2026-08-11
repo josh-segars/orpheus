@@ -118,6 +118,12 @@ class ZipData(BaseModel):
     shares: list[ShareItem] = []
     comments: list[CommentItem] = []
     reactions: list[ReactionItem] = []
+    # ORPHEUS-114 (d): raw CSV row counts for shares/comments/reactions,
+    # recorded BEFORE the parsers drop empty-Date rows — those drops were
+    # previously counted nowhere, so coverage facts couldn't state how many
+    # rows the export actually carried. Keys: "shares", "comments",
+    # "reactions". Empty dict on data ingested before ORPHEUS-114.
+    raw_behavioral_row_counts: dict[str, int] = {}
 
 
 # ============================================================
