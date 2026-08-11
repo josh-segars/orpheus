@@ -103,23 +103,35 @@ class _Chain:
     def __init__(self, parent: "FakeSupabase", table_name: str) -> None:
         self._parent = parent
         self._table = table_name
+        self._filters: list[tuple[str, tuple[Any, ...]]] = []
 
-    def select(self, *_args: Any, **_kwargs: Any) -> "_Chain":
+    def select(self, *args: Any, **_kwargs: Any) -> "_Chain":
+        self._filters.append(("select", args))
         return self
 
-    def eq(self, *_args: Any, **_kwargs: Any) -> "_Chain":
+    def eq(self, *args: Any, **_kwargs: Any) -> "_Chain":
+        self._filters.append(("eq", args))
         return self
 
-    def in_(self, *_args: Any, **_kwargs: Any) -> "_Chain":
+    def in_(self, *args: Any, **_kwargs: Any) -> "_Chain":
+        self._filters.append(("in_", args))
         return self
 
-    def order(self, *_args: Any, **_kwargs: Any) -> "_Chain":
+    def order(self, *args: Any, **_kwargs: Any) -> "_Chain":
+        self._filters.append(("order", args))
         return self
 
-    def limit(self, *_args: Any, **_kwargs: Any) -> "_Chain":
+    def limit(self, *args: Any, **_kwargs: Any) -> "_Chain":
+        self._filters.append(("limit", args))
         return self
 
     def execute(self) -> SimpleNamespace:
+        # ORPHEUS-120: record what was queried, not just which table —
+        # the publication-gate tests assert the reports read is keyed on
+        # the right job. FIFO pop is unchanged so pre-120 tests hold.
+        self._parent.queries.append(
+            {"table": self._table, "filters": list(self._filters)}
+        )
         if self._parent.responses:
             response = self._parent.responses.pop(0)
         else:
@@ -131,6 +143,7 @@ class FakeSupabase:
     def __init__(self, responses: list[dict[str, Any]]) -> None:
         self.responses = list(responses)
         self.tables_queried: list[str] = []
+        self.queries: list[dict[str, Any]] = []
 
     def table(self, name: str) -> _Chain:
         self.tables_queried.append(name)
@@ -149,6 +162,21 @@ def _job_row(*, job_id: str, client_id: str, status_value: str = "running") -> d
         "created_at": "2026-05-15T00:00:00+00:00",
         "updated_at": "2026-05-15T00:00:01+00:00",
         "error_message": None,
+    }
+
+
+def _report_row(
+    *, report_type: str = "self_serve", published: bool = True
+) -> dict[str, Any]:
+    """Minimal reports row for the ORPHEUS-120 publication check.
+
+    Defaults model the common case (self-serve, published at completion)
+    so pre-120 payload tests stay ungated with one queued response.
+    """
+    return {
+        "job_id": JOB_1_ID,
+        "report_type": report_type,
+        "published_at": "2026-06-02T00:00:00+00:00" if published else None,
     }
 
 
@@ -389,6 +417,8 @@ async def test_complete_job_assembles_payload():
                     )
                 ]
             },
+            # ORPHEUS-120: publication check precedes payload assembly.
+            {"data": [_report_row()]},
             # scores query
             {"data": [_score_row(job_id=JOB_1_ID)]},
             # narratives query — 4 dim sections, no forward_brief, no
@@ -449,7 +479,9 @@ async def test_complete_job_assembles_payload():
     # ingested_data on this single-job path. No ingested_data response is
     # queued here, so the fake returns empty → not data-limited.
     assert result.result["quality"] == {"data_limited": False, "notices": []}
-    assert fake.tables_queried == ["jobs", "scores", "narratives", "ingested_data"]
+    assert fake.tables_queried == [
+        "jobs", "reports", "scores", "narratives", "ingested_data",
+    ]
 
 
 @pytest.mark.asyncio
@@ -471,6 +503,9 @@ async def test_complete_job_edited_text_wins_over_generated():
                     )
                 ]
             },
+            # ORPHEUS-120: publication check precedes payload assembly for
+            # a client viewer of a complete job.
+            {"data": [_report_row()]},
             {"data": [_score_row(job_id=JOB_1_ID)]},
             {
                 "data": [
@@ -529,6 +564,8 @@ async def test_complete_job_with_missing_scores_returns_no_result():
                     )
                 ]
             },
+            # ORPHEUS-120: publication check precedes payload assembly.
+            {"data": [_report_row()]},
             # scores query returns nothing
             {"data": []},
         ]
@@ -543,7 +580,7 @@ async def test_complete_job_with_missing_scores_returns_no_result():
     assert result.state == "complete"
     assert result.result is None
     # Narratives query was not made — scores miss short-circuits early.
-    assert fake.tables_queried == ["jobs", "scores"]
+    assert fake.tables_queried == ["jobs", "reports", "scores"]
 
 
 @pytest.mark.asyncio
@@ -563,6 +600,9 @@ async def test_complete_job_legacy_forward_brief_row_ignored():
                     )
                 ]
             },
+            # ORPHEUS-120: publication check precedes payload assembly for
+            # a client viewer of a complete job.
+            {"data": [_report_row()]},
             {"data": [_score_row(job_id=JOB_1_ID)]},
             {
                 "data": [
@@ -609,6 +649,9 @@ async def test_complete_job_with_no_dimension_narratives_returns_no_result():
                     )
                 ]
             },
+            # ORPHEUS-120: publication check precedes payload assembly for
+            # a client viewer of a complete job.
+            {"data": [_report_row()]},
             {"data": [_score_row(job_id=JOB_1_ID)]},
             {
                 "data": [
@@ -681,6 +724,9 @@ async def test_complete_job_cheat_sheet_section_deserializes():
                     )
                 ]
             },
+            # ORPHEUS-120: publication check precedes payload assembly for
+            # a client viewer of a complete job.
+            {"data": [_report_row()]},
             {"data": [_score_row(job_id=JOB_1_ID)]},
             {
                 "data": [
@@ -744,6 +790,9 @@ async def test_complete_job_malformed_cheat_sheet_falls_back_to_null():
                     )
                 ]
             },
+            # ORPHEUS-120: publication check precedes payload assembly for
+            # a client viewer of a complete job.
+            {"data": [_report_row()]},
             {"data": [_score_row(job_id=JOB_1_ID)]},
             {
                 "data": [
@@ -791,6 +840,9 @@ async def test_complete_job_cheat_sheet_edited_text_currently_falls_back():
                     )
                 ]
             },
+            # ORPHEUS-120: publication check precedes payload assembly for
+            # a client viewer of a complete job.
+            {"data": [_report_row()]},
             {"data": [_score_row(job_id=JOB_1_ID)]},
             {
                 "data": [
@@ -880,6 +932,9 @@ async def test_complete_job_quality_summary_flags_data_limited():
                     )
                 ]
             },
+            # ORPHEUS-120: publication check precedes payload assembly for
+            # a client viewer of a complete job.
+            {"data": [_report_row()]},
             {"data": [_score_row(job_id=JOB_1_ID)]},
             {"data": _minimal_dim_narratives()},
             {"data": [{"quality_report": quality_report}]},
@@ -899,7 +954,9 @@ async def test_complete_job_quality_summary_flags_data_limited():
     # warning is excluded.
     assert len(quality["notices"]) == 1
     assert "No behavioral data found" in quality["notices"][0]
-    assert fake.tables_queried == ["jobs", "scores", "narratives", "ingested_data"]
+    assert fake.tables_queried == [
+        "jobs", "reports", "scores", "narratives", "ingested_data",
+    ]
 
 
 @pytest.mark.asyncio
@@ -917,6 +974,9 @@ async def test_complete_job_quality_summary_missing_row_defaults_not_limited():
                     )
                 ]
             },
+            # ORPHEUS-120: publication check precedes payload assembly for
+            # a client viewer of a complete job.
+            {"data": [_report_row()]},
             {"data": [_score_row(job_id=JOB_1_ID)]},
             {"data": _minimal_dim_narratives()},
             {"data": []},  # ingested_data miss
@@ -931,3 +991,209 @@ async def test_complete_job_quality_summary_missing_row_defaults_not_limited():
 
     assert result.result is not None
     assert result.result["quality"] == {"data_limited": False, "notices": []}
+
+# --------------------------------------------------------------------------- #
+# Advisory draft gate — ORPHEUS-120
+# --------------------------------------------------------------------------- #
+#
+# The gate signal is job-level reports.published_at (materialized at write
+# time), never per-narrative status counting — a half-published report stays
+# fully hidden until the admin's last flip stamps published_at. Gating nulls
+# the entire result payload, so the scoring half (composite band, dim bands,
+# forward-brief metrics) is withheld along with the narratives. The advisor
+# reviewing the client's job sees drafts; dual-role callers resolve advisor-
+# first. A missing reports row fails OPEN (legacy pre-ORPHEUS-98 jobs).
+
+
+def _complete_job_response() -> dict[str, Any]:
+    return {
+        "data": [
+            _job_row(
+                job_id=JOB_1_ID,
+                client_id=CLIENT_1_ID,
+                status_value="complete",
+            )
+        ]
+    }
+
+
+@pytest.mark.asyncio
+async def test_client_unpublished_advisory_job_is_gated():
+    """ORPHEUS-120: the report subject gets result=None + in_review=True
+    while the advisory report is unpublished — and the handler never reads
+    scores or narratives, so nothing report-shaped even leaves the DB."""
+    fake = FakeSupabase(
+        responses=[
+            _complete_job_response(),
+            {"data": [_report_row(report_type="advisory", published=False)]},
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_client_roles(CLIENT_1_ID),
+        )
+
+    assert result.state == "complete"
+    assert result.result is None
+    assert result.in_review is True
+    assert fake.tables_queried == ["jobs", "reports"]
+    # The reports read is keyed on this job.
+    reports_query = fake.queries[-1]
+    assert reports_query["table"] == "reports"
+    assert ("eq", ("job_id", JOB_1_ID)) in reports_query["filters"]
+
+
+@pytest.mark.asyncio
+async def test_client_published_advisory_job_serves_full_payload():
+    """ORPHEUS-120: once published_at is stamped (the admin's last narrative
+    flip), the same client gets the full payload and in_review clears."""
+    fake = FakeSupabase(
+        responses=[
+            _complete_job_response(),
+            {"data": [_report_row(report_type="advisory", published=True)]},
+            {"data": [_score_row(job_id=JOB_1_ID)]},
+            {"data": _minimal_dim_narratives()},
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_client_roles(CLIENT_1_ID),
+        )
+
+    assert result.result is not None
+    assert result.in_review is False
+
+
+@pytest.mark.asyncio
+async def test_advisor_sees_drafts_on_unpublished_advisory_job():
+    """ORPHEUS-120: the advisor reviewing their client's job sees the draft
+    payload — no publication check fires for an advisor-of-this-client."""
+    fake = FakeSupabase(
+        responses=[
+            # clients roster expansion — advisor manages CLIENT_1
+            {"data": [{"id": CLIENT_1_ID}]},
+            _complete_job_response(),
+            {"data": [_score_row(job_id=JOB_1_ID)]},
+            {"data": _minimal_dim_narratives()},
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_advisor_roles(ADVISOR_1_ID),
+        )
+
+    assert result.result is not None
+    assert result.in_review is False
+    # No reports read on the advisor path.
+    assert fake.tables_queried == ["clients", "jobs", "scores", "narratives", "ingested_data"]
+
+
+@pytest.mark.asyncio
+async def test_dual_role_viewer_resolves_advisor_first():
+    """ORPHEUS-120: Andrew viewing his own is_self row's job holds both
+    roles; the job's client_id is on his own roster, so the advisor path
+    wins and drafts stay visible (his own advisory self-report)."""
+    dual_roles = SessionRoles(
+        user_id=ADVISOR_USER_ID,
+        email=ADVISOR_EMAIL,
+        access_token="test-token",
+        advisor_id=ADVISOR_1_ID,
+        client_id=CLIENT_1_ID,
+    )
+    fake = FakeSupabase(
+        responses=[
+            {"data": [{"id": CLIENT_1_ID}]},
+            _complete_job_response(),
+            {"data": [_score_row(job_id=JOB_1_ID)]},
+            {"data": _minimal_dim_narratives()},
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(job_id=JOB_1_ID, roles=dual_roles)
+
+    assert result.result is not None
+    assert result.in_review is False
+    assert "reports" not in fake.tables_queried
+
+
+@pytest.mark.asyncio
+async def test_self_serve_job_visible_regardless_of_published_at():
+    """ORPHEUS-120: a self_serve report is published by definition — the
+    worker stamps published_at at completion, and even a NULL (data drift)
+    must not gate an individual's own report."""
+    fake = FakeSupabase(
+        responses=[
+            _complete_job_response(),
+            {"data": [_report_row(report_type="self_serve", published=False)]},
+            {"data": [_score_row(job_id=JOB_1_ID)]},
+            {"data": _minimal_dim_narratives()},
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_client_roles(CLIENT_1_ID),
+        )
+
+    assert result.result is not None
+    assert result.in_review is False
+
+
+@pytest.mark.asyncio
+async def test_missing_reports_row_fails_open():
+    """ORPHEUS-120: legacy pre-ORPHEUS-98 jobs have no reports row and have
+    been client-visible since creation — the gate must not hide them."""
+    fake = FakeSupabase(
+        responses=[
+            _complete_job_response(),
+            {"data": []},  # no reports row
+            {"data": [_score_row(job_id=JOB_1_ID)]},
+            {"data": _minimal_dim_narratives()},
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_client_roles(CLIENT_1_ID),
+        )
+
+    assert result.result is not None
+    assert result.in_review is False
+
+
+@pytest.mark.asyncio
+async def test_pending_job_skips_publication_check():
+    """ORPHEUS-120: the gate only fires for complete jobs — the 3s polling
+    path for pending/running jobs stays at one cheap query."""
+    fake = FakeSupabase(
+        responses=[
+            {
+                "data": [
+                    _job_row(
+                        job_id=JOB_1_ID,
+                        client_id=CLIENT_1_ID,
+                        status_value="pending",
+                    )
+                ]
+            },
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_client_roles(CLIENT_1_ID),
+        )
+
+    assert result.result is None
+    assert result.in_review is False
+    assert fake.tables_queried == ["jobs"]

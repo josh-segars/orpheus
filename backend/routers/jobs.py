@@ -452,6 +452,7 @@ async def list_jobs(
         str(r["id"]) for r in rows if r.get("status") == "complete"
     ]
     band_by_job: dict[str, str] = {}
+    in_review_ids: set[str] = set()
     if complete_ids:
         scores_result = (
             supabase.table("scores")
@@ -463,13 +464,37 @@ async def list_jobs(
             if s.get("band"):
                 band_by_job[str(s["job_id"])] = s["band"]
 
+        # ORPHEUS-120: a complete advisory job whose report is unpublished
+        # is "in review" — the row must not link to the report or leak the
+        # composite band ahead of the advisor's release. Publication state
+        # is materialized on the reports row (worker writes published_at for
+        # self-serve at completion; the admin last-flip trigger stamps it
+        # for advisory). A missing reports row fails OPEN (not in review):
+        # legacy pre-ORPHEUS-98 jobs have been client-visible since creation.
+        reports_result = (
+            supabase.table("reports")
+            .select("job_id,report_type,published_at")
+            .in_("job_id", complete_ids)
+            .execute()
+        )
+        for rep in reports_result.data or []:
+            if rep.get("report_type") == "advisory" and not rep.get(
+                "published_at"
+            ):
+                in_review_ids.add(str(rep["job_id"]))
+
     return [
         JobSummary(
             id=str(r["id"]),
             state=r["status"],
             created_at=r["created_at"],
-            band=band_by_job.get(str(r["id"])),
+            band=(
+                None
+                if str(r["id"]) in in_review_ids
+                else band_by_job.get(str(r["id"]))
+            ),
             data_limited=bool(r.get("data_limited")),
+            in_review=str(r["id"]) in in_review_ids,
         )
         for r in rows
     ]
@@ -519,6 +544,11 @@ async def get_job(
     # auth.uid() and we want the advisor's roster regardless of the
     # session token's RLS context.
     allowed_client_ids: set[str] = set()
+    # ORPHEUS-120: track the advisor's roster separately from the union so
+    # viewer classification survives — an advisor reviewing their client's
+    # job sees drafts; the report subject does not. Dual-role callers
+    # (Andrew on his own is_self row) satisfy both; advisor wins.
+    advisor_client_ids: set[str] = set()
     if roles.is_client():
         assert roles.client_id is not None  # narrowed by is_client()
         allowed_client_ids.add(roles.client_id)
@@ -530,7 +560,8 @@ async def get_job(
             .execute()
         )
         for client_row in advisor_clients.data or []:
-            allowed_client_ids.add(str(client_row["id"]))
+            advisor_client_ids.add(str(client_row["id"]))
+        allowed_client_ids |= advisor_client_ids
 
     if not allowed_client_ids:
         # Advisor with zero managed clients (and no client role of
@@ -565,11 +596,26 @@ async def get_job(
     # querying them is both wasteful and (on a partial dev schema) fatal.
     # The AnalysisPage polls this endpoint every 3s; a cheap pending
     # response keeps that quiet.
-    payload = (
-        _build_result_payload(supabase, job_id)
-        if row["status"] == "complete"
-        else None
-    )
+    #
+    # ORPHEUS-120: the advisory draft gate. The gate signal is job-level
+    # reports.published_at, NOT per-narrative status counting — publication
+    # happens via per-narrative flips in /admin, and a half-published report
+    # must stay fully hidden until the last flip stamps published_at (which
+    # is also when the report-ready email fires). Gating the whole payload
+    # (result=None) also withholds the scoring half — composite band, dim
+    # bands, sub-dim pips, forward-brief metrics — not just the narratives.
+    # The advisor reviewing the client's job continues to see drafts.
+    payload = None
+    gated = False
+    if row["status"] == "complete":
+        viewer_is_advisor_of_job = (
+            str(row.get("client_id")) in advisor_client_ids
+        )
+        if not viewer_is_advisor_of_job:
+            is_advisory, is_published = _report_publication(supabase, job_id)
+            gated = is_advisory and not is_published
+        if not gated:
+            payload = _build_result_payload(supabase, job_id)
 
     return Job(
         id=str(row["id"]),
@@ -579,6 +625,7 @@ async def get_job(
         client_id=row.get("client_id"),
         result=payload,
         error=row.get("error_message"),
+        in_review=gated,
     )
 
 
@@ -830,6 +877,35 @@ def _persist_ingested_data(
             job_id,
             exc,
         )
+
+
+def _report_publication(supabase, job_id: str) -> tuple[bool, bool]:
+    """(is_advisory, is_published) from the job's reports row (ORPHEUS-120).
+
+    Publication state is materialized at write time: the worker stamps
+    reports.published_at at completion for self-serve and leaves it NULL
+    for advisory; the admin last-flip trigger
+    (`_maybe_send_report_ready_on_publish`) stamps it when the final draft
+    narrative flips to published. Reading it here makes the read-path gate
+    job-level and atomic — a partially-flipped report stays hidden.
+
+    A missing reports row fails OPEN — (False, True) — because legacy
+    pre-ORPHEUS-98 jobs never got a reports row and have been client-visible
+    since creation; hiding them would break the preserved demo jobs.
+    """
+    result = (
+        supabase.table("reports")
+        .select("report_type,published_at")
+        .eq("job_id", job_id)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        return (False, True)
+    row = result.data[0]
+    is_advisory = row.get("report_type") == "advisory"
+    is_published = bool(row.get("published_at")) or not is_advisory
+    return (is_advisory, is_published)
 
 
 def _build_result_payload(supabase, job_id: str) -> dict | None:

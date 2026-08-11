@@ -78,6 +78,23 @@ export function ReportsPage() {
 function ReportRow({ job }: { job: JobSummary }) {
   const date = formatRunDate(job.created_at)
 
+  // ORPHEUS-120: complete advisory job awaiting the advisor's release.
+  // No link (the read path gates the payload anyway), no band chip (the
+  // composite band must not leak ahead of the release).
+  if (job.state === 'complete' && job.in_review) {
+    return (
+      <div className="report-row">
+        <span className="report-row-date">{date}</span>
+        <span className="report-status-chip report-status-in-review">
+          In review
+        </span>
+        <span className="report-row-note">
+          Your advisor is preparing your report.
+        </span>
+      </div>
+    )
+  }
+
   if (job.state === 'complete') {
     return (
       <Link to={`/jobs/${job.id}`} className="report-row report-row-link">

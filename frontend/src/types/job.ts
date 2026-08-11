@@ -32,6 +32,12 @@ export interface Job {
   /** Present when state === 'complete'. */
   result: JobResultPayload | null
   error: string | null
+  /**
+   * ORPHEUS-120: complete advisory job whose report the advisor hasn't
+   * released yet — `result` is null and the report page shows the
+   * "your advisor is reviewing" surface instead of Analysis-in-Progress.
+   */
+  in_review?: boolean
 }
 
 /**
@@ -47,4 +53,9 @@ export interface JobSummary {
   band: string | null
   /** ORPHEUS-88: completed on incomplete/degraded data. Chip on the list. */
   data_limited?: boolean
+  /**
+   * ORPHEUS-120: complete advisory job awaiting the advisor's release.
+   * The row renders an "In review" chip, no band, no report link.
+   */
+  in_review?: boolean
 }

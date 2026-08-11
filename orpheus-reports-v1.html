@@ -97,6 +97,13 @@
       color: var(--issue);
     }
 
+    /* ORPHEUS-120: complete advisory report awaiting the advisor's release.
+       Accent tone — good news in progress, not a caution or failure. */
+    .report-status-in-review {
+      border: 1px solid var(--accent);
+      color: var(--accent);
+    }
+
     /* Band chips take their band's spectrum pip color with the dark
        knockout text (ORPHEUS-70 mapping): Dissonant→pip-1 … Resonant→pip-5. */
     .report-band-chip { color: #000803; }
@@ -159,6 +166,14 @@
         <span class="report-status-chip report-status-in-progress">In progress</span>
         <span class="report-row-action">View progress &rsaquo;</span>
       </a>
+
+      <!-- ORPHEUS-120: in-review row — complete advisory report awaiting
+           the advisor's release. Static (no link), no band chip. -->
+      <div class="report-row">
+        <span class="report-row-date">June 8, 2026</span>
+        <span class="report-status-chip report-status-in-review">In review</span>
+        <span class="report-row-note">Your advisor is preparing your report.</span>
+      </div>
 
       <!-- Complete rows → report, with the composite band chip. -->
       <a href="orpheus-signal-score.html" class="report-row report-row-link">

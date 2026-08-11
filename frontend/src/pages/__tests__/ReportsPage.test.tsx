@@ -129,3 +129,43 @@ describe('ReportsPage', () => {
     ).toHaveAttribute('href', '/groundwork')
   })
 })
+
+// --------------------------------------------------------------------------- //
+// ORPHEUS-120 — in-review rows
+// --------------------------------------------------------------------------- //
+
+describe('ReportsPage in-review rows (ORPHEUS-120)', () => {
+  it('renders a complete-but-unpublished advisory job as a non-link "In review" row with no band chip', () => {
+    const inReviewJob: JobSummary = {
+      id: 'job-in-review-1',
+      state: 'complete',
+      created_at: '2026-08-11T12:00:00+00:00',
+      band: null,
+      in_review: true,
+    }
+    mockJobs([inReviewJob])
+    renderPage()
+
+    expect(screen.getByText(/in review/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/your advisor is preparing your report/i),
+    ).toBeInTheDocument()
+    // Not a link — the read path gates the payload anyway.
+    const links = screen.getAllByRole('link')
+    expect(
+      links.some((l) => l.getAttribute('href') === '/jobs/job-in-review-1'),
+    ).toBe(false)
+    // No band chip leaks ahead of the release.
+    expect(screen.queryByText('Tuned')).not.toBeInTheDocument()
+  })
+
+  it('published complete rows keep their live link and band chip', () => {
+    mockJobs([{ ...COMPLETE_JOB, in_review: false }])
+    renderPage()
+
+    expect(
+      screen.getByRole('link', { name: /view report/i }),
+    ).toHaveAttribute('href', '/jobs/job-complete-1')
+    expect(screen.getByText('Tuned')).toBeInTheDocument()
+  })
+})

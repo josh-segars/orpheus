@@ -11,6 +11,11 @@ class Job(BaseModel):
     client_id: Optional[str] = None
     result: Optional[dict] = None
     error: Optional[str] = None
+    # ORPHEUS-120: true when the job is complete but its advisory report is
+    # unpublished and the caller is the report subject (not the advisor).
+    # `result` is null in that state — the frontend renders the "your advisor
+    # is reviewing" surface instead of Analysis-in-Progress.
+    in_review: bool = False
 
 
 class JobSummary(BaseModel):
@@ -36,3 +41,8 @@ class JobSummary(BaseModel):
     # reports list can chip it without reading quality_report. Null/false
     # for pre-ORPHEUS-88 jobs and non-complete jobs.
     data_limited: bool = False
+    # ORPHEUS-120: complete advisory job whose report is unpublished
+    # (reports.published_at IS NULL). The list row renders an "In review"
+    # chip instead of a live report link, and `band` is withheld (None) so
+    # the composite band doesn't leak ahead of the advisor's release.
+    in_review: bool = False

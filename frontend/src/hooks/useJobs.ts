@@ -18,7 +18,11 @@ export function useJobs() {
       const hasInFlight = rows?.some(
         (j) => j.state === 'pending' || j.state === 'running',
       )
-      return hasInFlight ? 5_000 : false
+      if (hasInFlight) return 5_000
+      // ORPHEUS-120: keep a slow poll while any report awaits the
+      // advisor's release so the row flips to a live link on publish.
+      const hasInReview = rows?.some((j) => j.in_review)
+      return hasInReview ? 15_000 : false
     },
   })
 }

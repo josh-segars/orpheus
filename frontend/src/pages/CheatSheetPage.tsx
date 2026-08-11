@@ -48,6 +48,25 @@ export function CheatSheetPage() {
     )
   }
 
+  // ORPHEUS-120: complete advisory job awaiting the advisor's release.
+  if (job.state === 'complete' && job.in_review) {
+    return (
+      <main className="main-interior">
+        <div className="section-header">
+          <div className="section-eyebrow">In Review</div>
+          <h2 className="section-title">
+            Your advisor is reviewing your report
+          </h2>
+          <p className="section-intro">
+            Your Quick Reference Card will be available here as soon as your
+            advisor releases your report — this page will refresh
+            automatically.
+          </p>
+        </div>
+      </main>
+    )
+  }
+
   if (job.state !== 'complete' || !job.result) {
     return (
       <main className="main-interior">

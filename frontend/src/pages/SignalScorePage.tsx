@@ -71,6 +71,27 @@ export function SignalScorePage() {
     )
   }
 
+  // ORPHEUS-120: complete advisory job awaiting the advisor's release.
+  // Distinct from Analysis-in-Progress — the pipeline is done; the report
+  // appears when the advisor publishes it (useJob keeps a slow poll going).
+  if (job.state === 'complete' && job.in_review) {
+    return (
+      <main className="main-interior">
+        <div className="section-header">
+          <div className="section-eyebrow">In Review</div>
+          <h2 className="section-title">
+            Your advisor is reviewing your report
+          </h2>
+          <p className="section-intro">
+            Your analysis is complete and your advisor is giving it a final
+            review. You&rsquo;ll see your report here as soon as it&rsquo;s
+            released — this page will refresh automatically.
+          </p>
+        </div>
+      </main>
+    )
+  }
+
   if (job.state !== 'complete' || !job.result) {
     return (
       <main className="main-interior">

@@ -171,6 +171,16 @@ async def test_list_jobs_joins_band_onto_complete_rows():
             },
             # scores query — bucketed on the complete ids only
             {"data": [{"job_id": JOB_COMPLETE_ID, "band": "Tuned"}]},
+            # ORPHEUS-120: reports query — published self-serve row
+            {
+                "data": [
+                    {
+                        "job_id": JOB_COMPLETE_ID,
+                        "report_type": "self_serve",
+                        "published_at": "2026-06-12T00:01:00+00:00",
+                    }
+                ]
+            },
         ]
     )
 
@@ -186,7 +196,9 @@ async def test_list_jobs_joins_band_onto_complete_rows():
     assert [r.state for r in result] == ["running", "complete", "failed"]
     # ORPHEUS-88: the denormalized data_limited flag rides each summary row.
     assert [r.data_limited for r in result] == [False, True, False]
-    assert fake.tables_queried == ["jobs", "scores"]
+    # ORPHEUS-120: published rows are not in review.
+    assert [r.in_review for r in result] == [False, False, False]
+    assert fake.tables_queried == ["jobs", "scores", "reports"]
 
 
 @pytest.mark.asyncio
@@ -250,3 +262,60 @@ def test_has_active_job_false_when_only_terminal_jobs():
     server-side, so an empty response means no active job."""
     fake = FakeSupabase(responses=[{"data": []}])
     assert jobs_router._has_active_job(fake, CLIENT_ID) is False
+
+
+# --------------------------------------------------------------------------- #
+# In-review rows — ORPHEUS-120
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_list_jobs_suppresses_band_on_unpublished_advisory_rows():
+    """ORPHEUS-120: a complete advisory job with published_at NULL renders
+    as in_review with the band withheld — the composite band must not leak
+    ahead of the advisor's release, and the row must not link to a report
+    the read path would gate anyway."""
+    fake = FakeSupabase(
+        responses=[
+            {
+                "data": [
+                    _job_row(job_id=JOB_COMPLETE_ID, status_value="complete"),
+                ]
+            },
+            {"data": [{"job_id": JOB_COMPLETE_ID, "band": "Tuned"}]},
+            {
+                "data": [
+                    {
+                        "job_id": JOB_COMPLETE_ID,
+                        "report_type": "advisory",
+                        "published_at": None,
+                    }
+                ]
+            },
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.list_jobs(roles=_client_roles())
+
+    assert len(result) == 1
+    assert result[0].in_review is True
+    assert result[0].band is None  # withheld, even though scores has one
+
+
+@pytest.mark.asyncio
+async def test_list_jobs_missing_reports_row_not_in_review():
+    """ORPHEUS-120: legacy jobs with no reports row fail open — visible,
+    band shown (consistent with the GET /jobs/{id} gate)."""
+    fake = FakeSupabase(
+        responses=[
+            {"data": [_job_row(job_id=JOB_COMPLETE_ID, status_value="complete")]},
+            {"data": [{"job_id": JOB_COMPLETE_ID, "band": "Tuned"}]},
+            {"data": []},  # no reports rows
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.list_jobs(roles=_client_roles())
+
+    assert result[0].in_review is False
+    assert result[0].band == "Tuned"
