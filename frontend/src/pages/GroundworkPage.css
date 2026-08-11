@@ -225,3 +225,42 @@
   max-width: 520px;
   line-height: 1.5;
 }
+
+/* ---------------------------------------------------------------------------
+   ORPHEUS-126 — upload consent, in the completion row above the submit
+   button. Wider measure than the login checkbox because the statement has to
+   name what we do with the files, not just point at a document.
+   --------------------------------------------------------------------------- */
+
+.groundwork-consent {
+  width: 100%;
+  max-width: 52rem;
+  margin: 0 auto 1.25rem;
+  text-align: left;
+}
+
+.groundwork-consent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.groundwork-consent-checkbox {
+  flex: 0 0 auto;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-top: 0.2rem;
+  cursor: pointer;
+  accent-color: var(--color-accent, #c4902a);
+}
+
+.groundwork-consent-label {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  font-variation-settings: 'opsz' 18;
+}
+
+.groundwork-consent-label a {
+  text-decoration: underline;
+}

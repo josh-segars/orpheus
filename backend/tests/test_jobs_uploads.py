@@ -24,6 +24,7 @@ from fastapi import HTTPException
 
 from backend import config as config_mod
 from backend.auth import SessionRoles
+from backend.consent_versions import CURRENT_PRIVACY_VERSION
 from backend.models.quality import (
     DataQualityReport,
     IssueCategory,
@@ -205,11 +206,21 @@ def _gate_patches(fake: FakeSupabase, report: DataQualityReport | None = None):
 def _request(
     upload_id: str = UPLOAD_ID,
     archive_filename: str | None = "Complete_LinkedInDataExport.zip",
+    upload_consent: bool = True,
+    consent_privacy_version: str | None = None,
 ) -> CreateJobFromUploadsRequest:
+    """Build a from-uploads body.
+
+    `upload_consent` defaults True because ORPHEUS-126 makes it a
+    precondition for every other path under test — the consent-refusal
+    cases below pass it explicitly.
+    """
     return CreateJobFromUploadsRequest(
         upload_id=upload_id,
         archive_filename=archive_filename,
         has_profile_photo=True,
+        upload_consent=upload_consent,
+        consent_privacy_version=consent_privacy_version,
     )
 
 
@@ -427,6 +438,10 @@ async def test_from_uploads_happy_path_moves_to_worker_path():
     tables_inserted = [t for t, _ in fake.inserts]
     assert tables_inserted == ["jobs"]
     assert fake.inserts[0][1]["oidc_photo_present"] is True
+    # ORPHEUS-126: the consent is stamped onto the job row, server-side.
+    job_payload = fake.inserts[0][1]
+    assert job_payload["upload_consent_at"] is not None
+    assert job_payload["upload_consent_version"] == CURRENT_PRIVACY_VERSION
     assert [t for t, _ in fake.upserts] == ["ingested_data"]
 
 
@@ -458,3 +473,81 @@ async def test_from_uploads_move_failure_marks_job_failed():
     assert exc.value.status_code == 502
     assert fake.updates and fake.updates[0][0] == "jobs"
     assert fake.updates[0][1]["status"] == "failed"
+
+
+# --------------------------------------------------------------------------- #
+# ORPHEUS-126 — upload consent
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+async def test_from_uploads_refuses_without_upload_consent():
+    """No consent, no job — and nothing touched on the way out.
+
+    The frontend checkbox is a UX affordance, not a control. This handler is
+    the only thing between a scripted caller and an unconsented LinkedIn
+    archive sitting in the bucket, which is precisely the Art. 6(1)(a) /
+    Art. 9(2)(a) exposure ORPHEUS-126 exists to close.
+    """
+    fake = FakeSupabase()
+    with patch.object(jobs_router, "get_service_client", return_value=fake):
+        with pytest.raises(HTTPException) as exc:
+            await jobs_router.create_job_from_uploads(
+                body=_request(upload_consent=False),
+                roles=_client_roles(),
+            )
+    assert exc.value.status_code == 400
+    assert "agree" in exc.value.detail.lower()
+    # Refused before any storage or database work — no job row, and the
+    # active-job probe never even ran.
+    assert fake.inserts == []
+
+
+@pytest.mark.asyncio
+async def test_from_uploads_consent_refusal_precedes_the_upload_id_check():
+    """Consent is the first thing the handler insists on after the role gate.
+
+    Sent together with a malformed upload_id, the consent refusal is what
+    comes back — proving the ordering rather than just asserting it. An
+    unconsented caller therefore learns nothing about staging state, and the
+    refusal costs no storage or database work at all.
+    """
+    fake = FakeSupabase()
+    with patch.object(jobs_router, "get_service_client", return_value=fake):
+        with pytest.raises(HTTPException) as exc:
+            await jobs_router.create_job_from_uploads(
+                body=_request(upload_id="not-a-uuid", upload_consent=False),
+                roles=_client_roles(),
+            )
+    assert exc.value.status_code == 400
+    assert "agree" in exc.value.detail.lower()
+    assert "upload id" not in exc.value.detail.lower()
+
+
+@pytest.mark.asyncio
+async def test_from_uploads_rejects_unrecognised_policy_version():
+    """A stale cached bundle must not record consent against a policy
+    version that never existed — the row would be indistinguishable from a
+    real one afterwards."""
+    fake = FakeSupabase()
+    with patch.object(jobs_router, "get_service_client", return_value=fake):
+        with pytest.raises(HTTPException) as exc:
+            await jobs_router.create_job_from_uploads(
+                body=_request(consent_privacy_version="1999-01-01"),
+                roles=_client_roles(),
+            )
+    assert exc.value.status_code == 400
+    assert "privacy policy version" in exc.value.detail.lower()
+    assert fake.inserts == []
+
+
+@pytest.mark.asyncio
+async def test_from_uploads_role_gate_still_precedes_consent():
+    """An advisor without a client profile is refused for the role, not the
+    consent — the 403 must not be masked by the new 400."""
+    with pytest.raises(HTTPException) as exc:
+        await jobs_router.create_job_from_uploads(
+            body=_request(upload_consent=False),
+            roles=_advisor_roles(),
+        )
+    assert exc.value.status_code == 403

@@ -2,6 +2,14 @@ import { useEffect, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 
 import { signInWithLinkedIn, useSession } from '../lib/auth'
+import {
+  CURRENT_PRIVACY_VERSION,
+  CURRENT_TERMS_VERSION,
+  PRIVACY_PATH,
+  TERMS_PATH,
+  buildAcceptanceRedirectUrl,
+  writePendingTermsAcceptance,
+} from '../lib/consent'
 import './LoginPage.css'
 
 /**
@@ -12,12 +20,27 @@ import './LoginPage.css'
  * round trip arrive via the URL hash fragment (#error=...&error_description=...)
  * — typically because LinkedIn returned an unverified email and the
  * on_auth_user_created trigger refused to create the clients row.
+ *
+ * ORPHEUS-126: signing in requires ticking the ToS + Privacy Policy
+ * checkbox, which replaces the old "provided separately by Andrew" fine
+ * print. The box is unticked by default (a pre-ticked box is not a clear
+ * affirmative act) and gates the sign-in button. Because the affirmative act
+ * happens here — pre-authentication — the accepted versions ride the OAuth
+ * `redirectTo` query string and are recorded on the way back by
+ * TermsAcceptanceRecorder. See lib/consent.ts for why the URL rather than
+ * sessionStorage is the primary carrier (ORPHEUS-92's lesson).
+ *
+ * The document links open in a new tab on purpose: a same-tab navigation
+ * from here would unmount this page and lose the ticked state, so reading
+ * the terms would silently cost the user their checkbox.
  */
 export function LoginPage() {
   const { status } = useSession()
   const location = useLocation()
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [accepted, setAccepted] = useState(false)
+  const [showAcceptPrompt, setShowAcceptPrompt] = useState(false)
 
   // Set by AccountPage's post-deletion redirect (ORPHEUS-124). Router
   // state rather than a query param so a shared/bookmarked URL can't
@@ -44,10 +67,24 @@ export function LoginPage() {
   }
 
   const handleClick = async () => {
+    // Belt to the disabled button's braces: if the box somehow isn't
+    // ticked, say why rather than failing silently.
+    if (!accepted) {
+      setShowAcceptPrompt(true)
+      return
+    }
     setErrorMessage(null)
     setSubmitting(true)
+
+    // Same-context fallback; the redirect URL below is the primary carrier
+    // because in-app browsers return in a fresh context (ORPHEUS-92).
+    writePendingTermsAcceptance({
+      termsVersion: CURRENT_TERMS_VERSION,
+      privacyVersion: CURRENT_PRIVACY_VERSION,
+    })
+
     try {
-      await signInWithLinkedIn(`${window.location.origin}/`)
+      await signInWithLinkedIn(buildAcceptanceRedirectUrl())
       // signInWithOAuth navigates the browser away; nothing more to do.
     } catch (err) {
       setSubmitting(false)
@@ -89,18 +126,50 @@ export function LoginPage() {
           </div>
         )}
 
+        <div className="login-consent">
+          <label className="login-consent-row" htmlFor="login-accept-terms">
+            <input
+              id="login-accept-terms"
+              type="checkbox"
+              className="login-consent-checkbox"
+              checked={accepted}
+              onChange={(event) => {
+                setAccepted(event.target.checked)
+                if (event.target.checked) setShowAcceptPrompt(false)
+              }}
+            />
+            <span className="login-consent-label">
+              I agree to the{' '}
+              <a href={TERMS_PATH} target="_blank" rel="noopener noreferrer">
+                Terms of Service
+              </a>{' '}
+              and the{' '}
+              <a href={PRIVACY_PATH} target="_blank" rel="noopener noreferrer">
+                Privacy Policy
+              </a>
+              .
+            </span>
+          </label>
+          {showAcceptPrompt && (
+            <p className="login-consent-prompt" role="alert">
+              Please agree to the Terms of Service and Privacy Policy to
+              continue.
+            </p>
+          )}
+        </div>
+
         <button
           type="button"
           className="login-button"
           onClick={handleClick}
-          disabled={submitting || status === 'loading'}
+          disabled={!accepted || submitting || status === 'loading'}
         >
           {submitting ? 'Redirecting to LinkedIn…' : 'Continue with LinkedIn'}
         </button>
 
         <p className="login-fineprint">
-          By continuing you agree to Orpheus’s confidentiality and data-handling
-          terms (provided separately by Andrew).
+          Orpheus uses your LinkedIn account only to verify who you are. We
+          never post on your behalf.
         </p>
       </div>
     </main>

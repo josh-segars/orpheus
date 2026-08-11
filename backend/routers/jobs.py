@@ -34,6 +34,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from backend.auth import SessionRoles, get_current_session_roles
+from backend.consent_versions import (
+    ACCEPTED_PRIVACY_VERSIONS,
+    CURRENT_PRIVACY_VERSION,
+)
 from backend.db import get_service_client
 from backend.ingestion.xlsx_parser import latest_analytics_date, parse_xlsx
 from backend.ingestion.zip_parser import parse_archive_filename, parse_zip
@@ -115,6 +119,15 @@ class CreateJobFromUploadsRequest(BaseModel):
     # ORPHEUS-89 OIDC photo-presence signal. None = no signal; the worker
     # falls back to the ZIP rich-media heuristic at scoring time.
     has_profile_photo: bool | None = None
+    # ORPHEUS-126 upload consent. The client must affirm the upload-step
+    # consent before a job can be minted — Art. 6(1)(a) for the archive
+    # itself and Art. 9(2)(a) for whatever incidental special-category
+    # content the user authored inside it. Defaults to False so an older
+    # cached bundle that doesn't send the field is refused rather than
+    # silently treated as consenting.
+    upload_consent: bool = False
+    # Privacy Policy version whose s6 / s13 the consent copy reflected.
+    consent_privacy_version: str | None = None
 
 
 @router.post(
@@ -207,6 +220,32 @@ async def create_job_from_uploads(
     client_id = roles.client_id
     assert client_id is not None
 
+    # ── 0. Upload consent (ORPHEUS-126) ────────────────────────────────
+    # Checked before any storage work so a consent-less call costs nothing,
+    # and checked server-side at all because the frontend checkbox is a UX
+    # affordance, not a control — this handler is the only thing standing
+    # between a scripted caller and an unconsented archive in the bucket.
+    if not body.upload_consent:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Please confirm you agree to us processing your LinkedIn "
+                "files before submitting."
+            ),
+        )
+    declared_version = body.consent_privacy_version
+    if declared_version is not None and (
+        declared_version not in ACCEPTED_PRIVACY_VERSIONS
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Unrecognised privacy policy version. Please reload the "
+                "page and try again."
+            ),
+        )
+    consent_version = declared_version or CURRENT_PRIVACY_VERSION
+
     # upload_id must be the UUID we minted — it's interpolated into storage
     # paths, so anything else is a path-traversal attempt.
     try:
@@ -298,6 +337,10 @@ async def create_job_from_uploads(
                 "client_id": client_id,
                 "status": "pending",
                 "oidc_photo_present": body.has_profile_photo,
+                # Server-stamped, not client-supplied: the client asserts
+                # *that* it consented, we decide *when* (ORPHEUS-126).
+                "upload_consent_at": datetime.now(timezone.utc).isoformat(),
+                "upload_consent_version": consent_version,
             }
         )
         .execute()

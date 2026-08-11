@@ -13,7 +13,7 @@
  * Per the ORPHEUS-47 convention the data hooks are vi.mocked rather than
  * running an MSW server; useNavigate is stubbed so submit success is inert.
  */
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 import { GroundworkPage } from '../GroundworkPage'
@@ -57,7 +57,21 @@ function renderPage() {
   )
 }
 
+function consentCheckbox() {
+  return screen.getByRole('checkbox', {
+    name: /processing my linkedin data archive/i,
+  })
+}
+
+/**
+ * ORPHEUS-126: submit is gated on the upload-consent box as well as the
+ * checklist, so every pre-existing submit case has to tick it first.
+ */
 function clickComplete() {
+  const box = consentCheckbox()
+  if (!(box as HTMLInputElement).checked) {
+    fireEvent.click(box)
+  }
   fireEvent.click(screen.getByRole('button', { name: /groundwork is complete/i }))
 }
 
@@ -127,7 +141,10 @@ describe('GroundworkPage upload-failure UX (ORPHEUS-86)', () => {
     mockUpload.archive = makeFile('archive.zip', 200 * MB)
     renderPage()
     expect(screen.getByText(/archive is large \(200 MB\)/i)).toBeInTheDocument()
-    // Advisory only — the submit button stays enabled.
+    // The size advisory is exactly that — advisory. Tick the ORPHEUS-126
+    // consent (the only other submit gate) and the button is live, which is
+    // what "warns without blocking" has to mean now that consent exists.
+    fireEvent.click(consentCheckbox())
     expect(
       screen.getByRole('button', { name: /groundwork is complete/i }),
     ).not.toBeDisabled()
@@ -136,5 +153,84 @@ describe('GroundworkPage upload-failure UX (ORPHEUS-86)', () => {
   it('shows no large-archive advisory for a normal-sized archive', () => {
     renderPage()
     expect(screen.queryByText(/archive is large/i)).not.toBeInTheDocument()
+  })
+})
+
+// ── ORPHEUS-126: upload consent ────────────────────────────────────────
+
+describe('GroundworkPage upload consent (ORPHEUS-126)', () => {
+  beforeEach(() => {
+    mockNavigate.mockReset()
+    mockMutateAsync = vi.fn()
+    mockIsPending = false
+    mockProgress = {
+      data: { questionnaireComplete: true, latestPendingJobId: null },
+      isLoading: false,
+    }
+    mockUpload = {
+      archive: makeFile('archive.zip', 20 * MB),
+      analytics: makeFile('analytics.xlsx', 1 * MB),
+      clear: vi.fn(),
+    }
+  })
+
+  it('starts unticked even with every checklist item complete', () => {
+    renderPage()
+    expect(consentCheckbox()).not.toBeChecked()
+  })
+
+  it('keeps submit disabled until the consent is given', () => {
+    renderPage()
+    const button = screen.getByRole('button', {
+      name: /groundwork is complete/i,
+    })
+    expect(button).toBeDisabled()
+    fireEvent.click(consentCheckbox())
+    expect(button).toBeEnabled()
+  })
+
+  it('explains WHY submit is disabled when only the consent is missing', () => {
+    renderPage()
+    // Otherwise a client who has finished everything reads "Available once
+    // all items above are complete" next to a completed checklist.
+    expect(
+      screen.getByText(/confirm the permission above/i),
+    ).toBeInTheDocument()
+  })
+
+  it('does not submit while unticked', () => {
+    renderPage()
+    fireEvent.click(
+      screen.getByRole('button', { name: /groundwork is complete/i }),
+    )
+    expect(mockMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('passes the consent through to the submit', async () => {
+    mockMutateAsync.mockResolvedValue({ id: 'job-1' })
+    renderPage()
+    clickComplete()
+
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalled())
+    expect(mockMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ uploadConsent: true }),
+    )
+  })
+
+  it('links the Privacy Policy in a new tab', () => {
+    renderPage()
+    const link = screen.getByRole('link', { name: /privacy policy/i })
+    expect(link).toHaveAttribute('href', '/privacy')
+    expect(link).toHaveAttribute('target', '_blank')
+  })
+
+  it('promises no retention window the system does not implement', () => {
+    renderPage()
+    // The Privacy Policy's 30-day raw-upload deletion clause has no
+    // sweeper behind it (2026-08-03 review). The copy must not restate it.
+    expect(screen.queryByText(/30 days/i)).toBeNull()
+    expect(
+      screen.getByText(/kept until you delete your account/i),
+    ).toBeInTheDocument()
   })
 })

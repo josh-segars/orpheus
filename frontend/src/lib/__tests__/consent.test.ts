@@ -1,0 +1,118 @@
+/**
+ * Consent carrier — ORPHEUS-126.
+ *
+ * The ToS/Privacy acceptance is given on /login, before there is any
+ * authenticated identity to attach it to, so it has to survive the LinkedIn
+ * OAuth round trip. Per ORPHEUS-92 the URL query string is the primary
+ * carrier and sessionStorage the same-context fallback; these tests pin both
+ * halves plus the address-bar cleanup.
+ */
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+
+import {
+  CURRENT_PRIVACY_VERSION,
+  CURRENT_TERMS_VERSION,
+  buildAcceptanceRedirectUrl,
+  captureTermsAcceptanceFromUrl,
+  clearPendingTermsAcceptance,
+  readPendingTermsAcceptance,
+  writePendingTermsAcceptance,
+} from '../consent'
+
+beforeEach(() => {
+  sessionStorage.clear()
+  window.history.replaceState({}, '', '/')
+})
+
+afterEach(() => {
+  sessionStorage.clear()
+  window.history.replaceState({}, '', '/')
+})
+
+describe('buildAcceptanceRedirectUrl', () => {
+  it('carries both versions on the redirect URL', () => {
+    const url = new URL(buildAcceptanceRedirectUrl('https://app.example.com'))
+    expect(url.pathname).toBe('/')
+    expect(url.searchParams.get('terms_v')).toBe(CURRENT_TERMS_VERSION)
+    expect(url.searchParams.get('privacy_v')).toBe(CURRENT_PRIVACY_VERSION)
+  })
+})
+
+describe('pending acceptance storage', () => {
+  it('round-trips through sessionStorage', () => {
+    writePendingTermsAcceptance({
+      termsVersion: '2026-08-11',
+      privacyVersion: '2026-08-11',
+    })
+    expect(readPendingTermsAcceptance()).toEqual({
+      termsVersion: '2026-08-11',
+      privacyVersion: '2026-08-11',
+    })
+    clearPendingTermsAcceptance()
+    expect(readPendingTermsAcceptance()).toBeNull()
+  })
+
+  it('returns null for a corrupt stored value rather than throwing', () => {
+    sessionStorage.setItem('orpheus.pendingTermsAcceptance', 'not-json')
+    expect(readPendingTermsAcceptance()).toBeNull()
+  })
+
+  it('returns null when only one version is present', () => {
+    sessionStorage.setItem(
+      'orpheus.pendingTermsAcceptance',
+      JSON.stringify({ termsVersion: '2026-08-11' }),
+    )
+    expect(readPendingTermsAcceptance()).toBeNull()
+  })
+})
+
+describe('captureTermsAcceptanceFromUrl', () => {
+  it('captures both versions off the URL and stashes them', () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/?terms_v=2026-08-11&privacy_v=2026-08-11',
+    )
+    const captured = captureTermsAcceptanceFromUrl()
+    expect(captured).toEqual({
+      termsVersion: '2026-08-11',
+      privacyVersion: '2026-08-11',
+    })
+    expect(readPendingTermsAcceptance()).toEqual(captured)
+  })
+
+  it('strips its own params from the address bar so a refresh cannot replay', () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/?terms_v=2026-08-11&privacy_v=2026-08-11',
+    )
+    captureTermsAcceptanceFromUrl()
+    expect(window.location.search).toBe('')
+    expect(window.location.pathname).toBe('/')
+  })
+
+  it('preserves unrelated query params while stripping its own', () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/?terms_v=2026-08-11&privacy_v=2026-08-11&keep=me',
+    )
+    captureTermsAcceptanceFromUrl()
+    expect(window.location.search).toBe('?keep=me')
+  })
+
+  it('is a no-op when the URL carries no acceptance', () => {
+    window.history.replaceState({}, '', '/?foo=bar')
+    expect(captureTermsAcceptanceFromUrl()).toBeNull()
+    expect(readPendingTermsAcceptance()).toBeNull()
+    // Untouched — we only rewrite the URL when we actually captured.
+    expect(window.location.search).toBe('?foo=bar')
+  })
+
+  it('requires BOTH versions — a half-present carrier is not an acceptance', () => {
+    window.history.replaceState({}, '', '/?terms_v=2026-08-11')
+    expect(captureTermsAcceptanceFromUrl()).toBeNull()
+    expect(readPendingTermsAcceptance()).toBeNull()
+  })
+})

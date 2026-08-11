@@ -16,6 +16,7 @@ from backend.routers import account as account_router
 from backend.routers import admin as admin_router
 from backend.routers import advisor as advisor_router
 from backend.routers import clients as clients_router
+from backend.routers import consent as consent_router
 from backend.routers import jobs as jobs_router
 from backend.routers import session as session_router
 
@@ -43,6 +44,7 @@ app.include_router(session_router.router)
 app.include_router(advisor_router.router)
 app.include_router(admin_router.router)
 app.include_router(account_router.router)
+app.include_router(consent_router.router)
 
 
 @app.get("/health")

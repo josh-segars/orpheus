@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { NetworkError, UploadRejectedError, apiPostJson } from '../lib/apiClient'
+import { CURRENT_PRIVACY_VERSION } from '../lib/consent'
 import { supabase } from '../lib/supabase'
 import type { Job } from '../types/job'
 
@@ -46,6 +47,12 @@ function toUploadError(which: 'archive' | 'analytics', error: object): Error {
 interface CreateJobArgs {
   archive: File
   analytics: File
+  /**
+   * ORPHEUS-126: the client ticked the upload-consent box on the Groundwork
+   * submit step. Required — the caller is expected to gate submission on it,
+   * and POST /jobs/from-uploads refuses the request without it.
+   */
+  uploadConsent: boolean
 }
 
 interface UploadTarget {
@@ -95,7 +102,7 @@ export function useCreateJob() {
   const queryClient = useQueryClient()
 
   return useMutation<Job, Error, CreateJobArgs>({
-    mutationFn: async ({ archive, analytics }) => {
+    mutationFn: async ({ archive, analytics, uploadConsent }) => {
       const targets = await apiPostJson<CreateUploadUrlsResponse>(
         '/jobs/upload-urls',
         {},
@@ -129,6 +136,11 @@ export function useCreateJob() {
 
       return apiPostJson<Job>('/jobs/from-uploads', {
         upload_id: targets.upload_id,
+        // ORPHEUS-126. The server stamps the timestamp itself; we only
+        // assert the affirmation and which policy version it was given
+        // against.
+        upload_consent: uploadConsent,
+        consent_privacy_version: CURRENT_PRIVACY_VERSION,
         // The staged object is always named archive.zip; the original
         // browser filename carries the Basic/Complete flag + export date
         // for the ORPHEUS-101 filename gate.

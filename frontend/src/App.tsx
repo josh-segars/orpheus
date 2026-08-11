@@ -5,6 +5,7 @@ import { PortalLayout } from './components/layout/PortalLayout'
 import { LinkedInUploadProvider } from './contexts/LinkedInUploadContext'
 import { useGroundworkProgress } from './hooks/useGroundworkProgress'
 import { useSessionRoles } from './hooks/useSessionRoles'
+import { TermsAcceptanceRecorder } from './hooks/useRecordTermsAcceptance'
 import { useSession } from './lib/auth'
 import { isMarketingHost } from './lib/host'
 import { hasSeenWelcome } from './lib/welcomeFlag'
@@ -44,7 +45,17 @@ export default function App() {
   }
 
   return (
-    <Routes>
+    <>
+      {/*
+        ORPHEUS-126: records the ToS/Privacy acceptance the user gave on
+        /login once the OAuth round trip has produced a session. Sits
+        outside <Routes> deliberately — a brand-new user whose clients row
+        doesn't exist yet lands on /not-invited, which is outside
+        ProtectedRoute, and their acceptance is no less real for it.
+        Renders nothing.
+      */}
+      <TermsAcceptanceRecorder />
+      <Routes>
       {/* Dev-only design playground — no portal shell, no auth gate */}
       <Route path="/design/signal-meter" element={<SignalMeterPlayground />} />
 
@@ -149,7 +160,8 @@ export default function App() {
         />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
-    </Routes>
+      </Routes>
+    </>
   )
 }
 

@@ -6,6 +6,7 @@ import { useLinkedInUpload } from '../contexts/LinkedInUploadContext'
 import { useCreateJob } from '../hooks/useCreateJob'
 import { useGroundworkProgress } from '../hooks/useGroundworkProgress'
 import { ApiError, NetworkError, UploadRejectedError } from '../lib/apiClient'
+import { PRIVACY_PATH } from '../lib/consent'
 import './GroundworkPage.css'
 
 // Soft advisory threshold for the archive (ORPHEUS-86). A LinkedIn "Complete"
@@ -75,6 +76,14 @@ function resolveSubmitError(err: unknown): string {
  * files; on success we navigate to /jobs/:id/analysis (ORPHEUS-20). If the
  * client already has a pending job (re-clicking the button), we route them
  * straight to the existing analysis page without resubmitting.
+ *
+ * ORPHEUS-126: submission additionally requires the upload-consent
+ * checkbox. This is the Art. 6(1)(a) basis for processing the archive and
+ * the Art. 9(2)(a) basis for whatever incidental special-category content
+ * the user authored inside it, so it is a per-submission act — a client
+ * running a second report consents again. Unticked by default, gates the
+ * button, and re-enforced server-side at POST /jobs/from-uploads, which
+ * refuses to mint a job without it.
  */
 export function GroundworkPage() {
   const { data, isLoading } = useGroundworkProgress()
@@ -82,6 +91,7 @@ export function GroundworkPage() {
   const createJob = useCreateJob()
   const navigate = useNavigate()
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [uploadConsent, setUploadConsent] = useState(false)
 
   // LinkedIn flags come from the in-memory upload context — overrides the
   // stub `false` values from useGroundworkProgress.
@@ -114,7 +124,11 @@ export function GroundworkPage() {
     }
 
     try {
-      const job = await createJob.mutateAsync({ archive, analytics })
+      const job = await createJob.mutateAsync({
+        archive,
+        analytics,
+        uploadConsent,
+      })
       // Drop the in-memory blobs once the server has them — they're no
       // longer needed and we don't want to keep them resident.
       clearUploads()
@@ -125,7 +139,7 @@ export function GroundworkPage() {
   }
 
   const buttonDisabled =
-    !allComplete || isLoading || createJob.isPending
+    !allComplete || !uploadConsent || isLoading || createJob.isPending
   const buttonLabel = createJob.isPending
     ? 'Submitting…'
     : 'My Groundwork is Complete'
@@ -181,6 +195,46 @@ export function GroundworkPage() {
             export usually fixes it.
           </p>
         )}
+        {/*
+          ORPHEUS-126 upload consent. Deliberately states only what the
+          system actually does: the Privacy Policy's 30-day raw-upload
+          deletion clause is not implemented (no sweeper exists), so this
+          copy promises no deletion window it can't keep and points at
+          self-service deletion (ORPHEUS-124), which does work.
+        */}
+        <div className="groundwork-consent">
+          <label
+            className="groundwork-consent-row"
+            htmlFor="groundwork-upload-consent"
+          >
+            <input
+              id="groundwork-upload-consent"
+              type="checkbox"
+              className="groundwork-consent-checkbox"
+              checked={uploadConsent}
+              onChange={(event) => setUploadConsent(event.target.checked)}
+            />
+            <span className="groundwork-consent-label">
+              I agree to Orpheus processing my LinkedIn data archive and
+              analytics export to produce my report. We read seven data
+              files from the archive — profile, positions, skills, rich
+              media, posts, comments and reactions — and send extracts to
+              Anthropic to generate your narrative. Your uploads and report
+              are kept until you delete your account, which you can do
+              yourself at any time from your account page. Full detail is in
+              the{' '}
+              <a
+                href={PRIVACY_PATH}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Privacy Policy
+              </a>
+              .
+            </span>
+          </label>
+        </div>
+
         <button
           type="button"
           className={
@@ -203,7 +257,9 @@ export function GroundworkPage() {
         >
           {submitError
             ? submitError
-            : 'Available once all items above are complete.'}
+            : allComplete && !uploadConsent
+              ? 'Please confirm the permission above to submit.'
+              : 'Available once all items above are complete.'}
         </span>
       </div>
     </main>

@@ -15,6 +15,13 @@ import { SpeedInsights } from '@vercel/speed-insights/react'
 import '../../orpheus-styles.css'
 
 import App from './App'
+// ORPHEUS-126: lift the ToS/Privacy acceptance off the post-OAuth URL
+// before React mounts. The landing route is `/`, whose SmartIndexRedirect
+// navigates away on its first render and discards the query string — so a
+// component effect races the redirect and this cannot.
+import { captureTermsAcceptanceFromUrl } from './lib/consent'
+
+captureTermsAcceptanceFromUrl()
 
 async function bootstrap() {
   // Start MSW in development only when there are handlers to register.

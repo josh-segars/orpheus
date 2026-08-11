@@ -17,6 +17,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NetworkError, UploadRejectedError } from '../../lib/apiClient'
+import { CURRENT_PRIVACY_VERSION } from '../../lib/consent'
 import { useCreateJob } from '../useCreateJob'
 
 const apiPostJson = vi.hoisted(() => vi.fn())
@@ -59,6 +60,9 @@ function files() {
   return {
     archive: new File(['zip-bytes'], 'Complete_LinkedInDataExport_07-14-2026.zip'),
     analytics: new File(['xlsx-bytes'], 'Content_2026.xlsx'),
+    // ORPHEUS-126: GroundworkPage gates submit on this, so the happy path
+    // always carries it.
+    uploadConsent: true,
   }
 }
 
@@ -93,6 +97,10 @@ describe('useCreateJob (ORPHEUS-108 direct upload)', () => {
       upload_id: TARGETS.upload_id,
       archive_filename: 'Complete_LinkedInDataExport_07-14-2026.zip',
       has_profile_photo: true,
+      // ORPHEUS-126 — the affirmation plus the policy version it was
+      // given against. The timestamp is the server's to stamp.
+      upload_consent: true,
+      consent_privacy_version: CURRENT_PRIVACY_VERSION,
     })
     expect(result.current.data).toEqual(JOB)
   })
@@ -111,6 +119,7 @@ describe('useCreateJob (ORPHEUS-108 direct upload)', () => {
       ),
       // No type at all is also common; must land as the xlsx MIME.
       analytics: new File(['xlsx-bytes'], 'Content_2026.xlsx'),
+      uploadConsent: true,
     })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
