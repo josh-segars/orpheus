@@ -1,0 +1,63 @@
+/* Sign-up page (ORPHEUS-85) — relies on the shared .login-shell /
+ * .login-card scaffold from LoginPage.css (same pattern as
+ * NotInvitedPage.css). Only the beta-code field needs its own
+ * treatment. The field also appears on /signup/callback's re-prompt
+ * card, which is why these classes are signup-* rather than page-scoped. */
+
+.signup-code-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+
+.signup-code-label {
+  font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--warm-stone);
+}
+
+.signup-code-input {
+  font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
+  font-size: 14px;
+  color: var(--warm-text);
+  background-color: var(--warm-ivory);
+  border: 1px solid var(--warm-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.signup-code-input:focus {
+  border-color: var(--accent);
+}
+
+.signup-code-input::placeholder {
+  color: var(--warm-stone);
+  opacity: 0.7;
+}
+
+/* "Already have an account?" / "New here?" cross-links between /login
+ * and /signup. Sits under the fineprint; centered like it. */
+.signup-crosslink {
+  font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--warm-stone);
+  margin: 4px 0 0 0;
+  text-align: center;
+}
+
+.signup-crosslink a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.signup-crosslink a:hover {
+  color: var(--primary-hover);
+}

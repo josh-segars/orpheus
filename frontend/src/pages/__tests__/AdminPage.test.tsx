@@ -27,6 +27,7 @@ import type {
   AdminClient,
   AdminJob,
   AdminNarrative,
+  AdminSignupCode,
   AdminWaitlistEntry,
 } from '../../hooks/useAdmin'
 import { AdminPage } from '../AdminPage'
@@ -69,7 +70,18 @@ const mockWaitlistRef: {
   isLoading: false,
   isError: false,
 }
+const mockCodesRef: {
+  data: AdminSignupCode[]
+  isLoading: boolean
+  isError: boolean
+} = {
+  data: [],
+  isLoading: false,
+  isError: false,
+}
 const mockMutateAsync = vi.fn()
+const mockCreateCodeMutate = vi.fn()
+const mockUpdateCodeMutate = vi.fn()
 
 vi.mock('../../lib/auth', () => ({
   useSession: () => ({
@@ -107,6 +119,20 @@ vi.mock('../../hooks/useAdmin', () => ({
     data: { entries: mockWaitlistRef.data },
     isLoading: mockWaitlistRef.isLoading,
     isError: mockWaitlistRef.isError,
+  }),
+  // ORPHEUS-129 — sign-up codes
+  useAdminCodes: () => ({
+    data: { codes: mockCodesRef.data },
+    isLoading: mockCodesRef.isLoading,
+    isError: mockCodesRef.isError,
+  }),
+  useCreateAdminCode: () => ({
+    mutate: mockCreateCodeMutate,
+    isPending: false,
+  }),
+  useUpdateAdminCode: () => ({
+    mutate: mockUpdateCodeMutate,
+    isPending: false,
   }),
 }))
 
@@ -191,6 +217,35 @@ const mockWaitlist: AdminWaitlistEntry[] = [
   },
 ]
 
+const mockCodes: AdminSignupCode[] = [
+  {
+    id: 'code-uuid-1',
+    code: 'ORPH-AAAA-BBBB',
+    label: 'Closed beta',
+    advisor_id: null,
+    advisor_practice_name: null,
+    expires_at: null,
+    max_uses: null,
+    disabled_at: null,
+    created_by: 'josh@ess3.ai',
+    created_at: '2026-08-12T00:00:00+00:00',
+    redemption_count: 3,
+  },
+  {
+    id: 'code-uuid-2',
+    code: 'ACME2027',
+    label: 'Acme cohort',
+    advisor_id: 'advisor-uuid-9',
+    advisor_practice_name: 'Acme Advisory',
+    expires_at: '2027-01-01T00:00:00+00:00',
+    max_uses: 25,
+    disabled_at: '2026-08-12T12:00:00+00:00',
+    created_by: 'josh@ess3.ai',
+    created_at: '2026-08-11T00:00:00+00:00',
+    redemption_count: 1,
+  },
+]
+
 function resetMocks() {
   mockClientsRef.data = mockClients
   mockClientsRef.isLoading = false
@@ -205,8 +260,13 @@ function resetMocks() {
   mockWaitlistRef.data = mockWaitlist
   mockWaitlistRef.isLoading = false
   mockWaitlistRef.isError = false
+  mockCodesRef.data = mockCodes
+  mockCodesRef.isLoading = false
+  mockCodesRef.isError = false
   mockMutateAsync.mockReset()
   mockMutateAsync.mockResolvedValue({})
+  mockCreateCodeMutate.mockReset()
+  mockUpdateCodeMutate.mockReset()
 }
 
 function renderAdmin() {
@@ -342,5 +402,75 @@ describe('AdminPage', () => {
     expect(
       screen.getByText(/0 signups · 0 beta assessment · 0 live cohorts/i),
     ).toBeInTheDocument()
+  })
+
+  // ORPHEUS-129 — sign-up codes section
+
+  it('renders the codes table with routing, counts, and status', () => {
+    renderAdmin()
+    expect(
+      screen.getByRole('heading', { level: 2, name: /sign-up codes/i }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('ORPH-AAAA-BBBB')).toBeInTheDocument()
+    // House-advisor default vs. routing override label.
+    expect(screen.getByText('House')).toBeInTheDocument()
+    expect(screen.getByText('Acme Advisory')).toBeInTheDocument()
+    // Redemption count renders capped form when max_uses is set.
+    expect(screen.getByText('1 / 25')).toBeInTheDocument()
+    // Disabled code shows its state and an Enable action.
+    expect(screen.getByText('Disabled')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /^enable$/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('creates a code with the form values', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    await user.type(screen.getByLabelText(/code label/i), 'Spring cohort')
+    await user.type(screen.getByLabelText(/vanity code/i), 'SPRING27')
+    await user.type(screen.getByLabelText(/max uses/i), '10')
+    await user.click(screen.getByRole('button', { name: /create code/i }))
+
+    expect(mockCreateCodeMutate).toHaveBeenCalledTimes(1)
+    expect(mockCreateCodeMutate.mock.calls[0][0]).toEqual({
+      label: 'Spring cohort',
+      code: 'SPRING27',
+      advisor_id: null,
+      expires_at: null,
+      max_uses: 10,
+    })
+  })
+
+  it('requires a label before creating', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    await user.click(screen.getByRole('button', { name: /create code/i }))
+    expect(mockCreateCodeMutate).not.toHaveBeenCalled()
+    expect(screen.getByText(/a label is required/i)).toBeInTheDocument()
+  })
+
+  it('toggles a code via the disable/enable action', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    // First row (active) shows Disable; fires disabled=true.
+    await user.click(screen.getByRole('button', { name: /^disable$/i }))
+    expect(mockUpdateCodeMutate).toHaveBeenCalledWith({
+      codeId: 'code-uuid-1',
+      disabled: true,
+    })
+    // Second row (disabled) shows Enable; fires disabled=false.
+    await user.click(screen.getByRole('button', { name: /^enable$/i }))
+    expect(mockUpdateCodeMutate).toHaveBeenCalledWith({
+      codeId: 'code-uuid-2',
+      disabled: false,
+    })
+  })
+
+  it('shows the codes empty state with the fail-closed warning', () => {
+    mockCodesRef.data = []
+    renderAdmin()
+    expect(screen.getByText(/no codes yet/i)).toBeInTheDocument()
+    expect(screen.getByText(/rejects everyone/i)).toBeInTheDocument()
   })
 })

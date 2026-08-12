@@ -28,6 +28,13 @@ Three routes:
     browser (anon INSERT-only RLS, no select policy), so this
     service-role read is the only in-app surface for signups.
 
+  * `GET /admin/codes` / `POST /admin/codes` /
+    `PATCH /admin/codes/{code_id}` — sign-up access codes
+    (ORPHEUS-129): list with redemption counts, generate (or mint a
+    vanity code), and disable/enable. `public.signup_codes` +
+    `public.code_redemptions` are service-role only (migration 022),
+    so this is their only in-app surface.
+
 Every endpoint depends on `get_current_admin` (backend/auth.py) and
 uses the service-role Supabase client (RLS bypassed intentionally —
 the whole point of the admin surface is to see across tenants).
@@ -41,11 +48,12 @@ generic auth + db modules).
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+import secrets
+from datetime import datetime, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from backend.auth import SessionRoles, get_current_admin
 from backend.config import get_settings
@@ -881,4 +889,357 @@ def _narrative_from_row(row: dict[str, Any]) -> AdminNarrative:
         status=row.get("status") or "draft",
         published_at=_iso_or_none(row.get("published_at")),
         generated_at=_iso_or_none(row.get("generated_at")),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Sign-up access codes (ORPHEUS-129)
+# --------------------------------------------------------------------------- #
+
+# Generated-code alphabet: A-Z + 2-9 minus the lookalikes (I, L, O, 0, 1)
+# so a code read over the phone or retyped from a slide can't be
+# mis-transcribed. Codes are matched case-insensitively at redemption.
+_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+
+def _generate_code() -> str:
+    """Mint a fresh high-entropy code: ORPH-XXXX-XXXX.
+
+    31^8 ≈ 2^39.6 possibilities — redemption requires an authenticated
+    session per attempt, so online enumeration is not a realistic
+    threat at this entropy. Vanity codes (admin-supplied) are the
+    deliberate low-entropy exception.
+    """
+    groups = [
+        "".join(secrets.choice(_CODE_ALPHABET) for _ in range(4))
+        for _ in range(2)
+    ]
+    return f"ORPH-{groups[0]}-{groups[1]}"
+
+
+class AdminSignupCode(BaseModel):
+    """One row of the /admin/codes surface.
+
+    `code` is returned in full — codes are distribution secrets the
+    admin must read back to hand out, which is also why they're stored
+    plaintext (migration 022). `redemption_count` is derived by
+    counting `code_redemptions` rows; there is no counter column to
+    drift. `advisor_practice_name` labels a routing override in the UI
+    without a second round trip; None either means no override (house
+    advisor) or an override whose advisor row lost its practice_name.
+    """
+
+    id: str
+    code: str
+    label: str
+    advisor_id: str | None
+    advisor_practice_name: str | None
+    expires_at: str | None
+    max_uses: int | None
+    disabled_at: str | None
+    created_by: str | None
+    created_at: str | None
+    redemption_count: int
+
+
+class ListAdminCodesResponse(BaseModel):
+    """Body of `GET /admin/codes`."""
+
+    codes: list[AdminSignupCode]
+
+
+class CreateAdminCodeRequest(BaseModel):
+    """Body for `POST /admin/codes`.
+
+    `code` omitted → a high-entropy ORPH-XXXX-XXXX code is generated.
+    Supplying it mints a vanity code (e.g. ACME2027) — allowed
+    deliberately for marketing/group distribution, at the cost of
+    guessability the admin accepts by typing one.
+    """
+
+    label: str = Field(..., min_length=1, max_length=200)
+    code: str | None = Field(default=None, min_length=4, max_length=64)
+    advisor_id: str | None = None
+    expires_at: str | None = None
+    max_uses: int | None = Field(default=None, gt=0)
+
+    @field_validator("label")
+    @classmethod
+    def _trim_label(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("label must not be blank")
+        return trimmed
+
+    @field_validator("code")
+    @classmethod
+    def _validate_vanity_code(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        if len(trimmed) < 4:
+            raise ValueError("code must be at least 4 characters")
+        if any(ch.isspace() for ch in trimmed):
+            raise ValueError("code must not contain whitespace")
+        return trimmed
+
+    @field_validator("expires_at")
+    @classmethod
+    def _validate_expires_at(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        try:
+            datetime.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError(
+                f"expires_at must be an ISO 8601 timestamp (got: {value!r})"
+            ) from exc
+        return value
+
+
+class UpdateAdminCodeRequest(BaseModel):
+    """Body for `PATCH /admin/codes/{code_id}` — the disable/enable switch.
+
+    Just the kill switch in v1. Editing label/expiry/max_uses in place
+    is deliberately out of scope: a changed code is a different
+    distribution decision, and minting a new one keeps the redemption
+    history unambiguous.
+    """
+
+    disabled: bool
+
+
+def _admin_code_from_row(
+    row: dict[str, Any],
+    *,
+    redemption_count: int,
+    advisor_practice_name: str | None,
+) -> AdminSignupCode:
+    return AdminSignupCode(
+        id=str(row["id"]),
+        code=row["code"],
+        label=row["label"],
+        advisor_id=(str(row["advisor_id"]) if row.get("advisor_id") else None),
+        advisor_practice_name=advisor_practice_name,
+        expires_at=_iso_or_none(row.get("expires_at")),
+        max_uses=row.get("max_uses"),
+        disabled_at=_iso_or_none(row.get("disabled_at")),
+        created_by=row.get("created_by"),
+        created_at=_iso_or_none(row.get("created_at")),
+        redemption_count=redemption_count,
+    )
+
+
+@router.get("/codes", response_model=ListAdminCodesResponse)
+async def list_admin_codes(
+    _admin: Annotated[SessionRoles, Depends(get_current_admin)],
+) -> ListAdminCodesResponse:
+    """Return every signup code, newest first, with redemption counts.
+
+    Three round trips — codes, all redemptions (bucketed in Python),
+    and practice names for any routing-override advisors. Same
+    bucket-don't-join posture as GET /admin/clients; code volume is
+    admin-generated and will stay tiny. Service-role client required
+    (migration 022: RLS enabled, no policies).
+    """
+    supabase = get_service_client()
+
+    codes_result = (
+        supabase.table("signup_codes")
+        .select("*")
+        .order("created_at", desc=True)
+        .execute()
+    )
+    rows = codes_result.data or []
+
+    counts: dict[str, int] = {}
+    advisor_names: dict[str, str | None] = {}
+    if rows:
+        redemptions_result = (
+            supabase.table("code_redemptions")
+            .select("code_id")
+            .execute()
+        )
+        for redemption in redemptions_result.data or []:
+            cid = str(redemption["code_id"])
+            counts[cid] = counts.get(cid, 0) + 1
+
+        advisor_ids = sorted(
+            {str(r["advisor_id"]) for r in rows if r.get("advisor_id")}
+        )
+        if advisor_ids:
+            advisors_result = (
+                supabase.table("advisors")
+                .select("id, practice_name")
+                .in_("id", advisor_ids)
+                .execute()
+            )
+            for adv in advisors_result.data or []:
+                advisor_names[str(adv["id"])] = adv.get("practice_name")
+
+    codes = [
+        _admin_code_from_row(
+            row,
+            redemption_count=counts.get(str(row["id"]), 0),
+            advisor_practice_name=(
+                advisor_names.get(str(row["advisor_id"]))
+                if row.get("advisor_id")
+                else None
+            ),
+        )
+        for row in rows
+    ]
+    return ListAdminCodesResponse(codes=codes)
+
+
+@router.post(
+    "/codes",
+    response_model=AdminSignupCode,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_admin_code(
+    request: CreateAdminCodeRequest,
+    admin: Annotated[SessionRoles, Depends(get_current_admin)],
+) -> AdminSignupCode:
+    """Mint a new signup code (generated by default, vanity on request).
+
+    An `advisor_id` routing override is probed for existence up front —
+    400 on a bad uuid beats a dangling reference that silently falls
+    back to the house advisor at redemption time (the SET NULL
+    behavior is for advisors deleted AFTER the code was minted, not a
+    licence to mint codes against advisors that never existed).
+
+    Duplicate code (vanity collision on the lower(code) unique index)
+    → 409. A generated-code collision is astronomically unlikely; the
+    409 tells the admin to simply retry.
+    """
+    supabase = get_service_client()
+
+    if request.advisor_id is not None:
+        advisor_probe = (
+            supabase.table("advisors")
+            .select("id")
+            .eq("id", request.advisor_id)
+            .limit(1)
+            .execute()
+        )
+        if not advisor_probe.data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"No advisor exists with id {request.advisor_id}.",
+            )
+
+    code_value = request.code or _generate_code()
+
+    try:
+        insert_result = (
+            supabase.table("signup_codes")
+            .insert(
+                {
+                    "code": code_value,
+                    "label": request.label,
+                    "advisor_id": request.advisor_id,
+                    "expires_at": request.expires_at,
+                    "max_uses": request.max_uses,
+                    "created_by": admin.email,
+                }
+            )
+            .execute()
+        )
+    except Exception as exc:  # noqa: BLE001 — narrowed by the 23505 check
+        code = getattr(exc, "code", None)
+        if code == "23505" or "23505" in str(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "A code with that value already exists "
+                    "(codes are case-insensitive)."
+                ),
+            ) from exc
+        raise
+
+    if not insert_result.data:
+        logger.error("Failed to insert signup code (empty result.data)")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create the code.",
+        )
+
+    row = insert_result.data[0]
+    logger.info(
+        "Signup code created: id=%s label=%r advisor=%s by=%s",
+        row.get("id"),
+        request.label,
+        request.advisor_id,
+        admin.email,
+    )
+    return _admin_code_from_row(
+        row,
+        redemption_count=0,
+        advisor_practice_name=None,
+    )
+
+
+@router.patch("/codes/{code_id}", response_model=AdminSignupCode)
+async def update_admin_code(
+    code_id: str,
+    request: UpdateAdminCodeRequest,
+    admin: Annotated[SessionRoles, Depends(get_current_admin)],
+) -> AdminSignupCode:
+    """Disable or re-enable a code (the per-code kill switch).
+
+    Disabling takes effect on the next POST /signup/complete — there
+    is no session to revoke, since a code gates row creation only.
+    Re-enabling clears disabled_at; expiry and max-uses still apply.
+    """
+    supabase = get_service_client()
+
+    lookup = (
+        supabase.table("signup_codes")
+        .select("id")
+        .eq("id", code_id)
+        .limit(1)
+        .execute()
+    )
+    if not lookup.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Code not found.",
+        )
+
+    new_disabled_at = (
+        datetime.now(timezone.utc).isoformat() if request.disabled else None
+    )
+    update_result = (
+        supabase.table("signup_codes")
+        .update({"disabled_at": new_disabled_at})
+        .eq("id", code_id)
+        .execute()
+    )
+    if not update_result.data:
+        logger.error("Failed to update signup code %s (empty result)", code_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update the code.",
+        )
+
+    row = update_result.data[0]
+
+    count_result = (
+        supabase.table("code_redemptions")
+        .select("id", count="exact")
+        .eq("code_id", code_id)
+        .execute()
+    )
+
+    logger.info(
+        "Signup code %s %s by %s",
+        code_id,
+        "disabled" if request.disabled else "re-enabled",
+        admin.email,
+    )
+    return _admin_code_from_row(
+        row,
+        redemption_count=getattr(count_result, "count", 0) or 0,
+        advisor_practice_name=None,
     )

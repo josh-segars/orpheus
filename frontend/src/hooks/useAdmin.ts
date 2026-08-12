@@ -16,7 +16,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 
-import { ApiError, apiGet, apiPatchJson } from '../lib/apiClient'
+import { ApiError, apiGet, apiPatchJson, apiPostJson } from '../lib/apiClient'
 import { useSession } from '../lib/auth'
 
 // --------------------------------------------------------------------------- //
@@ -269,4 +269,84 @@ export function extractAdminErrorMessage(error: unknown): string {
     return error.message
   }
   return 'Something went wrong. Please try again.'
+}
+
+// --------------------------------------------------------------------------- //
+// Sign-up access codes (ORPHEUS-129)
+// --------------------------------------------------------------------------- //
+
+// Mirrors AdminSignupCode in backend/routers/admin.py.
+export interface AdminSignupCode {
+  id: string
+  code: string
+  label: string
+  advisor_id: string | null
+  advisor_practice_name: string | null
+  expires_at: string | null
+  max_uses: number | null
+  disabled_at: string | null
+  created_by: string | null
+  created_at: string | null
+  redemption_count: number
+}
+
+export interface AdminCodesResponse {
+  codes: AdminSignupCode[]
+}
+
+export interface CreateAdminCodeRequest {
+  label: string
+  code?: string | null
+  advisor_id?: string | null
+  expires_at?: string | null
+  max_uses?: number | null
+}
+
+export const ADMIN_CODES_QUERY_KEY = ['admin', 'codes'] as const
+
+export function useAdminCodes() {
+  const enabled = useEnabled()
+  return useQuery<AdminCodesResponse, ApiError>({
+    queryKey: ADMIN_CODES_QUERY_KEY,
+    queryFn: () => apiGet<AdminCodesResponse>('/admin/codes'),
+    enabled,
+    retry: false,
+  })
+}
+
+/**
+ * Mutation against `POST /admin/codes`. On success, invalidates the
+ * codes list so the new row (with its generated code value) appears —
+ * the response also carries the full row, so callers can surface the
+ * minted code immediately without waiting for the refetch.
+ */
+export function useCreateAdminCode() {
+  const queryClient = useQueryClient()
+  return useMutation<AdminSignupCode, ApiError, CreateAdminCodeRequest>({
+    mutationFn: (body) => apiPostJson<AdminSignupCode>('/admin/codes', body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ADMIN_CODES_QUERY_KEY })
+    },
+  })
+}
+
+/**
+ * Mutation against `PATCH /admin/codes/{id}` — the disable/enable
+ * kill switch. Same invalidate-don't-optimistically-update posture as
+ * the narrative editor: a disabled code failing to disable must not
+ * look disabled.
+ */
+export function useUpdateAdminCode() {
+  const queryClient = useQueryClient()
+  return useMutation<
+    AdminSignupCode,
+    ApiError,
+    { codeId: string; disabled: boolean }
+  >({
+    mutationFn: ({ codeId, disabled }) =>
+      apiPatchJson<AdminSignupCode>(`/admin/codes/${codeId}`, { disabled }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ADMIN_CODES_QUERY_KEY })
+    },
+  })
 }

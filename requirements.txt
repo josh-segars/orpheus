@@ -7,14 +7,12 @@ pydantic
 pydantic-settings>=2.0.0
 openpyxl
 
-# Was required by the multipart POST /jobs (ORPHEUS-16) for FastAPI's
-# UploadFile / Form parsing. That handler was deleted with the ORPHEUS-108
-# shim (2026-07-27) and no route declares Form/File/UploadFile any more, so
-# this is now unused — FastAPI only imports it when a route needs it.
-# Retained one deploy cycle as a safety margin rather than changing the
-# Railway build in the same commit that removes the endpoint; drop it once
-# the deploy is confirmed green.
-python-multipart>=0.0.9
+# python-multipart was removed 2026-08-12 (with the ORPHEUS-85/129 commit) —
+# it had been unused since the multipart POST /jobs handler was deleted with
+# the ORPHEUS-108 shim (2026-07-27; no route declares Form/File/UploadFile),
+# and was retained past its planned one-deploy safety margin. If a future
+# route reintroduces Form/File parsing, FastAPI will fail loudly at import
+# with an instruction to install it.
 
 # JWT verification for Supabase-issued tokens (ORPHEUS-27).
 PyJWT[crypto]>=2.8.0

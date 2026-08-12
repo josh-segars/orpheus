@@ -28,12 +28,16 @@ import {
   AdminClient,
   AdminJob,
   AdminNarrativeMeta,
+  AdminSignupCode,
   AdminWaitlistEntry,
   extractAdminErrorMessage,
   useAdminClients,
+  useAdminCodes,
   useAdminJobs,
   useAdminNarrative,
   useAdminWaitlist,
+  useCreateAdminCode,
+  useUpdateAdminCode,
   useUpdateAdminNarrative,
 } from '../hooks/useAdmin'
 import './AdminPage.css'
@@ -114,8 +118,258 @@ export function AdminPage() {
         </section>
       )}
 
+      <CodesSection />
+
       <WaitlistSection />
     </main>
+  )
+}
+
+// --------------------------------------------------------------------------- //
+// Sign-up codes (ORPHEUS-129) — generate / list / disable access codes
+// --------------------------------------------------------------------------- //
+
+function CodesSection() {
+  const codesQuery = useAdminCodes()
+  const createMutation = useCreateAdminCode()
+  const updateMutation = useUpdateAdminCode()
+
+  const [label, setLabel] = useState('')
+  const [vanityCode, setVanityCode] = useState('')
+  const [advisorId, setAdvisorId] = useState('')
+  const [maxUses, setMaxUses] = useState('')
+  const [expiresAt, setExpiresAt] = useState('')
+  const [formError, setFormError] = useState<string | null>(null)
+  // The most recently minted code, surfaced prominently so the admin
+  // can copy it without hunting the table.
+  const [mintedCode, setMintedCode] = useState<AdminSignupCode | null>(null)
+
+  const codes = codesQuery.data?.codes ?? []
+
+  const handleCreate = (event: FormEvent) => {
+    event.preventDefault()
+    setFormError(null)
+    const trimmedLabel = label.trim()
+    if (!trimmedLabel) {
+      setFormError('A label is required — what is this code for?')
+      return
+    }
+    const parsedMaxUses = maxUses.trim() ? Number(maxUses.trim()) : null
+    if (parsedMaxUses !== null && (!Number.isInteger(parsedMaxUses) || parsedMaxUses <= 0)) {
+      setFormError('Max uses must be a positive whole number (or blank for unlimited).')
+      return
+    }
+    createMutation.mutate(
+      {
+        label: trimmedLabel,
+        code: vanityCode.trim() || null,
+        advisor_id: advisorId.trim() || null,
+        // <input type="date"> yields YYYY-MM-DD, a valid ISO 8601 date —
+        // the backend stores it as midnight UTC on that day.
+        expires_at: expiresAt.trim() || null,
+        max_uses: parsedMaxUses,
+      },
+      {
+        onSuccess: (created) => {
+          setMintedCode(created)
+          setLabel('')
+          setVanityCode('')
+          setAdvisorId('')
+          setMaxUses('')
+          setExpiresAt('')
+        },
+        onError: (err) => {
+          setFormError(extractAdminErrorMessage(err))
+        },
+      },
+    )
+  }
+
+  return (
+    <section className="admin-section">
+      <h2 className="admin-section-title">
+        Sign-up codes
+        {!codesQuery.isLoading && !codesQuery.isError && (
+          <span className="admin-waitlist-stats">
+            {codes.length} code{codes.length === 1 ? '' : 's'}
+            {' · '}
+            {codes.reduce((sum, c) => sum + c.redemption_count, 0)} redemptions
+          </span>
+        )}
+      </h2>
+
+      <form className="admin-codes-form" onSubmit={handleCreate}>
+        <input
+          type="text"
+          className="admin-codes-input"
+          placeholder="Label (required) — e.g. Closed beta"
+          aria-label="Code label"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+        />
+        <input
+          type="text"
+          className="admin-codes-input"
+          placeholder="Vanity code (blank = generate)"
+          aria-label="Vanity code"
+          value={vanityCode}
+          onChange={(e) => setVanityCode(e.target.value)}
+        />
+        <input
+          type="text"
+          className="admin-codes-input"
+          placeholder="Routing advisor id (blank = house)"
+          aria-label="Routing advisor id"
+          value={advisorId}
+          onChange={(e) => setAdvisorId(e.target.value)}
+        />
+        <input
+          type="text"
+          className="admin-codes-input admin-codes-input-narrow"
+          placeholder="Max uses"
+          aria-label="Max uses"
+          value={maxUses}
+          onChange={(e) => setMaxUses(e.target.value)}
+        />
+        <input
+          type="date"
+          className="admin-codes-input admin-codes-input-narrow"
+          aria-label="Expires on"
+          title="Expires on (blank = never)"
+          value={expiresAt}
+          onChange={(e) => setExpiresAt(e.target.value)}
+        />
+        <button
+          type="submit"
+          className="admin-codes-create"
+          disabled={createMutation.isPending}
+        >
+          {createMutation.isPending ? 'Creating…' : 'Create code'}
+        </button>
+      </form>
+
+      {formError && (
+        <div className="admin-status admin-status-error" role="alert">
+          {formError}
+        </div>
+      )}
+
+      {mintedCode && (
+        <div className="admin-codes-minted" role="status">
+          Created <strong>{mintedCode.label}</strong>:{' '}
+          <code className="admin-codes-value">{mintedCode.code}</code> — share
+          it as{' '}
+          <code className="admin-codes-value">
+            /signup?code={encodeURIComponent(mintedCode.code)}
+          </code>
+        </div>
+      )}
+
+      <CodesTable
+        isLoading={codesQuery.isLoading}
+        isError={codesQuery.isError}
+        errorMessage={
+          codesQuery.isError
+            ? extractAdminErrorMessage(codesQuery.error)
+            : null
+        }
+        codes={codes}
+        onToggle={(code) =>
+          updateMutation.mutate({
+            codeId: code.id,
+            disabled: code.disabled_at === null,
+          })
+        }
+        togglePending={updateMutation.isPending}
+      />
+    </section>
+  )
+}
+
+interface CodesTableProps {
+  isLoading: boolean
+  isError: boolean
+  errorMessage: string | null
+  codes: AdminSignupCode[]
+  onToggle: (code: AdminSignupCode) => void
+  togglePending: boolean
+}
+
+function CodesTable({
+  isLoading,
+  isError,
+  errorMessage,
+  codes,
+  onToggle,
+  togglePending,
+}: CodesTableProps) {
+  if (isLoading) {
+    return <div className="admin-status">Loading codes…</div>
+  }
+  if (isError) {
+    return (
+      <div className="admin-status admin-status-error" role="alert">
+        {errorMessage ?? 'Failed to load codes.'}
+      </div>
+    )
+  }
+  if (codes.length === 0) {
+    return (
+      <div className="admin-status">
+        No codes yet. Create one above to open the self-serve sign-up
+        funnel — without an active code, /signup rejects everyone.
+      </div>
+    )
+  }
+
+  return (
+    <table className="admin-table">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Label</th>
+          <th>Routing</th>
+          <th>Redemptions</th>
+          <th>Expires</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {codes.map((code) => {
+          const disabled = code.disabled_at !== null
+          return (
+            <tr key={code.id}>
+              <td>
+                <code className="admin-codes-value">{code.code}</code>
+              </td>
+              <td>{code.label}</td>
+              <td>
+                {code.advisor_id
+                  ? code.advisor_practice_name ?? code.advisor_id
+                  : 'House'}
+              </td>
+              <td>
+                {code.redemption_count}
+                {code.max_uses !== null ? ` / ${code.max_uses}` : ''}
+              </td>
+              <td>{code.expires_at ? code.expires_at.slice(0, 10) : '—'}</td>
+              <td>{disabled ? 'Disabled' : 'Active'}</td>
+              <td>
+                <button
+                  type="button"
+                  className="admin-codes-toggle"
+                  disabled={togglePending}
+                  onClick={() => onToggle(code)}
+                >
+                  {disabled ? 'Enable' : 'Disable'}
+                </button>
+              </td>
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
   )
 }
 

@@ -1,7 +1,8 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 import { signOut } from '../lib/auth'
 import './NotInvitedPage.css'
+import './SignupPage.css'
 
 /**
  * /not-invited — the page ProtectedRoute redirects authenticated users
@@ -24,6 +25,11 @@ import './NotInvitedPage.css'
  * Both cases are recovered by signing out + starting over (either
  * with the same LinkedIn account once their advisor re-issues, or
  * with a different LinkedIn account next time).
+ *
+ * ORPHEUS-85 added a third path: self-serve sign-up. A neither-role
+ * user no longer needs an invitation at all — the sign-up link below
+ * routes them to /signup, where (already authenticated) they complete
+ * in place with a beta access code, no OAuth re-run.
  *
  * Sits outside ProtectedRoute. The user IS authenticated when
  * reaching this page — ProtectedRoute literally sent them here —
@@ -80,6 +86,11 @@ export function NotInvitedPage() {
 
         <p className="login-fineprint">
           If you believe this is a mistake, please contact your advisor.
+        </p>
+
+        <p className="signup-crosslink">
+          Don't have an advisor? If you have a beta access code, you can{' '}
+          <Link to="/signup">sign up directly</Link>.
         </p>
       </div>
     </main>

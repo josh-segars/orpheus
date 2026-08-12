@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Navigate, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 
 import { signInWithLinkedIn, useSession } from '../lib/auth'
 import {
@@ -11,6 +11,7 @@ import {
   writePendingTermsAcceptance,
 } from '../lib/consent'
 import './LoginPage.css'
+import './SignupPage.css'
 
 /**
  * /login — single-purpose page that kicks off the LinkedIn OIDC flow.
@@ -174,6 +175,11 @@ export function LoginPage() {
         <p className="login-fineprint">
           Orpheus uses your LinkedIn account only to verify who you are. We
           never post on your behalf.
+        </p>
+
+        {/* ORPHEUS-85: self-serve sign-up entry point. */}
+        <p className="signup-crosslink">
+          New to Orpheus? <Link to="/signup">Sign up with a beta access code</Link>.
         </p>
       </div>
     </main>

@@ -140,6 +140,24 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Self-serve sign-up (ORPHEUS-85) ----------------------------------- #
+
+    house_advisor_id: str = Field(
+        default="",
+        alias="HOUSE_ADVISOR_ID",
+        description=(
+            "advisors.id (uuid) of the house advisor that self-serve "
+            "sign-ups are auto-assigned to by default (ORPHEUS-85). "
+            "clients.advisor_id stays NOT NULL, so this row must exist "
+            "before enabling sign-up. A signup code can override this "
+            "per-code via signup_codes.advisor_id (group/business "
+            "routing, ORPHEUS-129). When unset, POST /signup/complete "
+            "returns 503 — self-serve sign-up is disabled by default. "
+            "Access codes themselves live in public.signup_codes "
+            "(managed via /admin/codes), not in the env."
+        ),
+    )
+
     # --- Validators ------------------------------------------------------- #
 
     @field_validator("supabase_url")

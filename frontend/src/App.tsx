@@ -25,6 +25,8 @@ import { NotInvitedPage } from './pages/NotInvitedPage'
 import { QuestionnairePage } from './pages/QuestionnairePage'
 import { ReportsPage } from './pages/ReportsPage'
 import { SignalScorePage } from './pages/SignalScorePage'
+import { SignupCallbackPage } from './pages/SignupCallbackPage'
+import { SignupPage } from './pages/SignupPage'
 import { WelcomePage } from './pages/WelcomePage'
 import { isAdminEmail } from './hooks/useAdmin'
 import { ClientsPage } from './pages/advisor/ClientsPage'
@@ -75,6 +77,19 @@ export default function App() {
 
       {/* Public auth route — its own shell */}
       <Route path="/login" element={<LoginPage />} />
+
+      {/* Self-serve sign-up (ORPHEUS-85) — public. Collects the beta
+          access code + ToS acceptance, then kicks off LinkedIn OIDC
+          without an invitation token. Also serves already-authenticated
+          neither-role users (via /not-invited's sign-up link), who
+          complete in place without an OAuth re-run. */}
+      <Route path="/signup" element={<SignupPage />} />
+
+      {/* Post-OAuth sign-up completion — calls POST /signup/complete.
+          Public for the same reason as /invite/callback: the user has a
+          Supabase session but no clients row yet; ProtectedRoute would
+          bounce them to /not-invited before the completion could run. */}
+      <Route path="/signup/callback" element={<SignupCallbackPage />} />
 
       {/* Published legal documents (ORPHEUS-125) — public, no auth. The
           /login consent checkbox (ORPHEUS-126) links here in a new tab,
