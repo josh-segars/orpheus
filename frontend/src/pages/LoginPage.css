@@ -213,3 +213,64 @@
   font-variation-settings: 'opsz' 16;
   color: var(--issue);
 }
+
+/* ---------------------------------------------------------------------------
+   ORPHEUS-85/129 — self-serve sign-up panel.
+
+   Sign-up-by-access-code is the primary acquisition path during the
+   beta, so it gets a first-class panel above the consent row instead of
+   the original fine-print crosslink [Josh, 2026-08-12]. Visual family:
+   .login-notice (accent-toned = good news), plus its own solid-accent
+   action so the two CTAs on the card read as different weights —
+   sign-in stays the blue primary, sign-up is the green invitation.
+   --------------------------------------------------------------------------- */
+
+.login-signup-panel {
+  background-color: var(--accent-tint-soft);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.login-signup-label {
+  font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.login-signup-body {
+  font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--warm-text);
+}
+
+.login-signup-button {
+  font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bg-page);
+  background-color: var(--accent);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 11px 20px;
+  align-self: flex-start;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.login-signup-button:hover {
+  /* No --accent-hover token exists (accent-strong collapsed onto
+     --accent under ORPHEUS-70); the tint-hover overlay pattern doesn't
+     work on a solid fill, so brighten in place. */
+  background-color: #3fd877;
+}

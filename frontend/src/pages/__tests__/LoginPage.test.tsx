@@ -114,3 +114,24 @@ describe('LoginPage consent gate (ORPHEUS-126)', () => {
     expect(screen.queryByText(/provided separately/i)).toBeNull()
   })
 })
+
+// ── Self-serve sign-up panel (ORPHEUS-85/129) ───────────────────────────
+
+describe('LoginPage sign-up panel (ORPHEUS-85/129)', () => {
+  it('renders the sign-up panel with a first-class link to /signup', () => {
+    renderPage()
+    expect(screen.getByText(/new to orpheus\?/i)).toBeInTheDocument()
+    const signup = screen.getByRole('link', {
+      name: /sign up with an access code/i,
+    })
+    expect(signup).toHaveAttribute('href', '/signup')
+  })
+
+  it('keeps sign-in as the only button — sign-up is a link, not a competing submit', () => {
+    renderPage()
+    // Exactly one button on the card (Continue with LinkedIn); the
+    // sign-up action is an anchor so it can't be confused with the
+    // consent-gated submit.
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+  })
+})

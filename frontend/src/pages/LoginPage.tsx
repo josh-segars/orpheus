@@ -11,7 +11,6 @@ import {
   writePendingTermsAcceptance,
 } from '../lib/consent'
 import './LoginPage.css'
-import './SignupPage.css'
 
 /**
  * /login — single-purpose page that kicks off the LinkedIn OIDC flow.
@@ -131,6 +130,22 @@ export function LoginPage() {
           </div>
         )}
 
+        {/* ORPHEUS-85/129: self-serve sign-up is the primary acquisition
+            path during the beta, so it gets a first-class panel above the
+            sign-in machinery rather than a fine-print crosslink
+            [Josh, 2026-08-12]. Same visual family as .login-notice —
+            accent-toned, good news, not a caution. */}
+        <div className="login-signup-panel">
+          <div className="login-signup-label">New to Orpheus?</div>
+          <div className="login-signup-body">
+            The beta is open — if you have an access code, you can create
+            your account in about a minute.
+          </div>
+          <Link to="/signup" className="login-signup-button">
+            Sign up with an access code
+          </Link>
+        </div>
+
         <div className="login-consent">
           <label className="login-consent-row" htmlFor="login-accept-terms">
             <input
@@ -175,11 +190,6 @@ export function LoginPage() {
         <p className="login-fineprint">
           Orpheus uses your LinkedIn account only to verify who you are. We
           never post on your behalf.
-        </p>
-
-        {/* ORPHEUS-85: self-serve sign-up entry point. */}
-        <p className="signup-crosslink">
-          New to Orpheus? <Link to="/signup">Sign up with a beta access code</Link>.
         </p>
       </div>
     </main>
