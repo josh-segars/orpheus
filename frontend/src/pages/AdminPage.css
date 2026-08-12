@@ -508,3 +508,35 @@
   opacity: 0.6;
   cursor: progress;
 }
+
+/* Per-code roster (ORPHEUS-129) — expandable member list under a code
+ * row. The count itself is the toggle. */
+
+.admin-roster-toggle {
+  background: transparent;
+  color: var(--text-body);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.admin-roster-toggle:hover {
+  border-color: var(--accent);
+  color: var(--text-strong);
+}
+
+.admin-roster-row td {
+  background: var(--accent-tint-soft);
+  padding: 12px 16px 16px;
+}
+
+.admin-roster-table {
+  margin: 0;
+}
+
+.admin-roster-table th {
+  font-size: 11px;
+}

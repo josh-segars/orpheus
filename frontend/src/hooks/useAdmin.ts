@@ -350,3 +350,41 @@ export function useUpdateAdminCode() {
     },
   })
 }
+
+// Mirrors AdminCodeRedemption in backend/routers/admin.py — the
+// proto-cohort roster row (see the B2B Cohort Assessment scoping doc:
+// redemptions are enrollment provenance; `cohort_members` backfills
+// from these when the cohort layer lands).
+export interface AdminCodeRedemption {
+  client_id: string
+  display_name: string
+  email: string
+  redeemed_at: string | null
+  latest_job: AdminJobSummary | null
+}
+
+export interface AdminCodeRedemptionsResponse {
+  redemptions: AdminCodeRedemption[]
+}
+
+export function adminCodeRedemptionsQueryKey(codeId: string | null) {
+  return ['admin', 'codes', codeId, 'redemptions'] as const
+}
+
+/**
+ * Roster for one code — fetched on demand when the admin expands the
+ * code's row (same load-on-select posture as useAdminNarrative), so
+ * the codes list stays one cheap query.
+ */
+export function useAdminCodeRedemptions(codeId: string | null) {
+  const enabled = useEnabled() && Boolean(codeId)
+  return useQuery<AdminCodeRedemptionsResponse, ApiError>({
+    queryKey: adminCodeRedemptionsQueryKey(codeId),
+    queryFn: () =>
+      apiGet<AdminCodeRedemptionsResponse>(
+        `/admin/codes/${codeId}/redemptions`,
+      ),
+    enabled,
+    retry: false,
+  })
+}

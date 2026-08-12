@@ -367,3 +367,110 @@ async def test_patch_unknown_code_returns_404():
 
     assert exc.value.status_code == 404
     assert fake.captured_updates == []
+
+
+# --------------------------------------------------------------------------- #
+# GET /admin/codes/{id}/redemptions — per-code roster (ORPHEUS-129)
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_roster_returns_members_with_latest_job():
+    """Redemptions resolve to client name/email + latest job, preserving
+    the newest-first redemption order."""
+    fake = FakeSupabase(
+        responses=[
+            {"data": [{"id": CODE_ID}]},                       # code probe
+            {"data": [
+                {"client_id": "client-b", "redeemed_at": "2026-08-12T10:00:00+00:00"},
+                {"client_id": "client-a", "redeemed_at": "2026-08-11T09:00:00+00:00"},
+            ]},                                                # redemptions
+            {"data": [
+                {"id": "client-a", "display_name": "Ann A", "email": "ann@example.com"},
+                {"id": "client-b", "display_name": "Bob B", "email": "bob@example.com"},
+            ]},                                                # clients
+            {"data": [
+                {"id": "job-b1", "client_id": "client-b", "status": "complete",
+                 "created_at": "2026-08-12T11:00:00+00:00", "data_limited": False},
+                {"id": "job-b0", "client_id": "client-b", "status": "failed",
+                 "created_at": "2026-08-12T10:30:00+00:00", "data_limited": False},
+            ]},                                                # jobs desc
+        ]
+    )
+
+    with _patch_supabase(fake):
+        response = await admin_router.list_admin_code_redemptions(
+            code_id=CODE_ID,
+            _admin=_admin_roles(),
+        )
+
+    assert [r.display_name for r in response.redemptions] == ["Bob B", "Ann A"]
+    bob, ann = response.redemptions
+    # Latest job per client: first hit in the desc-ordered jobs query.
+    assert bob.latest_job is not None
+    assert bob.latest_job.id == "job-b1"
+    assert bob.latest_job.status == "complete"
+    # No jobs yet → roster still shows the member, coverage gap visible.
+    assert ann.latest_job is None
+    assert ann.email == "ann@example.com"
+
+
+@pytest.mark.asyncio
+async def test_roster_unknown_code_returns_404():
+    fake = FakeSupabase(responses=[{"data": []}])  # code probe misses
+
+    with _patch_supabase(fake):
+        with pytest.raises(HTTPException) as exc:
+            await admin_router.list_admin_code_redemptions(
+                code_id="no-such-code",
+                _admin=_admin_roles(),
+            )
+
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_roster_empty_code_short_circuits():
+    """Zero redemptions → empty roster, no clients/jobs round trips."""
+    fake = FakeSupabase(
+        responses=[
+            {"data": [{"id": CODE_ID}]},   # code probe
+            {"data": []},                  # redemptions empty
+        ]
+    )
+
+    with _patch_supabase(fake):
+        response = await admin_router.list_admin_code_redemptions(
+            code_id=CODE_ID,
+            _admin=_admin_roles(),
+        )
+
+    assert response.redemptions == []
+    assert fake.responses == []  # nothing else was fetched
+
+
+@pytest.mark.asyncio
+async def test_roster_skips_redemption_with_missing_client():
+    """A redemption whose clients row vanished (deletion race) is
+    skipped, not a 500 — CASCADE removes the redemption on the next
+    fetch anyway."""
+    fake = FakeSupabase(
+        responses=[
+            {"data": [{"id": CODE_ID}]},
+            {"data": [
+                {"client_id": "client-gone", "redeemed_at": "2026-08-12T10:00:00+00:00"},
+                {"client_id": "client-a", "redeemed_at": "2026-08-11T09:00:00+00:00"},
+            ]},
+            {"data": [
+                {"id": "client-a", "display_name": "Ann A", "email": "ann@example.com"},
+            ]},                            # client-gone missing
+            {"data": []},                  # no jobs
+        ]
+    )
+
+    with _patch_supabase(fake):
+        response = await admin_router.list_admin_code_redemptions(
+            code_id=CODE_ID,
+            _admin=_admin_roles(),
+        )
+
+    assert [r.client_id for r in response.redemptions] == ["client-a"]

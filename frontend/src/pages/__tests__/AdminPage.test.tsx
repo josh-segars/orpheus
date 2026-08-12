@@ -25,6 +25,7 @@ import { MemoryRouter } from 'react-router-dom'
 
 import type {
   AdminClient,
+  AdminCodeRedemption,
   AdminJob,
   AdminNarrative,
   AdminSignupCode,
@@ -82,6 +83,16 @@ const mockCodesRef: {
 const mockMutateAsync = vi.fn()
 const mockCreateCodeMutate = vi.fn()
 const mockUpdateCodeMutate = vi.fn()
+const mockRosterArgRef: { codeId: string | null } = { codeId: null }
+const mockRosterRef: {
+  data: AdminCodeRedemption[]
+  isLoading: boolean
+  isError: boolean
+} = {
+  data: [],
+  isLoading: false,
+  isError: false,
+}
 
 vi.mock('../../lib/auth', () => ({
   useSession: () => ({
@@ -126,6 +137,14 @@ vi.mock('../../hooks/useAdmin', () => ({
     isLoading: mockCodesRef.isLoading,
     isError: mockCodesRef.isError,
   }),
+  useAdminCodeRedemptions: (codeId: string | null) => {
+    mockRosterArgRef.codeId = codeId
+    return {
+      data: { redemptions: mockRosterRef.data },
+      isLoading: mockRosterRef.isLoading,
+      isError: mockRosterRef.isError,
+    }
+  },
   useCreateAdminCode: () => ({
     mutate: mockCreateCodeMutate,
     isPending: false,
@@ -267,7 +286,33 @@ function resetMocks() {
   mockMutateAsync.mockResolvedValue({})
   mockCreateCodeMutate.mockReset()
   mockUpdateCodeMutate.mockReset()
+  mockRosterArgRef.codeId = null
+  mockRosterRef.data = mockRoster
+  mockRosterRef.isLoading = false
+  mockRosterRef.isError = false
 }
+
+const mockRoster: AdminCodeRedemption[] = [
+  {
+    client_id: 'client-uuid-r1',
+    display_name: 'Rita Redeemer',
+    email: 'rita@example.com',
+    redeemed_at: '2026-08-12T10:00:00+00:00',
+    latest_job: {
+      id: 'job-uuid-r1',
+      status: 'complete',
+      created_at: '2026-08-12T11:00:00+00:00',
+      data_limited: false,
+    },
+  },
+  {
+    client_id: 'client-uuid-r2',
+    display_name: 'Rob Redeemer',
+    email: 'rob@example.com',
+    redeemed_at: '2026-08-11T09:00:00+00:00',
+    latest_job: null,
+  },
+]
 
 function renderAdmin() {
   return render(
@@ -415,8 +460,11 @@ describe('AdminPage', () => {
     // House-advisor default vs. routing override label.
     expect(screen.getByText('House')).toBeInTheDocument()
     expect(screen.getByText('Acme Advisory')).toBeInTheDocument()
-    // Redemption count renders capped form when max_uses is set.
-    expect(screen.getByText('1 / 25')).toBeInTheDocument()
+    // Redemption count renders capped form when max_uses is set — as
+    // the roster toggle button (ORPHEUS-129).
+    expect(
+      screen.getByRole('button', { name: /1 \/ 25/ }),
+    ).toBeInTheDocument()
     // Disabled code shows its state and an Enable action.
     expect(screen.getByText('Disabled')).toBeInTheDocument()
     expect(
@@ -472,5 +520,38 @@ describe('AdminPage', () => {
     renderAdmin()
     expect(screen.getByText(/no codes yet/i)).toBeInTheDocument()
     expect(screen.getByText(/rejects everyone/i)).toBeInTheDocument()
+  })
+
+  it('expands a code row into its roster when the count is clicked', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    // Roster hidden until expansion.
+    expect(screen.queryByText('Rita Redeemer')).not.toBeInTheDocument()
+
+    // First code row's count (3, unlimited so no cap suffix).
+    await user.click(screen.getByRole('button', { name: /3 ▸/ }))
+
+    expect(mockRosterArgRef.codeId).toBe('code-uuid-1')
+    expect(screen.getByText('Rita Redeemer')).toBeInTheDocument()
+    expect(screen.getByText('rita@example.com')).toBeInTheDocument()
+    // Coverage at a glance: report status, or the gap. ('complete' also
+    // appears as job chips elsewhere on the page — 'none yet' is the
+    // roster-only assertion.)
+    expect(screen.getAllByText('complete').length).toBeGreaterThan(0)
+    expect(screen.getByText('none yet')).toBeInTheDocument()
+
+    // Collapses on second click.
+    await user.click(screen.getByRole('button', { name: /3 ▾/ }))
+    expect(screen.queryByText('Rita Redeemer')).not.toBeInTheDocument()
+  })
+
+  it('shows the empty roster state for an unredeemed code', async () => {
+    mockRosterRef.data = []
+    const user = userEvent.setup()
+    renderAdmin()
+    await user.click(screen.getByRole('button', { name: /3 ▸/ }))
+    expect(
+      screen.getByText(/no sign-ups through this code yet/i),
+    ).toBeInTheDocument()
   })
 })

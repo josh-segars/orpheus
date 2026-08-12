@@ -21,7 +21,7 @@
  * still used so the page doesn't look out-of-place next to the rest
  * of the portal.
  */
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, Fragment, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import {
@@ -32,6 +32,7 @@ import {
   AdminWaitlistEntry,
   extractAdminErrorMessage,
   useAdminClients,
+  useAdminCodeRedemptions,
   useAdminCodes,
   useAdminJobs,
   useAdminNarrative,
@@ -303,6 +304,9 @@ function CodesTable({
   onToggle,
   togglePending,
 }: CodesTableProps) {
+  // Per-code roster expansion (ORPHEUS-129). One roster open at a time —
+  // the question is "who's behind THIS code", not a cross-code compare.
+  const [expandedCodeId, setExpandedCodeId] = useState<string | null>(null)
   if (isLoading) {
     return <div className="admin-status">Loading codes…</div>
   }
@@ -338,36 +342,121 @@ function CodesTable({
       <tbody>
         {codes.map((code) => {
           const disabled = code.disabled_at !== null
+          const expanded = expandedCodeId === code.id
           return (
-            <tr key={code.id}>
-              <td>
-                <code className="admin-codes-value">{code.code}</code>
-              </td>
-              <td>{code.label}</td>
-              <td>
-                {code.advisor_id
-                  ? code.advisor_practice_name ?? code.advisor_id
-                  : 'House'}
-              </td>
-              <td>
-                {code.redemption_count}
-                {code.max_uses !== null ? ` / ${code.max_uses}` : ''}
-              </td>
-              <td>{code.expires_at ? code.expires_at.slice(0, 10) : '—'}</td>
-              <td>{disabled ? 'Disabled' : 'Active'}</td>
-              <td>
-                <button
-                  type="button"
-                  className="admin-codes-toggle"
-                  disabled={togglePending}
-                  onClick={() => onToggle(code)}
-                >
-                  {disabled ? 'Enable' : 'Disable'}
-                </button>
-              </td>
-            </tr>
+            <Fragment key={code.id}>
+              <tr>
+                <td>
+                  <code className="admin-codes-value">{code.code}</code>
+                </td>
+                <td>{code.label}</td>
+                <td>
+                  {code.advisor_id
+                    ? code.advisor_practice_name ?? code.advisor_id
+                    : 'House'}
+                </td>
+                <td>
+                  {/* The count doubles as the roster toggle — "who's
+                      behind this number" is the natural click. */}
+                  <button
+                    type="button"
+                    className="admin-roster-toggle"
+                    aria-expanded={expanded}
+                    onClick={() =>
+                      setExpandedCodeId(expanded ? null : code.id)
+                    }
+                  >
+                    {code.redemption_count}
+                    {code.max_uses !== null ? ` / ${code.max_uses}` : ''}
+                    {' '}
+                    {expanded ? '▾' : '▸'}
+                  </button>
+                </td>
+                <td>{code.expires_at ? code.expires_at.slice(0, 10) : '—'}</td>
+                <td>{disabled ? 'Disabled' : 'Active'}</td>
+                <td>
+                  <button
+                    type="button"
+                    className="admin-codes-toggle"
+                    disabled={togglePending}
+                    onClick={() => onToggle(code)}
+                  >
+                    {disabled ? 'Enable' : 'Disable'}
+                  </button>
+                </td>
+              </tr>
+              {expanded && (
+                <tr className="admin-roster-row">
+                  <td colSpan={7}>
+                    <CodeRoster codeId={code.id} />
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           )
         })}
+      </tbody>
+    </table>
+  )
+}
+
+/**
+ * The per-code roster (ORPHEUS-129) — every client who signed up
+ * through the code, with sign-up date and latest-report status. This
+ * is the proto-cohort view: when the B2B cohort layer lands (see the
+ * Cohort Assessment scoping doc), `cohort_members` backfills from
+ * exactly these redemption rows, and this table grows into the
+ * roster heat-map.
+ */
+function CodeRoster({ codeId }: { codeId: string }) {
+  const rosterQuery = useAdminCodeRedemptions(codeId)
+
+  if (rosterQuery.isLoading) {
+    return <div className="admin-status">Loading roster…</div>
+  }
+  if (rosterQuery.isError) {
+    return (
+      <div className="admin-status admin-status-error" role="alert">
+        {extractAdminErrorMessage(rosterQuery.error)}
+      </div>
+    )
+  }
+  const redemptions = rosterQuery.data?.redemptions ?? []
+  if (redemptions.length === 0) {
+    return (
+      <div className="admin-status">
+        No sign-ups through this code yet.
+      </div>
+    )
+  }
+
+  return (
+    <table className="admin-table admin-roster-table">
+      <thead>
+        <tr>
+          <th>Member</th>
+          <th>Email</th>
+          <th>Signed up</th>
+          <th>Latest report</th>
+        </tr>
+      </thead>
+      <tbody>
+        {redemptions.map((member) => (
+          <tr key={member.client_id}>
+            <td>{member.display_name}</td>
+            <td>{member.email}</td>
+            <td>
+              {member.redeemed_at ? member.redeemed_at.slice(0, 10) : '—'}
+            </td>
+            <td>
+              {member.latest_job
+                ? `${member.latest_job.status}${
+                    member.latest_job.data_limited ? ' · limited data' : ''
+                  }`
+                : 'none yet'}
+            </td>
+          </tr>
+        ))}
       </tbody>
     </table>
   )

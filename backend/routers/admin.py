@@ -1243,3 +1243,132 @@ async def update_admin_code(
         redemption_count=getattr(count_result, "count", 0) or 0,
         advisor_practice_name=None,
     )
+
+
+# --------------------------------------------------------------------------- #
+# GET /admin/codes/{code_id}/redemptions — per-code roster (ORPHEUS-129)
+# --------------------------------------------------------------------------- #
+
+class AdminCodeRedemption(BaseModel):
+    """One member of a code's roster.
+
+    This is the proto-cohort roster row (see the B2B Cohort Assessment
+    scoping doc): each redemption is enrollment provenance — when the
+    cohort layer lands, `cohort_members` backfills from exactly these
+    rows. `latest_job` carries the same compact shape as the clients
+    list so the roster can show at a glance who has a current report
+    (the ancestor of the scoping doc's coverage metric).
+    """
+
+    client_id: str
+    display_name: str
+    email: str
+    redeemed_at: str | None
+    latest_job: AdminJobSummary | None
+
+
+class ListAdminCodeRedemptionsResponse(BaseModel):
+    """Body of `GET /admin/codes/{code_id}/redemptions`."""
+
+    redemptions: list[AdminCodeRedemption]
+
+
+@router.get(
+    "/codes/{code_id}/redemptions",
+    response_model=ListAdminCodeRedemptionsResponse,
+)
+async def list_admin_code_redemptions(
+    code_id: str,
+    _admin: Annotated[SessionRoles, Depends(get_current_admin)],
+) -> ListAdminCodeRedemptionsResponse:
+    """Return every client who signed up through this code, newest first.
+
+    Fetched on demand when the admin expands a code row (same
+    load-on-select posture as the narrative editor) rather than nested
+    into GET /admin/codes — rosters are unbounded where the codes list
+    is tiny.
+
+    Four round trips, bucket-don't-join like the rest of the surface:
+    code existence probe (404), redemptions by code_id, clients by id,
+    latest job per client. A redemption whose clients row is missing
+    (deleted account mid-request — CASCADE normally removes the
+    redemption too) is skipped rather than 500ing the roster.
+    """
+    supabase = get_service_client()
+
+    code_probe = (
+        supabase.table("signup_codes")
+        .select("id")
+        .eq("id", code_id)
+        .limit(1)
+        .execute()
+    )
+    if not code_probe.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Code not found.",
+        )
+
+    redemptions_result = (
+        supabase.table("code_redemptions")
+        .select("client_id, redeemed_at")
+        .eq("code_id", code_id)
+        .order("redeemed_at", desc=True)
+        .execute()
+    )
+    redemption_rows = redemptions_result.data or []
+    if not redemption_rows:
+        return ListAdminCodeRedemptionsResponse(redemptions=[])
+
+    client_ids = [str(r["client_id"]) for r in redemption_rows]
+
+    clients_result = (
+        supabase.table("clients")
+        .select("id, display_name, email")
+        .in_("id", client_ids)
+        .execute()
+    )
+    clients_by_id = {str(c["id"]): c for c in (clients_result.data or [])}
+
+    latest_by_client: dict[str, dict[str, Any]] = {}
+    jobs_result = (
+        supabase.table("jobs")
+        .select("id, client_id, status, created_at, data_limited")
+        .in_("client_id", client_ids)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    for job in jobs_result.data or []:
+        cid = str(job["client_id"])
+        if cid not in latest_by_client:
+            latest_by_client[cid] = job
+
+    roster: list[AdminCodeRedemption] = []
+    for redemption in redemption_rows:
+        cid = str(redemption["client_id"])
+        client = clients_by_id.get(cid)
+        if client is None:
+            # Deleted mid-request; CASCADE will have removed the
+            # redemption by the next fetch. Skip, don't 500.
+            continue
+        latest = latest_by_client.get(cid)
+        roster.append(
+            AdminCodeRedemption(
+                client_id=cid,
+                display_name=client["display_name"],
+                email=client["email"],
+                redeemed_at=_iso_or_none(redemption.get("redeemed_at")),
+                latest_job=(
+                    AdminJobSummary(
+                        id=str(latest["id"]),
+                        status=latest["status"],
+                        created_at=_iso_or_none(latest.get("created_at")),
+                        data_limited=bool(latest.get("data_limited")),
+                    )
+                    if latest is not None
+                    else None
+                ),
+            )
+        )
+
+    return ListAdminCodeRedemptionsResponse(redemptions=roster)
