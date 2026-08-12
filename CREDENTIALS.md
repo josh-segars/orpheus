@@ -69,7 +69,7 @@ If any of those fail, see the corresponding section below.
 | **Dashboard** | https://railway.app/dashboard |
 | **Account login** | `[password manager: <vault> / <item>]` |
 | **Services** | Two services: backend (web), worker (background). Both deploy from `main` branch on GitHub auto-push. |
-| **Env vars (set in dashboard, on BOTH services)** | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `APP_BASE_URL`, `FRONTEND_ORIGINS`, `SUPABASE_JWT_AUDIENCE`. |
+| **Env vars (set in dashboard, on BOTH services)** | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `APP_BASE_URL`, `FRONTEND_ORIGINS`, `SUPABASE_JWT_AUDIENCE`. Backend service only: `HOUSE_ADVISOR_ID` (ORPHEUS-85, set 2026-08-12 — the dedicated house advisor row `6b9922b9-9222-4774-86b6-5148405cedc4`; not a secret, but load-bearing for /signup — unset means self-serve sign-up 503s). |
 | **Build command** | Auto-detected by Railpack from repo-root `requirements.txt` (canonical Python deps file post-ORPHEUS-43, 2026-05-31). No manual override; Settings → Build should be empty on both services. |
 | **Backend public URL** | `https://orpheus-production-5082.up.railway.app` (subject to change if service is recreated) |
 
