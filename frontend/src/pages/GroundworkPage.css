@@ -252,15 +252,23 @@
   height: 1.05rem;
   margin-top: 0.2rem;
   cursor: pointer;
-  accent-color: var(--color-accent, #c4902a);
+  accent-color: var(--accent);
 }
 
 .groundwork-consent-label {
+  font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
   font-size: 0.875rem;
   line-height: 1.6;
   font-variation-settings: 'opsz' 18;
+  color: var(--text-body);
 }
 
 .groundwork-consent-label a {
+  color: var(--primary);
   text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.groundwork-consent-label a:hover {
+  color: var(--primary-hover);
 }

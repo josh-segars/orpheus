@@ -183,13 +183,14 @@
   height: 1.05rem;
   margin-top: 0.12rem;
   cursor: pointer;
-  accent-color: var(--color-accent, #c4902a);
+  accent-color: var(--accent);
 }
 
 .login-consent-label {
   font-size: 0.8125rem;
   line-height: 1.5;
   font-variation-settings: 'opsz' 16;
+  color: var(--text-body);
 }
 
 .login-consent-label a {
@@ -210,5 +211,5 @@
   font-size: 0.8125rem;
   line-height: 1.45;
   font-variation-settings: 'opsz' 16;
-  color: var(--color-error, #b4472e);
+  color: var(--issue);
 }
