@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 
+import {
+  InAppBrowserNotice,
+  useInAppBrowserGuard,
+} from '../components/InAppBrowserNotice'
 import { signInWithLinkedIn, useSession } from '../lib/auth'
 import {
   CURRENT_PRIVACY_VERSION,
@@ -41,6 +45,7 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
   const [accepted, setAccepted] = useState(false)
   const [showAcceptPrompt, setShowAcceptPrompt] = useState(false)
+  const { blocked, allowAnyway } = useInAppBrowserGuard()
 
   // Set by AccountPage's post-deletion redirect (ORPHEUS-124). Router
   // state rather than a query param so a shared/bookmarked URL can't
@@ -64,6 +69,14 @@ export function LoginPage() {
   // If we're already signed in, jump straight to the portal.
   if (status === 'authenticated') {
     return <Navigate to="/" replace />
+  }
+
+  // ORPHEUS-130: inside an app's built-in browser the LinkedIn hop
+  // cannot complete — it hands the user back to the host app, not to
+  // us. Replace the card rather than let them find that out by
+  // landing on a feed with no error and no way back.
+  if (blocked) {
+    return <InAppBrowserNotice info={blocked} onContinueAnyway={allowAnyway} />
   }
 
   const handleClick = async () => {

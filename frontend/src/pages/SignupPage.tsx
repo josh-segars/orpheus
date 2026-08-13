@@ -7,6 +7,10 @@ import {
   useCompleteSignup,
 } from '../hooks/useCompleteSignup'
 import { apiPostJson } from '../lib/apiClient'
+import {
+  InAppBrowserNotice,
+  useInAppBrowserGuard,
+} from '../components/InAppBrowserNotice'
 import { signInWithLinkedIn, useSession } from '../lib/auth'
 import {
   CURRENT_PRIVACY_VERSION,
@@ -74,6 +78,7 @@ export function SignupPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [showAcceptPrompt, setShowAcceptPrompt] = useState(false)
   const [showCodePrompt, setShowCodePrompt] = useState(false)
+  const { blocked, allowAnyway } = useInAppBrowserGuard()
 
   const isAuthenticated = status === 'authenticated'
 
@@ -158,6 +163,14 @@ export function SignupPage() {
 
   const busy =
     submitting || completeMutation.isPending || status === 'loading'
+
+  // ORPHEUS-130 — see LoginPage. The already-authenticated branch
+  // below completes in place with no OAuth round trip and would
+  // survive an in-app browser, but a prospect arriving here from a
+  // shared /signup?code= link is the common case and cannot.
+  if (blocked) {
+    return <InAppBrowserNotice info={blocked} onContinueAnyway={allowAnyway} />
+  }
 
   return (
     <main className="login-shell">

@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
+import {
+  InAppBrowserNotice,
+  useInAppBrowserGuard,
+} from '../components/InAppBrowserNotice'
 import { signInWithLinkedIn } from '../lib/auth'
 import {
   INVITATION_TOKEN_QUERY_KEY,
@@ -31,8 +35,22 @@ import {
 export function InviteLandingPage() {
   const { token } = useParams<{ token: string }>()
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const { blocked, allowAnyway } = useInAppBrowserGuard()
+  // Primitive for the effect's dep array — `blocked` is a fresh
+  // object each render, and putting it in deps directly would re-run
+  // the redirect effect on every render.
+  const isBlocked = blocked !== null
 
   useEffect(() => {
+    // ORPHEUS-130: this page's whole job is an unattended redirect
+    // into LinkedIn, which makes it the worst offender of the three
+    // entry points — it is the one tapped straight out of a DM or an
+    // email opened in an app, and it gives the user nothing to react
+    // to before the handoff. Suppress the redirect and show the guard
+    // instead. Taking the escape hatch flips isBlocked and re-runs
+    // this effect, which is what resumes the normal flow.
+    if (isBlocked) return
+
     if (!token) {
       setErrorMessage('This invitation link is missing its token.')
       return
@@ -60,7 +78,11 @@ export function InviteLandingPage() {
         )
       },
     )
-  }, [token])
+  }, [token, isBlocked])
+
+  if (blocked) {
+    return <InAppBrowserNotice info={blocked} onContinueAnyway={allowAnyway} />
+  }
 
   if (errorMessage) {
     return (

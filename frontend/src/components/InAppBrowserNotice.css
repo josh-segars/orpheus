@@ -1,0 +1,112 @@
+/* In-app browser guard (ORPHEUS-130) — rides the shared .login-shell /
+ * .login-card scaffold from LoginPage.css, same as /signup and
+ * /not-invited. Only the instruction block, the copyable link row, and
+ * the override affordance need their own treatment. */
+
+.inapp-steps {
+  background-color: var(--accent-tint-soft);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.inapp-steps-label {
+  font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.inapp-steps-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--warm-text);
+}
+
+.inapp-link {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+/* The address is shown in full and left selectable on purpose: several
+ * of these webviews hide or lock their address bar, so this is the only
+ * place the user can read or grab the URL by hand if copy fails. */
+.inapp-link-url {
+  font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background-color: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.inapp-copy-button {
+  font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-strong);
+  background-color: var(--primary);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 11px 20px;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.inapp-copy-button:hover {
+  background-color: var(--primary-hover);
+}
+
+.inapp-copy-failed {
+  margin: 0;
+  font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--issue);
+}
+
+/* Deliberately understated — a text link, not a button. It exists for
+ * the false-positive case, and shouldn't compete with the instructions
+ * that fix the real one. */
+.inapp-override {
+  font-family: 'Orpheus Sans', 'Orpheus Sans Fallback', sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 4px 0 0 0;
+  text-align: center;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.inapp-override:hover {
+  color: var(--text-body);
+}
