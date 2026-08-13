@@ -111,10 +111,11 @@ Baselines: frontend vitest **186 green** (154 → 186; measured on Josh's machin
 
 ## State of the repo right now
 
-Two commits this session, on top of `2c99f9d`:
+Three commits this session, on top of `2c99f9d`:
 
 - **`0aca889`** — ORPHEUS-130, the in-app browser guard (9 files, +950).
-- **This wrap commit** — session handoff 2026-08-13, CLAUDE.md + PRODUCT_CONTEXT.md refreshes, retire the 08-12 part-2 handoff.
+- **`17840f0`** — session handoff 2026-08-13, CLAUDE.md + PRODUCT_CONTEXT.md refreshes, retire the 08-12 part-2 handoff.
+- **This follow-up commit** — documents `2c99f9d`'s per-code roster, the one surface the 08-12 session shipped without describing anywhere but its own code. Amended here rather than left for a future session, per caveat 5.
 
 `0aca889` is **pushed** (third attempt — caveat 3); the wrap commit is not yet. `origin/main` was at `2c99f9d` before this session.
 
