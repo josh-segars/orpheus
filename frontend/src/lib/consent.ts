@@ -3,8 +3,10 @@
  *
  * Two separate consents, captured in two separate places:
  *
- *   1. Terms of Service + Privacy Policy — a checkbox on /login that gates
- *      "Continue with LinkedIn". Account-level and version-scoped.
+ *   1. Terms of Service + Privacy Policy — a checkbox gating "Continue
+ *      with LinkedIn" on every entry point that can create an account:
+ *      /login, /signup, and /invite/:token (ORPHEUS-132). Account-level
+ *      and version-scoped.
  *   2. LinkedIn upload processing — a checkbox on the Groundwork submit
  *      step. Per-submission; lives on the jobs row.
  *
@@ -65,16 +67,33 @@ export interface PendingTermsAcceptance {
 }
 
 /**
+ * Stamp the currently-published version pair onto an OAuth callback URL.
+ *
+ * Each entry point that captures an acceptance pre-authentication returns
+ * to a different route carrying different baggage: /login to `/`, /signup
+ * to /signup/callback with an access code, /invite/:token to
+ * /invite/callback with an invitation token (ORPHEUS-132). What they share
+ * is these two params, so they share one place that writes them — a third
+ * caller setting the keys by hand is a third chance to drift from the ones
+ * captureTermsAcceptanceFromUrl reads back.
+ *
+ * Mutates and returns the URL it is given so it composes with a callback
+ * URL that already has params on it.
+ */
+export function withAcceptanceParams(url: URL): URL {
+  url.searchParams.set(TERMS_VERSION_QUERY_KEY, CURRENT_TERMS_VERSION)
+  url.searchParams.set(PRIVACY_VERSION_QUERY_KEY, CURRENT_PRIVACY_VERSION)
+  return url
+}
+
+/**
  * Build the post-OAuth landing URL, carrying the accepted versions.
  * Called by LoginPage when the user ticks the box and continues.
  */
 export function buildAcceptanceRedirectUrl(
   origin: string = window.location.origin,
 ): string {
-  const url = new URL(`${origin}/`)
-  url.searchParams.set(TERMS_VERSION_QUERY_KEY, CURRENT_TERMS_VERSION)
-  url.searchParams.set(PRIVACY_VERSION_QUERY_KEY, CURRENT_PRIVACY_VERSION)
-  return url.toString()
+  return withAcceptanceParams(new URL(`${origin}/`)).toString()
 }
 
 export function readPendingTermsAcceptance(): PendingTermsAcceptance | null {

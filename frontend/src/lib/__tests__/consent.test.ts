@@ -16,6 +16,7 @@ import {
   captureTermsAcceptanceFromUrl,
   clearPendingTermsAcceptance,
   readPendingTermsAcceptance,
+  withAcceptanceParams,
   writePendingTermsAcceptance,
 } from '../consent'
 
@@ -35,6 +36,33 @@ describe('buildAcceptanceRedirectUrl', () => {
     expect(url.pathname).toBe('/')
     expect(url.searchParams.get('terms_v')).toBe(CURRENT_TERMS_VERSION)
     expect(url.searchParams.get('privacy_v')).toBe(CURRENT_PRIVACY_VERSION)
+  })
+})
+
+describe('withAcceptanceParams', () => {
+  // ORPHEUS-132: /invite/:token and /signup return to routes that already
+  // carry their own baggage. Stamping the versions must add to that, not
+  // replace it — an invitation token lost here is an unusable link.
+  it('adds both versions without disturbing existing params', () => {
+    const url = withAcceptanceParams(
+      new URL('https://app.example.com/invite/callback?token=abc123'),
+    )
+    expect(url.pathname).toBe('/invite/callback')
+    expect(url.searchParams.get('token')).toBe('abc123')
+    expect(url.searchParams.get('terms_v')).toBe(CURRENT_TERMS_VERSION)
+    expect(url.searchParams.get('privacy_v')).toBe(CURRENT_PRIVACY_VERSION)
+  })
+
+  it('stamps the versions the capture side actually reads back', () => {
+    // Closes the loop the shared helper exists to protect: whatever keys
+    // withAcceptanceParams writes, captureTermsAcceptanceFromUrl must
+    // recognise. A drift between the two would silently drop consent.
+    const url = withAcceptanceParams(new URL('https://app.example.com/x'))
+    window.history.replaceState({}, '', `/x${url.search}`)
+    expect(captureTermsAcceptanceFromUrl()).toEqual({
+      termsVersion: CURRENT_TERMS_VERSION,
+      privacyVersion: CURRENT_PRIVACY_VERSION,
+    })
   })
 })
 

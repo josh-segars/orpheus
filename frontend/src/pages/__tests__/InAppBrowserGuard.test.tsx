@@ -6,9 +6,13 @@
  * domain and drops them on their feed. Four attempts, zero /callback
  * hits, no account (live, 2026-08-13).
  *
- * The sharpest case is /invite/:token, whose entire job is an unattended
- * redirect — the assertion that signInWithLinkedIn is NOT called there
- * is the one that would have prevented the reported experience.
+ * The sharpest case was /invite/:token, whose entire job used to be an
+ * unattended redirect — the assertion that signInWithLinkedIn is NOT
+ * called there is the one that would have prevented the reported
+ * experience. ORPHEUS-132 has since put a consent gate in front of that
+ * hop, so the page no longer redirects on its own; the guard still has
+ * to suppress the whole card, and the escape hatch still has to hand
+ * back a working invitation.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -90,6 +94,14 @@ function renderInvite() {
 const guardHeading = () =>
   screen.queryByRole('heading', { name: /open this page in your browser/i })
 
+/** Clear the ORPHEUS-132 consent gate and press the button. */
+function acceptAndContinue() {
+  fireEvent.click(screen.getByRole('checkbox'))
+  fireEvent.click(
+    screen.getByRole('button', { name: /continue with linkedin/i }),
+  )
+}
+
 beforeEach(() => {
   signInWithLinkedInMock.mockClear()
   clearOverride()
@@ -138,14 +150,17 @@ describe('inside a LinkedIn in-app browser', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('suppresses the automatic redirect on /invite/:token', () => {
+  it('replaces the whole invitation card on /invite/:token', () => {
     renderInvite()
 
-    // The whole point: no unattended handoff into a hop that cannot
-    // complete. Without this the user is dropped on their feed with no
-    // error and nothing to go back to.
+    // The whole point: no handoff into a hop that cannot complete.
+    // Without this the user is dropped on their feed with no error and
+    // nothing to go back to. Post-ORPHEUS-132 the guard must also take
+    // the consent gate off the screen — offering someone a ToS checkbox
+    // in front of a sign-in that cannot succeed is worse than useless.
     expect(signInWithLinkedInMock).not.toHaveBeenCalled()
     expect(guardHeading()).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })
 
   it('names the iOS gesture rather than a generic instruction', () => {
@@ -179,10 +194,16 @@ describe('the escape hatch', () => {
     ).toBeInTheDocument()
   })
 
-  it('resumes the redirect on /invite/:token, token intact', async () => {
+  it('restores the invitation consent gate on /invite/:token, token intact', async () => {
     renderInvite()
 
     fireEvent.click(screen.getByRole('button', { name: /continue here anyway/i }))
+
+    // Taking the hatch returns the user to the normal flow — which is
+    // now the consent gate, not an immediate redirect. The token has to
+    // survive both hops.
+    expect(guardHeading()).not.toBeInTheDocument()
+    acceptAndContinue()
 
     await waitFor(() => {
       expect(signInWithLinkedInMock).toHaveBeenCalledTimes(1)
@@ -251,12 +272,16 @@ describe('inside a real browser', () => {
     ).toBeInTheDocument()
   })
 
-  it('still auto-redirects /invite/:token', async () => {
+  it('shows /invite/:token its consent gate rather than the guard', async () => {
     renderInvite()
 
+    expect(guardHeading()).not.toBeInTheDocument()
+    // Not blocked, but no longer automatic either (ORPHEUS-132).
+    expect(signInWithLinkedInMock).not.toHaveBeenCalled()
+
+    acceptAndContinue()
     await waitFor(() => {
       expect(signInWithLinkedInMock).toHaveBeenCalledTimes(1)
     })
-    expect(guardHeading()).not.toBeInTheDocument()
   })
 })

@@ -17,8 +17,7 @@ import {
   CURRENT_TERMS_VERSION,
   PRIVACY_PATH,
   TERMS_PATH,
-  TERMS_VERSION_QUERY_KEY,
-  PRIVACY_VERSION_QUERY_KEY,
+  withAcceptanceParams,
   writePendingTermsAcceptance,
 } from '../lib/consent'
 import {
@@ -112,13 +111,10 @@ export function SignupPage() {
       privacyVersion: CURRENT_PRIVACY_VERSION,
     })
 
-    const callbackUrl = new URL(`${window.location.origin}/signup/callback`)
-    callbackUrl.searchParams.set(SIGNUP_CODE_QUERY_KEY, trimmedCode)
-    callbackUrl.searchParams.set(TERMS_VERSION_QUERY_KEY, CURRENT_TERMS_VERSION)
-    callbackUrl.searchParams.set(
-      PRIVACY_VERSION_QUERY_KEY,
-      CURRENT_PRIVACY_VERSION,
+    const callbackUrl = withAcceptanceParams(
+      new URL(`${window.location.origin}/signup/callback`),
     )
+    callbackUrl.searchParams.set(SIGNUP_CODE_QUERY_KEY, trimmedCode)
 
     try {
       await signInWithLinkedIn(callbackUrl.toString())
