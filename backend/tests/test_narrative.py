@@ -1011,7 +1011,7 @@ def _valid_cheat_sheet_payload() -> dict:
         ],
         "milestones": [
             {"value": "10", "label": "Posts published"},
-            {"value": "3", "label": "New recommendations"},
+            {"value": "3", "label": "Weeks with at least one comment"},
             {"value": "12", "label": "Weeks consistent"},
         ],
     }
@@ -1772,6 +1772,27 @@ class TestAbsenceAssertionBan:
         prompt = _build_system_prompt()
         assert "new recommendations in 30 days" not in prompt
         assert "**Target: three posts a week for the next 30 days.**" in prompt
+
+
+class TestMilestoneStartersCarryNoExcludedSubject:
+    """ORPHEUS-137's code-owned half. Prompt text cannot police a milestone
+    whose value is computed here and handed to the agent to phrase."""
+
+    def test_no_starter_mentions_recommendations(self):
+        for t in MILESTONE_STARTERS:
+            assert "recommendation" not in t.label.lower()
+            assert "recommendation" not in t.key.lower()
+            assert "endorse" not in t.label.lower()
+
+    def test_starter_count_still_satisfies_the_parser_minimum(self):
+        """The parser requires 3-4 milestones, so the replacement is load
+        bearing: two starters would fail a zero-baseline member's job."""
+        assert len(MILESTONE_STARTERS) >= 3
+
+    def test_the_replacement_starter_is_the_comment_side_mirror(self):
+        keys = [t.key for t in MILESTONE_STARTERS]
+        assert "weeks_with_a_comment" in keys
+        assert "new_recommendations" not in keys
 
 
 # ============================================================

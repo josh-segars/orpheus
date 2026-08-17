@@ -518,9 +518,25 @@ FOLLOWER_TREND_STRETCH = 1.25
 # first-time or dormant member. Constants rather than agent-authored, so the
 # "every milestone value is code-owned" property holds for everyone. Used only
 # to top up to the 3-entry minimum.
+#
+# ORPHEUS-137: the second entry used to be
+# MilestoneTarget("new_recommendations", "2", "New recommendations", None).
+# Recommendations are excluded from the deliverable entirely [Andrew,
+# 2026-08-16] — not scored, not narrated, and not a milestone — and a starter
+# is the one place the exclusion could not be enforced by prompt text alone,
+# since the value is code-owned and handed to the agent to phrase. It is
+# replaced rather than deleted because the parser requires 3-4 milestones and
+# there are exactly three starters: dropping to two fails a zero-baseline
+# member's job on a milestone-count validation error.
+#
+# The replacement mirrors the post starter on the engagement side, and both
+# sides of it are inside the ingested set (Shares.csv, Comments.csv). Its
+# value of 12 is PROVISIONAL in the same sense as MILESTONE_GROWTH_FACTORS
+# above: target-setting is a judgment about what is a reasonable ask of a
+# client over a quarter, which is Andrew's to tune, not a scoring parameter.
 MILESTONE_STARTERS: tuple[MilestoneTarget, ...] = (
     MilestoneTarget("weeks_with_a_post", "12", "Weeks with at least one post", None),
-    MilestoneTarget("new_recommendations", "2", "New recommendations", None),
+    MilestoneTarget("weeks_with_a_comment", "12", "Weeks with at least one comment", None),
     MilestoneTarget("substantive_comments", "24", "Substantive comments on other posts", None),
 )
 

@@ -394,7 +394,7 @@ export const demoJob: Job = {
         milestones: [
           { value: '12', label: 'Weeks without a gap' },
           { value: '36+', label: 'Posts published' },
-          { value: '2', label: 'New recommendations' },
+          { value: '12', label: 'Weeks with at least one comment' },
           { value: '3', label: 'Experience entries rewritten' },
         ],
       },
