@@ -590,3 +590,48 @@ class TestRunPipelinePersistsProseGateMarker:
         assert set(payload) == {
             "data_limited", "prose_gate_degraded", "prose_gate_violations",
         }
+
+
+class TestRegenerateReportRefusesDegradedNarrative:
+    """ORPHEUS-131 guard rail: the in-place regeneration script must NOT
+    inherit the worker's degrade posture.
+
+    `scripts/regenerate_report.py` used to be protected by accident — a
+    fabricated figure raised out of `generate_narratives` and the script never
+    reached its write. The degrade removes that exception, and the script's
+    own `verify()` has no prose-number check of its own, so without this the
+    degrade would silently start overwriting already-delivered reports with
+    unverified figures — and invisibly, since the script deliberately never
+    touches the job row that carries the marker.
+    """
+
+    def _verify(self, *, degraded: bool):
+        from backend.agents.narrative import NarrativeResult
+        from backend.scripts.regenerate_report import verify
+
+        scoring_output = _minimal_scoring_output()
+        narrative_result = NarrativeResult(
+            sections={},
+            summaries={},
+            sub_dimensions={},
+            cheat_sheet=None,
+            cta_present=None,
+            prose_gate_degraded=degraded,
+            prose_gate_violations=(
+                "section:Behavioral Signal Strength: '2,394'"
+                if degraded else None
+            ),
+        )
+        return verify(
+            scoring_output, narrative_result,
+            milestone_targets=[], stale_values=[],
+        )
+
+    def test_degraded_narrative_is_a_verification_failure(self):
+        failures = self._verify(degraded=True)
+        assert any("prose-number gate degraded" in f for f in failures)
+        assert any("2,394" in f for f in failures)
+
+    def test_clean_narrative_adds_no_prose_failure(self):
+        failures = self._verify(degraded=False)
+        assert not any("prose-number gate" in f for f in failures)

@@ -30,8 +30,18 @@ Design notes:
     deterministic false positive would otherwise fail every job with no
     recourse short of a deploy. Rejected tokens are always logged.
 
-Consumed by `generate_narratives` (blocking, with the violation fed back
-into the retry prompt) and by `scripts/regenerate_report.py`'s verify step.
+  * ORPHEUS-131: `block` rejects and retries the non-final attempts, then
+    DEGRADES on the last one — the narrative is served with the violation
+    marked on the result (`prose_gate_degraded` / `prose_gate_violations`)
+    and recorded on the job row for /admin. This gate nests inside the
+    worker's own 3-attempt pipeline loop, so raising on the last attempt
+    could fail a job on prose alone while the client's data was fine.
+
+Consumed by `generate_narratives`, which owns the retry-then-degrade loop.
+The marker it returns is persisted by the worker at completion, and read by
+`scripts/regenerate_report.py`'s verify step, which refuses to write a
+degraded regeneration — that script overwrites a report the client has
+already read and deliberately never touches the job row that would flag it.
 """
 
 from __future__ import annotations

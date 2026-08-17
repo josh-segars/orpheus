@@ -291,6 +291,24 @@ def verify(scoring_output, narrative_result, milestone_targets, stale_values) ->
     failures: list[str] = []
     strings = _client_facing_strings(scoring_output, narrative_result)
 
+    # ORPHEUS-131: the prose-number gate now degrades on its final attempt
+    # instead of raising, so a fabricated figure arrives here as a marker on
+    # the result rather than as an exception out of generate_narratives —
+    # which is what used to abort this script.
+    #
+    # The worker serves a degraded report on purpose (a client with no report
+    # is worse than one soft figure, and the marker lands on the job row for
+    # /admin). Neither half of that reasoning holds here: this script
+    # overwrites a report the client has ALREADY read, a human is at the
+    # keyboard and can just re-run for a fresh generation, and the script
+    # deliberately never touches the job row — so a degraded write would be
+    # invisible in /admin. Fail instead.
+    if narrative_result.prose_gate_degraded:
+        failures.append(
+            "prose-number gate degraded (unwhitelisted figures survived every "
+            f"attempt): {narrative_result.prose_gate_violations}"
+        )
+
     # ORPHEUS-114: an in-place regeneration is held to the same
     # reconciliation identities the worker enforces pre-persist.
     for r in check_reconciliation(scoring_output.forward_brief_data):
