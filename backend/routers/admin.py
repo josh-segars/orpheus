@@ -146,6 +146,12 @@ class AdminJob(BaseModel):
     completed_at: str | None
     error_message: str | None
     data_limited: bool = False  # ORPHEUS-88
+    # ORPHEUS-131: the report shipped with prose-number-gate violations still
+    # in it (final-attempt degrade, or the `log` kill switch). The summary
+    # names the offending figures so an admin can fix them via edited_text
+    # without re-deriving anything.
+    prose_gate_degraded: bool = False
+    prose_gate_violations: str | None = None
     narratives: list[AdminNarrativeMeta]
 
 
@@ -388,7 +394,8 @@ async def list_admin_jobs(
 
     jobs_query = supabase.table("jobs").select(
         "id, client_id, status, version_label, created_at, "
-        "started_at, completed_at, error_message, data_limited"
+        "started_at, completed_at, error_message, data_limited, "
+        "prose_gate_degraded, prose_gate_violations"
     )
     if client_id:
         jobs_query = jobs_query.eq("client_id", client_id)
@@ -464,6 +471,8 @@ async def list_admin_jobs(
                 completed_at=_iso_or_none(j.get("completed_at")),
                 error_message=j.get("error_message"),
                 data_limited=bool(j.get("data_limited")),
+                prose_gate_degraded=bool(j.get("prose_gate_degraded")),
+                prose_gate_violations=j.get("prose_gate_violations"),
                 narratives=narratives_by_job.get(jid, []),
             )
         )

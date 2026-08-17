@@ -676,6 +676,76 @@ async def test_list_admin_jobs_unfiltered_with_narratives():
 
 
 @pytest.mark.asyncio
+async def test_list_admin_jobs_surfaces_prose_gate_degradation():
+    """ORPHEUS-131 acceptance 2: the degradation marker is visible in /admin.
+
+    A degraded report is otherwise indistinguishable from a clean one — same
+    status, same narratives, same everything — so the summary of offending
+    figures riding the row is the entire review surface. The second row has
+    neither column, standing in for a pre-migration-023 job: absent must read
+    as false, not blow up.
+    """
+    fake = FakeSupabase(
+        queues={
+            "jobs": [
+                FakeResult(
+                    data=[
+                        {
+                            "id": JOB_A2_ID,
+                            "client_id": CLIENT_A_ID,
+                            "status": "complete",
+                            "version_label": "v2",
+                            "created_at": "2026-08-17T00:00:00+00:00",
+                            "started_at": "2026-08-17T00:00:10+00:00",
+                            "completed_at": "2026-08-17T00:00:30+00:00",
+                            "error_message": None,
+                            "data_limited": False,
+                            "prose_gate_degraded": True,
+                            "prose_gate_violations": (
+                                "section:Behavioral Signal Strength: '2,394'"
+                            ),
+                        },
+                        {
+                            "id": JOB_B1_ID,
+                            "client_id": CLIENT_B_ID,
+                            "status": "complete",
+                            "version_label": "v2",
+                            "created_at": "2026-05-10T00:00:00+00:00",
+                            "started_at": None,
+                            "completed_at": None,
+                            "error_message": None,
+                        },
+                    ]
+                )
+            ],
+            "clients": [
+                FakeResult(
+                    data=[
+                        {
+                            "id": CLIENT_A_ID,
+                            "display_name": "Client A",
+                            "email": "a@example.com",
+                        },
+                    ]
+                )
+            ],
+            "narratives": [FakeResult(data=[])],
+        }
+    )
+
+    with _patch_supabase(fake):
+        response = await admin_router.list_admin_jobs(
+            _admin=_admin_roles(), client_id=None
+        )
+
+    degraded, legacy = response.jobs
+    assert degraded.prose_gate_degraded is True
+    assert "2,394" in degraded.prose_gate_violations
+    assert legacy.prose_gate_degraded is False
+    assert legacy.prose_gate_violations is None
+
+
+@pytest.mark.asyncio
 async def test_list_admin_jobs_with_client_filter():
     """`?client_id=` filter narrows to one client's jobs."""
     fake = FakeSupabase(

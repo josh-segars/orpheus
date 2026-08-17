@@ -788,6 +788,20 @@ function JobsTable({
                   limited data
                 </span>
               )}
+              {job.prose_gate_degraded && (
+                <span
+                  className="admin-chip admin-chip-degraded"
+                  title={
+                    job.prose_gate_violations
+                      ? `Unverified figures in client-facing prose ` +
+                        `(ORPHEUS-131): ${job.prose_gate_violations}`
+                      : 'Served with unverified figures in client-facing ' +
+                        'prose (ORPHEUS-131)'
+                  }
+                >
+                  unverified figures
+                </span>
+              )}
               {job.error_message && (
                 <span
                   className="admin-job-error"

@@ -170,6 +170,15 @@
   margin-left: 4px;
 }
 
+/* ORPHEUS-131: prose-gate degradation chip. Same operator-signal weight as
+   the limited-data chip — this is a report to read before it goes out, not an
+   error. The offending figures ride the title attribute. */
+.admin-chip-degraded {
+  color: var(--issue);
+  border-color: var(--issue);
+  margin-left: 4px;
+}
+
 .admin-job-error {
   display: inline-block;
   margin-left: 8px;

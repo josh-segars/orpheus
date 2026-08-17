@@ -350,6 +350,28 @@ describe('AdminPage', () => {
     expect(screen.getByText('Profile Signal Clarity')).toBeInTheDocument()
   })
 
+  it('chips a prose-gate-degraded job with its offending figures', () => {
+    // ORPHEUS-131: a degraded report is identical to a clean one on every
+    // other axis — same status, same narratives — so this chip is the only
+    // place an operator finds out an unverified figure shipped.
+    mockJobsRef.data = [
+      {
+        ...mockJobs[0],
+        prose_gate_degraded: true,
+        prose_gate_violations: "section:Behavioral Signal Strength: '2,394'",
+      },
+    ]
+    renderAdmin()
+    const chip = screen.getByText('unverified figures')
+    expect(chip).toBeInTheDocument()
+    expect(chip.getAttribute('title')).toContain('2,394')
+  })
+
+  it('shows no degradation chip on a clean job', () => {
+    renderAdmin() // fixture carries neither field (pre-migration-023 shape)
+    expect(screen.queryByText('unverified figures')).not.toBeInTheDocument()
+  })
+
   it('filters the jobs pane to the selected client', async () => {
     const user = userEvent.setup()
     renderAdmin()

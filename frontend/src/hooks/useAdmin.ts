@@ -96,6 +96,11 @@ export interface AdminJob {
   completed_at: string | null
   error_message: string | null
   data_limited?: boolean // ORPHEUS-88
+  // ORPHEUS-131: the narrative shipped with prose-number-gate violations
+  // still in it (final-attempt degrade, or the `log` kill switch). Optional —
+  // pre-migration-023 rows carry neither field.
+  prose_gate_degraded?: boolean
+  prose_gate_violations?: string | null
   narratives: AdminNarrativeMeta[]
 }
 
