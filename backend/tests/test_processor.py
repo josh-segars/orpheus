@@ -34,6 +34,7 @@ from backend.workers.processor import (
     _merge_dim_summaries,
     _merge_sub_dim_narratives,
     stage_scoring,
+    update_job_status,
 )
 
 
@@ -372,3 +373,220 @@ class TestStageScoringReconciliationGate:
         )
         assert result is not None
         supabase.table.assert_any_call("scores")
+
+
+# --------------------------------------------------------------------------- #
+# ORPHEUS-131 — prose-gate degradation marker + error_message hygiene
+# --------------------------------------------------------------------------- #
+
+
+class _FakeTable:
+    """Chainable Supabase table stub that records the writes it is handed.
+
+    Every query verb returns `self`; `execute()` returns the canned row for
+    the table. Enough to walk `run_pipeline` end to end without touching
+    Supabase — the point is the payloads, which the recorder keeps.
+    """
+
+    def __init__(self, name: str, data, recorder: list):
+        self._name = name
+        self._data = data
+        self._recorder = recorder
+
+    # ── query verbs (no-ops that keep the chain going) ──
+    def select(self, *a, **k):
+        return self
+
+    def eq(self, *a, **k):
+        return self
+
+    def in_(self, *a, **k):
+        return self
+
+    def single(self):
+        return self
+
+    def order(self, *a, **k):
+        return self
+
+    # ── write verbs (recorded) ──
+    def update(self, payload):
+        self._recorder.append((self._name, "update", payload))
+        return self
+
+    def upsert(self, payload, **k):
+        self._recorder.append((self._name, "upsert", payload))
+        return self
+
+    def insert(self, payload):
+        self._recorder.append((self._name, "insert", payload))
+        return self
+
+    def delete(self):
+        self._recorder.append((self._name, "delete", None))
+        return self
+
+    def execute(self):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(data=self._data, count=1)
+
+
+class _FakeSupabase:
+    def __init__(self, rows: dict):
+        self.writes: list = []
+        self._rows = rows
+
+    def table(self, name: str):
+        return _FakeTable(name, self._rows.get(name), self.writes)
+
+
+class TestUpdateJobStatusErrorMessage:
+    """ORPHEUS-131 acceptance 3: `complete` jobs carry no error_message.
+
+    The retry path writes the failed attempt's traceback to the row, so a job
+    that lost an attempt and recovered used to reach `complete` still carrying
+    it — job b03ca0f5 shipped a correct report with an attempt-2 traceback
+    attached, which reads as a failure to anyone who looks.
+    """
+
+    def _payload(self, status: str, error_message=None):
+        import asyncio
+
+        supabase = _FakeSupabase({})
+        asyncio.run(
+            update_job_status(supabase, "job-1", status, error_message)
+        )
+        assert len(supabase.writes) == 1
+        table, verb, payload = supabase.writes[0]
+        assert (table, verb) == ("jobs", "update")
+        return payload
+
+    def test_complete_clears_error_message(self):
+        payload = self._payload("complete")
+        assert payload["status"] == "complete"
+        assert payload["error_message"] is None
+        assert "completed_at" in payload
+
+    def test_failed_still_records_error_message(self):
+        payload = self._payload("failed", "Attempt 3/3: boom")
+        assert payload["status"] == "failed"
+        assert payload["error_message"] == "Attempt 3/3: boom"
+
+    def test_running_touches_neither(self):
+        payload = self._payload("running")
+        assert "error_message" not in payload
+        assert "started_at" in payload
+
+
+class TestRunPipelinePersistsProseGateMarker:
+    """ORPHEUS-131 acceptance 1 + 2: a degraded narrative lands a marker on
+    the job row (the /admin surface) instead of the job landing `failed`.
+
+    The stages are patched out — this pins the persistence contract between
+    `NarrativeResult.prose_gate_degraded` and `jobs.prose_gate_degraded`,
+    which is where a silent break would cost the most: the report ships and
+    nobody can tell it was degraded.
+    """
+
+    _JOB = {"id": "job-131", "client_id": "client-1"}
+    _ROWS = {
+        # Advisory client — keeps the report-ready email path out of it
+        # (advisory reports are draft until published, so it early-returns).
+        "clients": {
+            "id": "client-1",
+            "email": "client@example.com",
+            "display_name": "Test Client",
+            "advisors": {"is_individual": False, "narrative_config": None},
+        },
+        "questionnaire_responses": {"answers": {}},
+    }
+
+    def _run(self, *, degraded: bool, violations):
+        import asyncio
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from backend.agents.narrative import NarrativeResult
+        from backend.ingestion.types import ZipData
+        from backend.workers import processor as processor_mod
+
+        supabase = _FakeSupabase(self._ROWS)
+        scoring_output = _minimal_scoring_output()
+        narrative_result = NarrativeResult(
+            sections={},
+            summaries={},
+            sub_dimensions={},
+            cheat_sheet=None,
+            cta_present=None,
+            prose_gate_degraded=degraded,
+            prose_gate_violations=violations,
+        )
+        quality = SimpleNamespace(is_data_limited=False)
+
+        async def _ingestion(*a, **k):
+            return ZipData(), None, quality
+
+        async def _rubric(*a, **k):
+            return {}, {}
+
+        async def _scoring(*a, **k):
+            return scoring_output
+
+        async def _narrative(*a, **k):
+            return narrative_result
+
+        with patch.object(processor_mod, "stage_ingestion", _ingestion), \
+             patch.object(processor_mod, "stage_rubric_scoring", _rubric), \
+             patch.object(processor_mod, "stage_scoring", _scoring), \
+             patch.object(
+                 processor_mod, "stage_narrative_generation", _narrative
+             ):
+            asyncio.run(
+                processor_mod.run_pipeline(supabase, object(), dict(self._JOB))
+            )
+
+        return supabase.writes
+
+    @staticmethod
+    def _marker_write(writes):
+        """The jobs update carrying the marker (not the status update)."""
+        for table, verb, payload in writes:
+            if table == "jobs" and verb == "update" and (
+                "prose_gate_degraded" in payload
+            ):
+                return payload
+        raise AssertionError(f"no marker write found in {writes}")
+
+    def test_degraded_narrative_marks_the_job(self):
+        writes = self._run(
+            degraded=True,
+            violations="section:Behavioral Signal Strength: '2,394'",
+        )
+        payload = self._marker_write(writes)
+        assert payload["prose_gate_degraded"] is True
+        assert "2,394" in payload["prose_gate_violations"]
+        # The job still completes — that is the whole point of the ticket.
+        statuses = [
+            p.get("status") for t, v, p in writes
+            if t == "jobs" and v == "update" and isinstance(p, dict)
+        ]
+        assert "complete" in statuses
+        assert "failed" not in statuses
+
+    def test_clean_narrative_clears_the_marker(self):
+        """Written unconditionally so an ORPHEUS-81 re-run that comes back
+        clean doesn't leave a stale flag on the row."""
+        writes = self._run(degraded=False, violations=None)
+        payload = self._marker_write(writes)
+        assert payload["prose_gate_degraded"] is False
+        assert payload["prose_gate_violations"] is None
+
+    def test_marker_rides_the_data_limited_update(self):
+        """One write, not two — same row, same moment, same reason."""
+        writes = self._run(degraded=True, violations="section:X: '999'")
+        payload = self._marker_write(writes)
+        assert payload["data_limited"] is False
+        assert set(payload) == {
+            "data_limited", "prose_gate_degraded", "prose_gate_violations",
+        }

@@ -101,6 +101,14 @@ async def update_job_status(
         update["started_at"] = datetime.utcnow().isoformat()
     elif status == "complete":
         update["completed_at"] = datetime.utcnow().isoformat()
+        # ORPHEUS-131: clear the retry breadcrumb. A job that lost an attempt
+        # and recovered on the next one kept the failed attempt's traceback in
+        # error_message (the retry path in process_one writes it there), so a
+        # `complete` row could carry what reads as a fatal error — job
+        # b03ca0f5 shipped a correct report with its attempt-2 traceback still
+        # attached. Nothing consumes error_message on a complete job; the
+        # attempt history lives in the worker log and attempt_count.
+        update["error_message"] = None
     elif status == "failed":
         update["error_message"] = error_message
         update["completed_at"] = datetime.utcnow().isoformat()
@@ -306,6 +314,13 @@ async def stage_narrative_generation(
         quality_report=quality_report,
     )
 
+    # ORPHEUS-131 [Josh, 2026-08-17]: a prose-gate-degraded report publishes
+    # on the normal path — the marker on the job row is the review surface,
+    # not a hold. Parking degraded self-serve reports as `draft` was the
+    # alternative and was rejected: self-serve is precisely the path with
+    # nobody watching, so a parked report becomes a report that never
+    # arrives, which is worse for the client than one soft figure an admin
+    # can see and fix via edited_text.
     status = "draft" if is_advisory else "published"
     now = datetime.utcnow().isoformat()
 
@@ -353,6 +368,11 @@ async def stage_narrative_generation(
         f"+ cheat_sheet={'yes' if cheat_sheet_persisted else 'no'} "
         f"(status={status})"
     )
+    if narrative_result.prose_gate_degraded:
+        logger.error(
+            f"[{job_id}] Report is PROSE-GATE DEGRADED — served with "
+            f"unwhitelisted figures: {narrative_result.prose_gate_violations}"
+        )
     return narrative_result
 
 
@@ -606,9 +626,19 @@ async def run_pipeline(supabase, anthropic_client: Anthropic, job: dict):
     # ingested_data.quality_report. Blocking (missing-file) criticals never
     # reach the worker — they're rejected at POST /jobs — so this reflects
     # allowed-through EMPTY_DATA criticals + data-limitation warnings.
-    supabase.table("jobs").update(
-        {"data_limited": quality_report.is_data_limited}
-    ).eq("id", job_id).execute()
+    #
+    # ORPHEUS-131: the prose-gate degradation marker rides the same update.
+    # `prose_gate_degraded` is True when the narrative was served with
+    # unwhitelisted figures still in it (final block-mode attempt, or the
+    # `log` kill switch); `prose_gate_violations` names them so /admin can
+    # judge without re-running the gate. Both are written unconditionally so
+    # a re-run (ORPHEUS-81) that comes back clean clears a previous
+    # degradation instead of leaving a stale flag on the row.
+    supabase.table("jobs").update({
+        "data_limited": quality_report.is_data_limited,
+        "prose_gate_degraded": narrative_result.prose_gate_degraded,
+        "prose_gate_violations": narrative_result.prose_gate_violations,
+    }).eq("id", job_id).execute()
 
     # Mark job complete
     await update_job_status(supabase, job_id, "complete")
