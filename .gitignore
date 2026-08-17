@@ -61,6 +61,13 @@ rubric_consistency_results_*.json
 create_beta_survey_form.gs
 outputs/
 .claude/settings.local.json
+# Acceptance-sweep text dumps (backend/scripts/claims_sweep.py) and the
+# pre-write snapshots regenerate_report.py drops at the repo root. Both
+# contain client narrative text verbatim, so neither may ever reach a
+# commit. regenerate_report.py has described its snapshots as "untracked
+# by default" since ORPHEUS-112 but nothing enforced it until now.
+sweep_*/
+snapshot_*.json
 
 # Session-transfer scratch: files staged for manual deletion (the device
 # bridge cannot unlink; deletions become moves into this folder).
