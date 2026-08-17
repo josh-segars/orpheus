@@ -342,9 +342,13 @@ export const demoJob: Job = {
               'Publish on a fixed weekly cadence — Monday, Wednesday, Friday. Build a two-to-three week content bank so the weekly decision is already made. **Target: zero empty weeks for 12 weeks.**',
           },
           {
-            title: 'Request Recommendations Strategically',
+            // ORPHEUS-137: this entry used to be "Request Recommendations
+            // Strategically". Recommendations are out of scope for the whole
+            // deliverable [Andrew, 2026-08-16], so the mock can't keep
+            // modelling a priority the generator is now forbidden to produce.
+            title: 'Comment Where Your Peers Are Reading',
             action:
-              'Identify two to three senior colleagues from your most recent and most prestigious roles. Send specific, personal requests that name what you want them to highlight. **Target: 2 new recommendations in 30 days.**',
+              'Pick three people whose posts your target audience already follows and leave a substantive reply — a specific point, not agreement. **Target: two substantive comments a week for 12 weeks.**',
           },
           {
             title: 'Sharpen Experience Entries',

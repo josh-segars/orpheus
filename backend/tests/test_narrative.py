@@ -1641,6 +1641,140 @@ class TestSystemPromptMetricCitationRules:
 
 
 # ============================================================
+# Test: Claims layer guardrails (ORPHEUS-134 + ORPHEUS-137)
+# ============================================================
+#
+# Spec 2's three prompt additions (Rulings 2/3, Foundational Review FINAL
+# 2026-07-16) plus the general absence-assertion ban [Andrew, 2026-08-16].
+#
+# What these tests can and cannot prove is worth stating, because the
+# 2026-07-27 lesson applies with full force here: the durable fix is the
+# guardrail TEXT being present in the prompt, and that is all these pins
+# establish. Whether a given generation honors it is stochastic and is
+# checked by the acceptance sweep on the ticket (regenerate against
+# b03ca0f5's ingested_data, several times, and read the output), not here.
+# The value of these tests is that a future prompt refactor cannot silently
+# drop the constraint the way Spec 2 was silently never added in the first
+# place.
+
+
+class TestClaimsLayerGuardrails:
+    """ORPHEUS-134: no reach/outcome claims, legibility-or-human-reader
+    framing, mechanism claims bounded and never quantified."""
+
+    def test_reach_claim_prohibition_is_present(self):
+        prompt = _build_system_prompt()
+        assert "Never claim a behavior produces reach" in prompt
+        # The banned vocabulary is enumerated rather than gestured at, so the
+        # model has no room to read "reach" narrowly and keep "distribution".
+        for term in (
+            "reach", "impressions", "visibility",
+            "distribution", "exposure", "algorithmic favor",
+        ):
+            assert term in prompt
+
+    def test_hedged_forms_are_named_as_the_same_claim(self):
+        """The v3 breaches were mostly hedged, not flat — an unhedged-only ban
+        would have caught almost none of them."""
+        prompt = _build_system_prompt()
+        assert "the same claim wearing a hedge" in prompt
+        assert "the algorithm rewards this" in prompt
+
+    def test_threshold_assertions_are_banned(self):
+        prompt = _build_system_prompt()
+        assert "Do not assert thresholds" in prompt
+        # The verbatim breach from the released report.
+        assert (
+            "Above the threshold where original content meaningfully "
+            "contributes" in prompt
+        )
+
+    def test_both_permitted_framings_are_offered_with_a_preference(self):
+        prompt = _build_system_prompt()
+        assert "Signal legibility" in prompt
+        assert "Human-reader effect" in prompt
+        assert "Prefer the human-reader framing" in prompt
+
+    def test_mechanism_list_is_closed_and_unquantified(self):
+        prompt = _build_system_prompt()
+        assert "Mechanism claims are limited to the documented list" in prompt
+        assert "part of how each post is represented" in prompt
+        assert "builds the member embedding" in prompt
+        assert "semantically embedded within minutes" in prompt
+        assert (
+            "Never attach a magnitude, multiple, percentage, rate, or effect "
+            "size to any mechanism" in prompt
+        )
+
+    def test_rules_are_declared_binding_on_every_surface(self):
+        """ORPHEUS-134's root cause was that the constraint reached neither the
+        dimension nor the sub-dimension generator. They share one system
+        prompt, so the fix is one insertion — but it has to say so, or the
+        compressed surfaces read as exempt."""
+        prompt = _build_system_prompt()
+        assert "hard limits, not stylistic preferences" in prompt
+        assert (
+            "apply uniformly to dimension narratives, dimension summaries, "
+            "every sub-dimension Summary / Best Practices / Improvements "
+            "slot, and every cheat sheet string" in prompt
+        )
+        assert "as bound as a 400-word narrative" in prompt
+
+
+class TestAbsenceAssertionBan:
+    """ORPHEUS-137: the product never asserts the absence of anything outside
+    the ingested set, and recommendations are out of scope entirely."""
+
+    def test_unknown_may_not_harden_into_absent(self):
+        prompt = _build_system_prompt()
+        assert "Never assert the absence of anything you were not given" in prompt
+        assert "unknown must never harden into absent" in prompt
+        assert "not present in the provided data" in prompt
+
+    def test_the_released_report_s_exact_phrasing_is_named(self):
+        """The flat assertion that shipped on b03ca0f5 is quoted in the ban
+        verbatim, so the rule keeps citing the real failure rather than
+        drifting into a paraphrase of it."""
+        prompt = _build_system_prompt()
+        assert "one of the few structural elements currently absent" in prompt
+        assert "you do not have" in prompt
+
+    def test_an_unverifiable_absence_can_never_be_an_action_item(self):
+        """The costliest half of the bug: it spent Quick Reference priority 4
+        of 5 on soliciting recommendations Andrew already had."""
+        prompt = _build_system_prompt()
+        assert (
+            "An absence you cannot verify may never become an action item"
+            in prompt
+        )
+        assert "Not a cheat sheet priority, not a rhythm item" in prompt
+
+    def test_observable_gaps_are_explicitly_still_fair_game(self):
+        """The ban must not collapse the score-calibration section, which
+        legitimately names gaps in content the agent CAN see."""
+        prompt = _build_system_prompt()
+        assert "This does not soften what you may say about content you" in prompt
+        assert "The ban is on elements that never reached you" in prompt
+
+    def test_recommendations_are_out_of_scope_everywhere(self):
+        prompt = _build_system_prompt()
+        assert (
+            "Recommendations, endorsements, and skill display order are out "
+            "of scope entirely" in prompt
+        )
+        assert "no cheat sheet priority, no rhythm item, no milestone label" in prompt
+        assert "review the ordering of their top skills" in prompt
+
+    def test_no_prompt_example_demonstrates_the_banned_action(self):
+        """The cheat-sheet priorities example used to be
+        `**Target: 2 new recommendations in 30 days.**` — the prompt was
+        modelling the exact action item the ban now forbids."""
+        prompt = _build_system_prompt()
+        assert "new recommendations in 30 days" not in prompt
+        assert "**Target: three posts a week for the next 30 days.**" in prompt
+
+
+# ============================================================
 # Test: Score-0 slot treatment (ORPHEUS-63)
 # ============================================================
 #
