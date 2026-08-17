@@ -2269,19 +2269,6 @@ class TestProseNumberGateInGenerateNarratives:
         assert "Correction required" not in first_message
 
     @pytest.mark.asyncio
-    async def test_persistent_fabrication_exhausts_retries(self, monkeypatch):
-        monkeypatch.delenv("PROSE_NUMBER_GATE", raising=False)
-        fabricated = _full_response_json("Exactly 2,394 total comments. " * 3)
-        client = _FakeAnthropicClient([fabricated] * 3)
-        output = _output_301ba109_shaped()
-
-        with pytest.raises(ValueError) as exc:
-            await generate_narratives(client, output, questionnaire={})
-
-        assert "2,394" in str(exc.value)
-        assert len(client.calls) == 3
-
-    @pytest.mark.asyncio
     async def test_log_mode_serves_despite_violation(self, monkeypatch):
         monkeypatch.setenv("PROSE_NUMBER_GATE", "log")
         fabricated = _full_response_json("Exactly 2,394 total comments. " * 3)
@@ -2292,6 +2279,10 @@ class TestProseNumberGateInGenerateNarratives:
 
         assert "2,394" in result.sections["Behavioral Signal Strength"]
         assert len(client.calls) == 1
+        # ORPHEUS-131: log mode serves, and now says so. Without the marker a
+        # global override hides every unverified figure it lets through.
+        assert result.prose_gate_degraded is True
+        assert "2,394" in result.prose_gate_violations
 
     @pytest.mark.asyncio
     async def test_clean_first_attempt_single_call(self, monkeypatch):
@@ -2304,3 +2295,99 @@ class TestProseNumberGateInGenerateNarratives:
 
         assert result.sections
         assert len(client.calls) == 1
+        assert result.prose_gate_degraded is False
+        assert result.prose_gate_violations is None
+
+
+class TestProseGateFinalAttemptDegrade:
+    """ORPHEUS-131: prose alone can no longer fail a job.
+
+    `generate_narratives` retries 3× inside a worker loop that retries the
+    whole pipeline 3× — up to nine 8192-token calls, ending in a `failed`
+    report whose data was fine. The gate now spends its non-final attempts
+    exactly as before and serves the final one with the violation marked.
+    """
+
+    @pytest.mark.asyncio
+    async def test_persistent_fabrication_degrades_instead_of_raising(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("PROSE_NUMBER_GATE", raising=False)
+        fabricated = _full_response_json("Exactly 2,394 total comments. " * 3)
+        client = _FakeAnthropicClient([fabricated] * 3)
+        output = _output_301ba109_shaped()
+
+        result = await generate_narratives(client, output, questionnaire={})
+
+        # Served, not raised — the client's report exists.
+        assert "2,394" in result.sections["Behavioral Signal Strength"]
+        assert result.prose_gate_degraded is True
+        assert "2,394" in result.prose_gate_violations
+        assert "Behavioral Signal Strength" in result.prose_gate_violations
+
+    @pytest.mark.asyncio
+    async def test_degrade_still_spends_every_retry_first(self, monkeypatch):
+        """The degrade is a floor, not a shortcut: attempts 1 and 2 still
+        reject and still feed the violation back, because that window is
+        where the gate does nearly all of its work (job b03ca0f5 recovered
+        inside it)."""
+        monkeypatch.delenv("PROSE_NUMBER_GATE", raising=False)
+        fabricated = _full_response_json("Exactly 2,394 total comments. " * 3)
+        client = _FakeAnthropicClient([fabricated] * 3)
+        output = _output_301ba109_shaped()
+
+        await generate_narratives(client, output, questionnaire={})
+
+        assert len(client.calls) == 3
+        first = client.calls[0]["messages"][0]["content"]
+        assert "Correction required" not in first
+        for call in client.calls[1:]:
+            content = call["messages"][0]["content"]
+            assert "Correction required" in content
+            assert "2,394" in content
+
+    @pytest.mark.asyncio
+    async def test_recovery_inside_the_window_is_not_marked(self, monkeypatch):
+        """A job that recovers on retry is a clean job. The marker means "an
+        unverified figure shipped", not "the gate fired at some point"."""
+        monkeypatch.delenv("PROSE_NUMBER_GATE", raising=False)
+        fabricated = _full_response_json("Exactly 2,394 total comments. " * 3)
+        clean = _full_response_json(
+            "Your activity shows 12,500 followers growing steadily. " * 3
+        )
+        client = _FakeAnthropicClient([fabricated, clean])
+        output = _output_301ba109_shaped()
+
+        result = await generate_narratives(client, output, questionnaire={})
+
+        assert len(client.calls) == 2
+        assert result.prose_gate_degraded is False
+        assert result.prose_gate_violations is None
+
+    @pytest.mark.asyncio
+    async def test_off_mode_never_marks(self, monkeypatch):
+        """`off` doesn't scan, so it can't know — marking there would be a
+        false claim in the other direction."""
+        monkeypatch.setenv("PROSE_NUMBER_GATE", "off")
+        fabricated = _full_response_json("Exactly 2,394 total comments. " * 3)
+        client = _FakeAnthropicClient([fabricated])
+        output = _output_301ba109_shaped()
+
+        result = await generate_narratives(client, output, questionnaire={})
+
+        assert len(client.calls) == 1
+        assert result.prose_gate_degraded is False
+        assert result.prose_gate_violations is None
+
+    @pytest.mark.asyncio
+    async def test_parse_failure_still_raises_after_retries(self, monkeypatch):
+        """The degrade is scoped to the prose gate. An unparseable response
+        leaves no partial narrative to serve and must still fail the job."""
+        monkeypatch.delenv("PROSE_NUMBER_GATE", raising=False)
+        client = _FakeAnthropicClient(["not json at all"] * 3)
+        output = _output_301ba109_shaped()
+
+        with pytest.raises(ValueError, match="Failed to parse"):
+            await generate_narratives(client, output, questionnaire={})
+
+        assert len(client.calls) == 3

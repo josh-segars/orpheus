@@ -89,6 +89,15 @@ class NarrativeResult(NamedTuple):
     # with this value before persisting. None when the agent omits it (best
     # effort; the worker leaves the heuristic value untouched in that case).
     cta_present: bool | None = None
+    # ORPHEUS-131: set when this narrative was served with the prose-number
+    # gate's violations still standing — either the final `block`-mode attempt
+    # degraded rather than failing the job, or the kill switch was in `log`
+    # mode. `prose_gate_violations` carries describe_violations()'s summary so
+    # the worker can persist it on the job row and /admin can show WHICH
+    # figures are unverified. False/None on every clean path and in `off` mode
+    # (which doesn't scan, so it can't know).
+    prose_gate_degraded: bool = False
+    prose_gate_violations: str | None = None
 
 
 # ============================================================
@@ -1666,27 +1675,62 @@ async def generate_narratives(
                     "Prose-number gate (%s): unwhitelisted figures — %s",
                     gate_mode, summary,
                 )
-                if gate_mode == "block":
+                if gate_mode == "block" and attempt < max_retries:
                     last_error = ValueError(
                         "Prose quotes figures not present in the report "
                         f"inputs: {summary}"
                     )
-                    if attempt < max_retries:
-                        violation_note = (
-                            "\n\n## Correction required\n\n"
-                            "Your previous response quoted numbers that do "
-                            "not appear anywhere in the data above: "
-                            f"{summary}. Every figure you cite must be a "
-                            "value explicitly provided in this prompt — do "
-                            "not derive, total, or recall numbers from "
-                            "context. Regenerate the full response, quoting "
-                            "only figures present in the input."
-                        )
-                        continue
-                    break
+                    violation_note = (
+                        "\n\n## Correction required\n\n"
+                        "Your previous response quoted numbers that do "
+                        "not appear anywhere in the data above: "
+                        f"{summary}. Every figure you cite must be a "
+                        "value explicitly provided in this prompt — do "
+                        "not derive, total, or recall numbers from "
+                        "context. Regenerate the full response, quoting "
+                        "only figures present in the input."
+                    )
+                    continue
+
+                # ORPHEUS-131: we are out of generation attempts (or the kill
+                # switch is in `log` mode), so serve the narrative WITH the
+                # violation rather than raising.
+                #
+                # Raising here used to fail the whole pipeline attempt, and
+                # the worker's own 3-attempt loop sits on top of this one —
+                # so a persistently-rejecting generation burned up to nine
+                # 8192-token calls and could land the job `failed` on prose
+                # alone, with the client's data entirely fine. A report
+                # carrying one unwhitelisted figure is strictly better than
+                # no report: the gate still rejects attempts 1..n-1, which is
+                # where it does nearly all of its work (job b03ca0f5
+                # recovered inside that window), and the degradation is
+                # marked on the job row so /admin can review it instead of
+                # it being indistinguishable from a clean run.
+                #
+                # `log` mode lands here on its first pass and is marked the
+                # same way — it is a global override, so without the marker
+                # every report served during an incident would hide its
+                # unverified figures, which is the invisibility this ticket
+                # exists to remove.
+                logger.error(
+                    "Prose-number gate: serving DEGRADED narrative "
+                    "(mode=%s, attempt %d of %d) — unwhitelisted figures "
+                    "remain: %s",
+                    gate_mode, attempt + 1, 1 + max_retries, summary,
+                )
+                return result._replace(
+                    prose_gate_degraded=True,
+                    prose_gate_violations=summary,
+                )
 
         return result
 
+    # Parse/validation failures only. ORPHEUS-131: the prose-number gate no
+    # longer reaches this raise — it degrades on the final attempt instead, so
+    # an unquotable figure can't fail a job whose data is fine. A response the
+    # parser can't read is still a hard failure: there is no partial narrative
+    # to serve.
     raise ValueError(
         f"Failed to parse narrative response after {1 + max_retries} attempts. "
         f"Last error: {last_error}"
