@@ -120,10 +120,26 @@ FAMILIES: list[dict] = [
         "exemplar": "places you well above the threshold where original "
                     "content meaningfully contributes to a professional "
                     "presence.",
+        # 2026-08-18 second sweep: the model relocated the banned cutoff into
+        # the permitted human-reader register. Same claim, new clothing.
+        "also_catches": [
+            "well past the point where your activity pattern is legible to "
+            "anyone paying attention",
+            "well past where consistent activity builds a recognizable "
+            "presence",
+            "place you well into the range where your participation is "
+            "genuinely substantive",
+            "consistent enough that readers who follow you have come to "
+            "expect you",
+            "The profile is already strong enough to support those goals",
+        ],
         "patterns": [
             r"above\s+the\s+threshold",
             r"threshold\s+(?:where|at\s+which|for)",
             r"past\s+the\s+point\s+(?:where|at\s+which)",
+            r"\bpast\s+where\b",
+            r"in(?:to)?\s+the\s+range\s+where",
+            r"enough\s+(?:that|to)\s+(?:readers|support)",
             r"enough\s+\w+(?:\s+\w+){0,3}\s+to\s+register",
             r"crosses?\s+(?:the\s+)?(?:line|bar)\s+(?:where|into)",
         ],
@@ -147,6 +163,23 @@ FAMILIES: list[dict] = [
             "the ones most likely to be seen by the audience you're trying "
             "to reach",
             "could amplify what's already working",
+            # 2026-08-18 second sweep: hyphenated words broke the verb-gap
+            # patterns ("Per-Post", "Post-Level"), and past-tense verbs were
+            # never covered.
+            "Grow Post-Level Reach",
+            "Grow Your Per-Post Reach",
+            "Strengthen Per-Post Reach",
+            "That consistency has produced observable results in the reach "
+            "data",
+            "is the kind that builds a recognizable presence across a "
+            "network over time",
+            "Sustaining that growth rate as you refine your topic mix will "
+            "build the audience most relevant",
+            "a tighter classification could help surface you in more "
+            "relevant searches",
+            "become part of the network that surfaces your name",
+            "tend to be the ones that travel most broadly",
+            "one way to move the per-post average",
         ],
         "patterns": [
             r"generating\s+meaningful\s+scale",
@@ -156,12 +189,20 @@ FAMILIES: list[dict] = [
             r"attention)",
             r"most\s+likely\s+to\s+be\s+seen",
             r"\bamplif(?:y|ies|ying)",
-            r"\b(?:drives?|driving|generates?|generating|produces?|creates?)"
-            r"\s+(?:\w+\s+){0,3}"
+            r"\b(?:drives?|driving|drove|generates?|generating|generated|"
+            r"produces?|producing|produced|creates?|creating|created)"
+            r"\s+(?:[\w'-]+\s+){0,4}"
             r"(?:reach|visibility|impressions|exposure|distribution|scale)",
-            r"\b(?:increases?|improves?|boosts?|lifts?|expands?|grows?)"
-            r"\s+(?:your\s+|the\s+)?(?:\w+\s+){0,2}"
+            r"\b(?:increases?|improves?|boosts?|lifts?|expands?|grows?|"
+            r"strengthens?)"
+            r"\s+(?:your\s+|the\s+)?(?:[\w'-]+\s+){0,2}"
             r"(?:reach|visibility|impressions|exposure|distribution)",
+            r"build(?:s|ing)?\s+(?:a\s+|the\s+|your\s+)?"
+            r"(?:recognizable\s+|genuine\s+)?(?:presence|audience|following)"
+            r"\b",
+            r"surfaces?\s+you(?:r\s+name)?\b",
+            r"travel(?:s|ed|ing)?\s+(?:most|more)\s+broadly",
+            r"move\s+the\s+(?:per-post\s+)?average",
             r"\bmore\s+(?:reach|visibility|impressions|exposure)",
             r"help(?:s|ing)?\s+you\s+(?:get\s+)?(?:seen|noticed|found)",
             r"algorithm\s+(?:rewards?|favou?rs?|picks?\s+up|likes?)",
@@ -214,10 +255,19 @@ FAMILIES: list[dict] = [
         "exemplar": "is likely the highest-leverage profile-level move "
                     "available to you. This is the single highest-leverage "
                     "move available given your existing volume and reach.",
+        # 2026-08-18 second sweep: leverage rankings in fresh wording.
+        "also_catches": [
+            "the primary lever at this level is continuity of focus",
+            "is likely the most important behavioral move you can make",
+            "the behavioral work that matters most",
+        ],
         "patterns": [
             r"highest[-\s]leverage",
             r"single\s+(?:most|highest|biggest|largest)",
             r"most\s+(?:impactful|effective|powerful)\s+(?:move|change|step)",
+            r"most\s+important\s+(?:behavioral\s+)?(?:move|change|step|work)",
+            r"primary\s+lever",
+            r"work\s+that\s+matters\s+most",
             r"biggest\s+(?:lever|impact|difference|win)",
             r"\d+\s?%\s+(?:more|higher|increase|improvement|lift|better)",
             # 2026-08-18: negative lookahead added — "doubles as a positioning
@@ -257,6 +307,10 @@ FAMILIES: list[dict] = [
             "assess whether the trend line is moving",
             "identify one post that performed well and consider what made "
             "it land",
+            # 2026-08-18 second sweep: the family relocated from the cheat
+            # sheet into an improvements[] slot.
+            "When personal or Portugal posts perform well, look for ways to "
+            "draw a connection to your professional domain",
         ],
         "patterns": [
             r"which\s+\w+\s+generated\s+(?:the\s+)?most",
@@ -280,6 +334,7 @@ FAMILIES: list[dict] = [
             r"what\s+changed\s+in\s+your\s+content",
             r"if\s+either\s+is\s+(?:stalling|drifting|moving)",
             r"whether\s+the\s+trend",
+            r"when\s+(?:[\w'-]+\s+){0,4}posts?\s+perform",
         ],
     },
     {
@@ -334,16 +389,23 @@ FAMILIES: list[dict] = [
                     "content; consider reviewing the ordering of your top "
                     "skills, and seek endorsements.",
         # 2026-08-18 dump read: skill-display-order advice in paraphrase.
+        # NOTE: skills-LIST-curation advice ("a more curated set") is NOT
+        # flagged here — whether set-curation is banned alongside display
+        # order is a pending team decision. Only order/prominence language
+        # lands at HIGH.
         "also_catches": [
             "prioritizing the skills most directly relevant to your current "
             "work could help",
             "a more curated front-of-list could sharpen the first impression",
+            "confirm that the skills most central to your current "
+            "positioning are prominent rather than buried",
         ],
         "patterns": [
             r"\bendorse(?:d|ment|ments|s)?\b",
             r"ordering\s+of\s+your\s+(?:top\s+)?skills",
             r"prioritiz(?:e|ing)\s+(?:the\s+)?skills",
             r"front[-\s]of[-\s]list",
+            r"prominent\s+rather\s+than\s+buried",
             r"(?:order|reorder|rearrange)\s+(?:your\s+)?(?:top\s+)?skills",
             r"skills?\s+(?:display\s+)?order",
             r"(?:request|solicit|ask(?:ing)?\s+for|obtain|seek|secure|"

@@ -1743,6 +1743,28 @@ class TestClaimsLayerGuardrails:
         assert "never rank a recommendation's effect" in prompt
         assert "effect-size claims in words" in prompt
 
+    def test_threshold_ban_holds_in_every_register(self):
+        """Second sweep of 2026-08-18: the model relocated banned cutoffs
+        into human-reader language ('above the threshold where a comment
+        reads as a genuine contribution'). The ban now names the migration."""
+        prompt = _build_system_prompt()
+        assert "The threshold ban holds in EVERY register" in prompt
+        assert "a KIND of claim, not a license to quantify" in prompt
+        assert (
+            "consistent enough that readers have come to expect you"
+            in prompt
+        )
+
+    def test_priority_titles_ban_reach_vocabulary_in_any_form(self):
+        """Second sweep of 2026-08-18: 'Grow Your Impressions Per Post' and
+        'Grow Post-Level Reach' appeared despite the named example — the ban
+        is now on the vocabulary, not the exact phrase."""
+        prompt = _build_system_prompt()
+        assert (
+            "may not contain reach, impressions, visibility, exposure, "
+            "followers, or audience vocabulary in ANY verb form" in prompt
+        )
+
     def test_cheat_sheet_carries_inline_reinforcement(self):
         """Second-pass item 2: every real breach in ten sweep runs landed in
         priorities or rhythm. The rules are restated AT the compressed

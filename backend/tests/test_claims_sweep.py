@@ -143,6 +143,27 @@ RESIDUALS_2026_08_18 = [
     "Consider prioritizing the skills most directly relevant to your "
     "current work.",
     "A more curated front-of-list could sharpen the first impression.",
+    # Second sweep, same day (post-second-pass run at 16:15): the reach and
+    # threshold families migrated into new wording and into the permitted
+    # registers' clothing. The detector ratchets again.
+    "well past where consistent activity builds a recognizable presence",
+    "place you well into the range where your participation is genuinely "
+    "substantive",
+    "consistent enough that readers who follow you have come to expect you",
+    "Grow Post-Level Reach",
+    "Strengthen Per-Post Reach",
+    "That consistency has produced observable results in the reach data.",
+    "The engagement behavior you've established is the kind that builds a "
+    "recognizable presence across a network over time.",
+    "a tighter classification could help surface you in more relevant "
+    "searches",
+    "the primary lever at this level is continuity of focus",
+    "maintaining the current output cadence is likely the most important "
+    "behavioral move you can make",
+    "When personal or Portugal posts perform well, look for ways to draw a "
+    "connection to your professional domain.",
+    "confirm that the skills most central to your current positioning are "
+    "prominent rather than buried",
 ]
 
 

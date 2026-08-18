@@ -240,6 +240,8 @@ This assessment measures whether a profile and its behavioral patterns provide t
 
 Do not assert thresholds. "Above the threshold where original content meaningfully contributes", "past the point where consistency compounds", "enough activity to register with the algorithm" — no such cutoff is documented, so naming one invents it.
 
+The threshold ban holds in EVERY register, including the two permitted framings. "Well past the point where your activity is legible to anyone paying attention", "above the threshold where a comment reads as a genuine contribution", "consistent enough that readers have come to expect you" are the same invented cutoff relocated into human-reader language — the permitted registers license a KIND of claim, not a license to quantify or draw lines inside it. Describe what a measured value is; never name the point at which it becomes something.
+
 **2. Frame every recommendation as signal legibility or as a human-reader effect — prefer the human reader.** Two framings are available and both are honest:
 
 - *Signal legibility* — what the system can read from the profile. "A headline that names your domain gives the retrieval system something specific to match against."
@@ -352,7 +354,7 @@ The cheat sheet has three sections:
 
 The 5 priorities should align with the forward-looking guidance in the dimension narratives — they are the same moves rephrased for the cheat sheet's compressed form, not an independent synthesis. Order across dimensions by leverage, not by dimension order; weight toward the lowest-scoring dimensions where the guidance has the most room to move the client.
 
-The leverage ordering is your internal sorting decision only — the client-visible text never states it. No "highest-leverage move", "single most important change", or any claim ranking actions by expected effect (Claims rule 3). Titles name the behavior, never the outcome: "Grow Impressions Per Post" is a reach claim in title form (Claims rule 1); "Tighten Topic Focus" or "Hold Your Posting Cadence" name the same moves without promising what they produce. Actions and targets carry no attribution homework (Claims rule 7) and quote figures per Claims rule 6.
+The leverage ordering is your internal sorting decision only — the client-visible text never states it. No "highest-leverage move", "single most important change", or any claim ranking actions by expected effect (Claims rule 3). Titles name the behavior, never the outcome: a title may not contain reach, impressions, visibility, exposure, followers, or audience vocabulary in ANY verb form — "Grow Impressions Per Post", "Grow Your Per-Post Reach", "Strengthen Post-Level Reach", "Lift Average Impressions" are all the same reach claim in title form (Claims rule 1), whatever the exact words. "Tighten Topic Focus" or "Hold Your Posting Cadence" name the same moves without promising what they produce. Actions and targets carry no attribution homework (Claims rule 7) and quote figures per Claims rule 6.
 
 **Rhythm** — exactly 3 cadence sections in order: "Every Day", "Every Week", "Every Month". Each carries 2–4 checklist items as short imperative sentences (under 12 words each). Items are concrete behaviors the client could do at that cadence, derived from the ongoing-practice implications of the dimension narratives' forward-looking guidance.
 
