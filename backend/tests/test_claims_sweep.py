@@ -228,8 +228,13 @@ PERMITTED = [
     "Leave a substantive reply on three posts a week.",
     # Advice-sense use of the ambiguous word.
     "The recommendations in this card are ordered by leverage.",
-    # 2026-08-18: the F5 idiom false positive from the 08-17 sweep's run 3.
+    # 2026-08-18: the F5 idiom false positive from the 08-17 sweep's run 3,
+    # plus the two HIGH false positives the third-sweep pattern expansion
+    # introduced (F5 "double duty", F2 bare "amplifies").
     "This headline doubles as a positioning statement for the profile.",
+    "Posts that pair a personal observation with a professional point do "
+    "double duty.",
+    "Your Orpheus Social experience entry amplifies that clearly.",
     # Observation-only review items in the register Claims rule 7 permits —
     # the expanded F6 must leave the permitted register alone.
     "Did you publish at least twice this week?",

@@ -188,7 +188,12 @@ FAMILIES: list[dict] = [
             r"pulls?\s+in\s+(?:the\s+)?(?:readers?|audiences?|members|"
             r"attention)",
             r"most\s+likely\s+to\s+be\s+seen",
-            r"\bamplif(?:y|ies|ying)",
+            # Narrowed 2026-08-18 (third sweep): bare "amplif" false-positived
+            # on "your experience entry amplifies that clearly" — require a
+            # reach-shaped object.
+            r"\bamplif(?:y|ies|ying)\s+(?:your\s+|the\s+)?"
+            r"(?:reach|visibility|exposure|impressions|"
+            r"what'?s\s+already\s+working)",
             r"\b(?:drives?|driving|drove|generates?|generating|generated|"
             r"produces?|producing|produced|creates?|creating|created)"
             r"\s+(?:[\w'-]+\s+){0,4}"
@@ -270,10 +275,10 @@ FAMILIES: list[dict] = [
             r"work\s+that\s+matters\s+most",
             r"biggest\s+(?:lever|impact|difference|win)",
             r"\d+\s?%\s+(?:more|higher|increase|improvement|lift|better)",
-            # 2026-08-18: negative lookahead added — "doubles as a positioning
-            # statement" is an idiom, not an effect size, and it inflated run 3
-            # of the 08-17 sweep.
-            r"\b(?:doubles?|triples?|halves?)\b(?!\s+as\b)",
+            # 2026-08-18: negative lookaheads — "doubles as a positioning
+            # statement" and "do double duty" are idioms, not effect sizes;
+            # each inflated a sweep run before being excluded.
+            r"\b(?:doubles?|triples?|halves?)\b(?!\s+(?:as|duty)\b)",
             r"(?:\d+|two|three|several)\s?(?:x|times)\s+(?:more|the|as)",
         ],
     },
@@ -626,6 +631,11 @@ def self_test() -> list[str]:
         "This headline doubles as a positioning statement for the profile.",
         "Did you publish at least twice this week?",
         "Review whether your posting cadence held through the month.",
+        # 2026-08-18 third sweep: two HIGH false positives the 58ba3f0
+        # pattern expansion introduced, pinned so they stay excluded.
+        "Posts that pair a personal observation with a professional point "
+        "do double duty.",
+        "Your Orpheus Social experience entry amplifies that clearly.",
     ]
     for text in permitted:
         for fam in COMPILED:
