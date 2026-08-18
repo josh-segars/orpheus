@@ -1720,6 +1720,42 @@ class TestClaimsLayerGuardrails:
         )
         assert "as bound as a 400-word narrative" in prompt
 
+    # -- ORPHEUS-134 second pass (2026-08-18) --------------------------------
+
+    def test_attribution_delegation_is_banned(self):
+        """Second-pass item 1: banning the claim was not enough — every run
+        of the 08-17/08-18 sweeps delegated it to the member instead. The
+        rule distinguishes observing a behavior from attributing outcomes."""
+        prompt = _build_system_prompt()
+        assert "Never delegate a banned claim to the member" in prompt
+        assert "notice which angles generated the most response" in prompt
+        assert "Did you publish at least twice this week?" in prompt
+        assert (
+            "never instructs them to infer a causation the corpus does "
+            "not support" in prompt
+        )
+
+    def test_recommendation_ranking_is_an_effect_size(self):
+        """F5 residual: 'highest-leverage move' survived the first pass
+        because rule 3 only bounded mechanisms. The extension names ranked
+        leverage as an effect-size claim in words."""
+        prompt = _build_system_prompt()
+        assert "never rank a recommendation's effect" in prompt
+        assert "effect-size claims in words" in prompt
+
+    def test_cheat_sheet_carries_inline_reinforcement(self):
+        """Second-pass item 2: every real breach in ten sweep runs landed in
+        priorities or rhythm. The rules are restated AT the compressed
+        surface, not only in the Claims layer section."""
+        prompt = _build_system_prompt()
+        assert "internal sorting decision only" in prompt
+        assert "reach claim in title form" in prompt
+        assert "observation-only per Claims rule 7" in prompt
+        assert (
+            "Re-check every priority title, action, and rhythm item "
+            "against Claims rules 1, 3, 5, 6, and 7" in prompt
+        )
+
 
 class TestAbsenceAssertionBan:
     """ORPHEUS-137: the product never asserts the absence of anything outside

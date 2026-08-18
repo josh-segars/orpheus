@@ -116,6 +116,36 @@ PARAPHRASES = [
 ]
 
 
+# The phrasings the 08-17 and 08-18 sweep dump reads caught by hand while
+# the patterns stayed silent (ORPHEUS-134 second pass). Each generation of
+# missed phrasings gets appended here, so the detector's recall only ever
+# ratchets forward.
+RESIDUALS_2026_08_18 = [
+    "Review your top-performing posts for common patterns and adjust your "
+    "content approach accordingly.",
+    "Notice which posts drew the most meaningful responses.",
+    "Examine what made it travel further than the others.",
+    "Note which openings, topics, or formats drew the most response and "
+    "carry that forward.",
+    "Which post traveled furthest, and what did it have in common with "
+    "your other high-performing content?",
+    "Use any significant shift as a prompt to examine what changed in your "
+    "content or engagement pattern.",
+    "Adjust your content mix if either is stalling.",
+    "Study what your highest-performing posts have in common and apply "
+    "those patterns more deliberately.",
+    "A modest increase brings you to a cadence where your content is "
+    "appearing in feeds more reliably.",
+    "This is the lever most likely to pull in the readers whose attention "
+    "matters most.",
+    "Being thoughtful about where you comment could amplify what's already "
+    "working.",
+    "Consider prioritizing the skills most directly relevant to your "
+    "current work.",
+    "A more curated front-of-list could sharpen the first impression.",
+]
+
+
 class TestRecall:
 
     @pytest.mark.parametrize("text", V3_CRITICAL)
@@ -128,6 +158,24 @@ class TestRecall:
         phrased differently again. Paraphrase recall is the closest thing to
         evidence that the patterns generalise past their exemplars."""
         assert _hits(text, "HIGH"), f"not caught at HIGH: {text!r}"
+
+    @pytest.mark.parametrize("text", RESIDUALS_2026_08_18)
+    def test_dump_read_residuals_reach_high_tier(self, text):
+        """Loop closure for the 08-17/08-18 acceptance sweeps: everything a
+        human read caught that the detector missed is now detector recall."""
+        assert _hits(text, "HIGH"), f"not caught at HIGH: {text!r}"
+
+    def test_review_families_catch_their_own_exemplars(self):
+        """The 08-18 additions (population benchmarks, derived window
+        shares) are REVIEW heuristics, but they still must fire on the
+        text they were written for."""
+        assert "F11-population-benchmark" in _hits(
+            "well above what most active LinkedIn users produce", "REVIEW"
+        )
+        assert "F12-derived-window-share" in _hits(
+            "zero-post weeks account for only 12% of the trailing year",
+            "REVIEW",
+        )
 
 
 # ============================================================
@@ -159,6 +207,13 @@ PERMITTED = [
     "Leave a substantive reply on three posts a week.",
     # Advice-sense use of the ambiguous word.
     "The recommendations in this card are ordered by leverage.",
+    # 2026-08-18: the F5 idiom false positive from the 08-17 sweep's run 3.
+    "This headline doubles as a positioning statement for the profile.",
+    # Observation-only review items in the register Claims rule 7 permits —
+    # the expanded F6 must leave the permitted register alone.
+    "Did you publish at least twice this week?",
+    "Does this week's post name your domain?",
+    "Review whether your posting cadence held through the month.",
 ]
 
 

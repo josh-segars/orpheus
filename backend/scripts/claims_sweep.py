@@ -137,9 +137,25 @@ FAMILIES: list[dict] = [
         "exemplar": "this activity level is generating meaningful scale and "
                     "shows that the volume is translating into genuine "
                     "audience exposure.",
+        # 2026-08-18 dump read: reach claims in cheat-sheet priorities that
+        # the patterns missed.
+        "also_catches": [
+            "a cadence where your content is appearing in feeds more "
+            "reliably",
+            "the lever most likely to pull in the readers whose attention "
+            "matters most",
+            "the ones most likely to be seen by the audience you're trying "
+            "to reach",
+            "could amplify what's already working",
+        ],
         "patterns": [
             r"generating\s+meaningful\s+scale",
             r"translating\s+into",
+            r"appear(?:ing|s)?\s+in\s+(?:the\s+)?feeds?",
+            r"pulls?\s+in\s+(?:the\s+)?(?:readers?|audiences?|members|"
+            r"attention)",
+            r"most\s+likely\s+to\s+be\s+seen",
+            r"\bamplif(?:y|ies|ying)",
             r"\b(?:drives?|driving|generates?|generating|produces?|creates?)"
             r"\s+(?:\w+\s+){0,3}"
             r"(?:reach|visibility|impressions|exposure|distribution|scale)",
@@ -204,7 +220,10 @@ FAMILIES: list[dict] = [
             r"most\s+(?:impactful|effective|powerful)\s+(?:move|change|step)",
             r"biggest\s+(?:lever|impact|difference|win)",
             r"\d+\s?%\s+(?:more|higher|increase|improvement|lift|better)",
-            r"\b(?:doubles?|triples?|halves?)\b",
+            # 2026-08-18: negative lookahead added — "doubles as a positioning
+            # statement" is an idiom, not an effect size, and it inflated run 3
+            # of the 08-17 sweep.
+            r"\b(?:doubles?|triples?|halves?)\b(?!\s+as\b)",
             r"(?:\d+|two|three|several)\s?(?:x|times)\s+(?:more|the|as)",
         ],
     },
@@ -218,6 +237,27 @@ FAMILIES: list[dict] = [
         "exemplar": "notice which angles generated the most response and let "
                     "that inform the following week's framing; note whether "
                     "topic shifts correlate with changes in either metric.",
+        # 2026-08-18: expanded with the phrasings the 08-17 and 08-18 dump
+        # reads caught by hand while the patterns stayed silent. Each is
+        # pinned in `also_catches` so a later edit cannot silently unlearn it.
+        "also_catches": [
+            "Review your top-performing posts for common patterns and adjust "
+            "your content approach accordingly.",
+            "which posts drew the most meaningful responses",
+            "examine what made it travel further than the others",
+            "note which openings, topics, or formats drew the most response "
+            "and carry that forward",
+            "which post traveled furthest, and what did it have in common "
+            "with your other high-performing content",
+            "use any significant shift as a prompt to examine what changed "
+            "in your content or engagement pattern",
+            "adjust your content mix if either is stalling",
+            "studying what your highest-performing posts have in common and "
+            "applying those patterns more deliberately",
+            "assess whether the trend line is moving",
+            "identify one post that performed well and consider what made "
+            "it land",
+        ],
         "patterns": [
             r"which\s+\w+\s+generated\s+(?:the\s+)?most",
             r"generated\s+the\s+most\s+(?:response|engagement|reach)",
@@ -228,6 +268,18 @@ FAMILIES: list[dict] = [
             r"see\s+what\s+(?:works|performs|lands)",
             r"track\s+(?:which|what)\s+(?:\w+\s+){0,3}"
             r"(?:performs?|works?|lands?)",
+            r"(?:drew|draws?|drawing)\s+the\s+most",
+            r"travel(?:s|ed|led|ing)?\s+(?:further|furthest|farther|farthest)",
+            r"adjust\s+(?:your\s+)?content\s+(?:mix|approach|direction|"
+            r"strategy)",
+            r"whether\s+(?:your\s+|any\s+)?content\s+(?:mix|type|direction)",
+            r"(?:high|highest|top|best)[-\s]perform",
+            r"appl(?:y|ying)\s+those\s+patterns",
+            r"what\s+made\s+(?:it|that|this)\s+(?:land|travel|work|resonate|"
+            r"perform)",
+            r"what\s+changed\s+in\s+your\s+content",
+            r"if\s+either\s+is\s+(?:stalling|drifting|moving)",
+            r"whether\s+the\s+trend",
         ],
     },
     {
@@ -281,9 +333,17 @@ FAMILIES: list[dict] = [
         "exemplar": "Recommendations are not visible in the provided profile "
                     "content; consider reviewing the ordering of your top "
                     "skills, and seek endorsements.",
+        # 2026-08-18 dump read: skill-display-order advice in paraphrase.
+        "also_catches": [
+            "prioritizing the skills most directly relevant to your current "
+            "work could help",
+            "a more curated front-of-list could sharpen the first impression",
+        ],
         "patterns": [
             r"\bendorse(?:d|ment|ments|s)?\b",
             r"ordering\s+of\s+your\s+(?:top\s+)?skills",
+            r"prioritiz(?:e|ing)\s+(?:the\s+)?skills",
+            r"front[-\s]of[-\s]list",
             r"(?:order|reorder|rearrange)\s+(?:your\s+)?(?:top\s+)?skills",
             r"skills?\s+(?:display\s+)?order",
             r"(?:request|solicit|ask(?:ing)?\s+for|obtain|seek|secure|"
@@ -343,6 +403,58 @@ FAMILIES: list[dict] = [
             r"\bcompounds?\b",
             r"\bsnowball",
             r"\bmomentum\b",
+            # 2026-08-18 dump read.
+            r"(?:are|is)\s+the\s+result\s+of",
+            r"goals\s+are\s+served",
+        ],
+    },
+    {
+        "id": "F11-population-benchmark",
+        "tier": "REVIEW",
+        "what": "The member compared against an invented population baseline",
+        "why": "2026-08-18 dump read: multiple runs asserted comparisons "
+               "('well above what most active LinkedIn users produce', 'a "
+               "posting practice most professionals never reach') against a "
+               "population the corpus contains no data on. REVIEW because "
+               "some comparative phrasing is legitimate calibration language "
+               "— read the hit and ask what data the baseline could rest on.",
+        "exemplar": "well above what most active LinkedIn users produce",
+        "also_catches": [
+            "a posting practice that most professionals never reach",
+            "Most LinkedIn users, even active ones, engage primarily "
+            "through reactions",
+            "well above most professional profiles",
+        ],
+        "patterns": [
+            r"\babove\s+what\s+most\b",
+            r"\bmost\s+(?:active\s+)?linkedin\s+users\b",
+            r"\bmost\s+professionals?\b",
+            r"\bmost\s+professional\s+profiles\b",
+            r"\bmost\s+active\s+users\b",
+        ],
+    },
+    {
+        "id": "F12-derived-window-share",
+        "tier": "REVIEW",
+        "what": "A computed share of the window presented as a figure",
+        "why": "2026-08-18 dump read: agent-computed percentages ('zero-post "
+               "weeks account for 12% of the trailing year') pass the "
+               "prose-number gate because small integers are structurally "
+               "allowed, so this sweep is the only detector for them. Claims "
+               "rule 6 forbids derived arithmetic; run 4 of the 08-18 sweep "
+               "also derived it WRONG ('12 zero-post weeks... represent "
+               "12%'). REVIEW because a supplied rate can be phrased this "
+               "way legitimately — check the figure against the inputs.",
+        "exemplar": "zero-post weeks account for only 12% of the trailing "
+                    "year",
+        "also_catches": [
+            "which represent 12% of the trailing 52 weeks",
+        ],
+        "patterns": [
+            r"\d{1,2}\s?%\s+of\s+(?:the\s+)?(?:trailing\s+|last\s+)?"
+            r"(?:year|weeks?|window|months?|days?)",
+            r"(?:account(?:s|ing)?\s+for|represent(?:s|ing)?)\s+"
+            r"(?:only\s+)?(?:about\s+|roughly\s+|nearly\s+)?\d{1,2}\s?%",
         ],
     },
 ]
@@ -412,14 +524,20 @@ def self_test() -> list[str]:
     """
     failures: list[str] = []
     for fam in COMPILED:
-        if not fam["exemplar"]:
-            continue
-        caught = any(rx.search(fam["exemplar"]) for rx in fam["compiled"])
-        if not caught:
-            failures.append(
-                f"{fam['id']} does NOT catch its own v3 exemplar: "
-                f"{fam['exemplar'][:80]!r}"
-            )
+        # The original v3 exemplar plus every phrasing a later dump read
+        # taught the family (`also_catches`, added 2026-08-18). Both are
+        # pinned the same way: a pattern edit that unlearns any of them
+        # fails loudly.
+        probes = ([fam["exemplar"]] if fam["exemplar"] else []) + list(
+            fam.get("also_catches") or []
+        )
+        for probe in probes:
+            caught = any(rx.search(probe) for rx in fam["compiled"])
+            if not caught:
+                failures.append(
+                    f"{fam['id']} does NOT catch its own exemplar: "
+                    f"{probe[:80]!r}"
+                )
     # And the inverse: prose that is deliberately inside the permitted
     # registers must NOT trip the HIGH tier. A detector that flags everything
     # is as useless as one that flags nothing, and this is where over-broad
@@ -440,6 +558,12 @@ def self_test() -> list[str]:
         # this test fails and says so.
         "You do not have a call to action in your About section.",
         "The recommendations in this card are ordered by leverage.",
+        # 2026-08-18: the F5 idiom false positive from run 3 of the 08-17
+        # sweep, and two observation-only rhythm items in the register the
+        # prompt's Claims rule 7 permits — the expanded F6 must not eat them.
+        "This headline doubles as a positioning statement for the profile.",
+        "Did you publish at least twice this week?",
+        "Review whether your posting cadence held through the month.",
     ]
     for text in permitted:
         for fam in COMPILED:
