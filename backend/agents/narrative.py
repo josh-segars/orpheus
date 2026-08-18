@@ -265,6 +265,12 @@ This does not soften what you may say about content you *can* see. A headline in
 
 **5. Recommendations, endorsements, and skill display order are out of scope entirely.** They are not ingested and not scored, so they appear nowhere in your output — no narrative mention, no sub-dimension slot, no cheat sheet priority, no rhythm item, no milestone label. Do not tell the client to request recommendations, to seek endorsements, or to review the ordering of their top skills. This is not an absence claim to hedge more carefully; it is a subject you do not write about at all.
 
+**6. Numbers are quoted, never manufactured.** Every figure you write must appear verbatim in your input — a `measured signal` line, the Forward Brief data, the Milestone Targets, or the verbatim Profile Content section.
+
+- Reproduce a cited figure exactly as it appears in the input — same digits, same precision. Never round or approximate ("over 6,700", "nearly 90 percent"). If the exact figure does not serve the sentence, write the sentence with no figure at all.
+- Never compute a new figure from the inputs — no totals, percentages, ratios, averages, or differences you derived yourself, even when the arithmetic is correct. If the input shows activity in 46 of 52 weeks, you may cite 46 and 52; you may not convert them into "88 percent of weeks".
+- A figure that appears only in the verbatim Profile Content is the member's own words, not a platform measurement. Cite it as what the profile or post says ("your experience descriptions cite $400 million in energy security funding"), never as an observed metric or a measured result.
+
 These rules apply uniformly to dimension narratives, dimension summaries, every sub-dimension Summary / Best Practices / Improvements slot, and every cheat sheet string. Do not relax them in the compressed forms — a six-word imperative title is as bound as a 400-word narrative.
 
 ## Score-to-narrative direction
@@ -1673,8 +1679,15 @@ async def generate_narratives(
     # the same values the prompt renders. Checked after every successful
     # parse; a fabricated aggregate ("2,394 total comments" against inputs
     # that contain no such value) rejects the response.
+    #
+    # ORPHEUS-142: the rendered profile excerpt is passed too — the SAME
+    # string formatted into the prompt above, so a figure is citable exactly
+    # when the agent can see it in the verbatim section the prompt requires
+    # it to quote. Without this, every correct profile citation ("$400
+    # million", "80 listed skills") rejected on all attempts and any member
+    # with numbers in their profile degraded 5-of-5.
     number_whitelist = prose_numbers.build_number_whitelist(
-        scoring_output, milestone_targets
+        scoring_output, milestone_targets, profile_excerpt=profile_excerpt
     )
 
     last_error = None
@@ -1736,11 +1749,12 @@ async def generate_narratives(
                         "\n\n## Correction required\n\n"
                         "Your previous response quoted numbers that do "
                         "not appear anywhere in the data above: "
-                        f"{summary}. Every figure you cite must be a "
-                        "value explicitly provided in this prompt — do "
-                        "not derive, total, or recall numbers from "
-                        "context. Regenerate the full response, quoting "
-                        "only figures present in the input."
+                        f"{summary}. Every figure you cite must appear "
+                        "verbatim in this prompt (including the Profile "
+                        "Content section) — do not derive, total, round, "
+                        "or recall numbers from context. Regenerate the "
+                        "full response, quoting only figures present in "
+                        "the input, exactly as written."
                     )
                     continue
 

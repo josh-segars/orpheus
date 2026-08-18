@@ -15,9 +15,24 @@ Design notes:
 
   * The whitelist is built from the same values the prompt renders — the
     forward-brief metrics (at their registry display precisions, plus
-    formatting variants), the coverage counts, sub-dim raw values, and the
-    computed milestone targets. If the agent quotes a figure it was handed,
-    it passes; if it mints one, it fails.
+    formatting variants), the coverage counts, sub-dim raw values, the
+    computed milestone targets, and (ORPHEUS-142) every numeric token in
+    the rendered verbatim profile excerpt. If the agent quotes a figure it
+    was handed, it passes; if it mints one, it fails.
+  * ORPHEUS-142: the excerpt tokens close a conflict this gate created.
+    ORPHEUS-96 put the member's verbatim profile text in the prompt and the
+    prompt REQUIRES profile-content claims to be grounded in it — but this
+    whitelist predated that and only knew scoring values, so a correct
+    quotation ("$400 million", "80 listed skills") rejected as fabrication
+    on every attempt: 3× generation cost and a guaranteed degrade for any
+    member whose profile contains numbers. The tokens come from the exact
+    string `generate_narratives` renders into the prompt (NOT re-derived
+    from zip_data), so citable == visible-to-the-agent: a figure beyond the
+    excerpt's truncation caps stays un-whitelisted because the agent never
+    saw it. This is provenance checking, not truth checking — the gate
+    guarantees a figure was supplied, the prompt's Claims layer governs how
+    it may be framed, and reconciliation (ORPHEUS-114) verifies the
+    measured metrics themselves.
   * DELIBERATELY EXCLUDED: the composite, per-dimension contributions and
     normalized scores (clients see bands, ORPHEUS-128 — the agent quoting
     the composite is a rejection we WANT), and the band thresholds (prose
@@ -62,8 +77,12 @@ _NUMBER_TOKEN = re.compile(r"\d[\d,]*(?:\.\d+)?")
 # Structural numbers that legitimately appear in guidance prose regardless
 # of the client's metrics: durations (hours/days/weeks), the analytics
 # top-50 cap, per-cent phrasing, and the substantive-comment word threshold.
+# ORPHEUS-142 added 15: advice quantities like "your last 10-15 posts" are
+# suggestions, not data claims — gating them is a category error. 13 and 14
+# stay gated deliberately: "14 posts in the window" IS a data claim.
 _STRUCTURAL_ALLOWANCES: frozenset[str] = frozenset({
-    "20", "24", "30", "45", "48", "50", "52", "60", "90", "100", "180", "365",
+    "15", "20", "24", "30", "45", "48", "50", "52", "60", "90", "100",
+    "180", "365",
 })
 
 # Small integers pass unconditionally: ordinals, list counts, sub-dim scores
@@ -146,8 +165,14 @@ def _rate_variants(value: float) -> set[str]:
 def build_number_whitelist(
     scoring_output: ScoringStageOutput,
     milestone_targets=None,
+    profile_excerpt: str | None = None,
 ) -> set[str]:
-    """Normalized tokens the prose is allowed to quote."""
+    """Normalized tokens the prose is allowed to quote.
+
+    `profile_excerpt` (ORPHEUS-142) is the rendered verbatim profile/content
+    string the prompt shows the agent — pass the SAME string, not a
+    re-render, so citable stays exactly equal to visible.
+    """
     allowed: set[str] = set()
     q = scoring_output.forward_brief_data.quantitative
 
@@ -190,6 +215,24 @@ def build_number_whitelist(
         for text in (target.value, target.baseline_display or ""):
             for tok in _NUMBER_TOKEN.findall(text):
                 allowed.add(_normalize(tok))
+
+    # ORPHEUS-142: figures the agent can see in the verbatim profile excerpt
+    # are citable — the prompt requires profile-content claims to be grounded
+    # in exactly this text, so rejecting an accurate quotation of it was the
+    # gate contradicting the prompt. Logged so an acceptance re-run can show
+    # how much of the whitelist is profile-sourced.
+    if profile_excerpt:
+        excerpt_tokens = {
+            _normalize(tok) for tok in _NUMBER_TOKEN.findall(profile_excerpt)
+        }
+        excerpt_tokens.discard("")
+        new_tokens = excerpt_tokens - allowed
+        if new_tokens:
+            logger.info(
+                "Prose-number whitelist: %d token(s) admitted from the "
+                "verbatim profile excerpt (ORPHEUS-142)", len(new_tokens),
+            )
+        allowed |= excerpt_tokens
 
     # NOT whitelisted, deliberately: composite, contributions, normalized
     # scores (ORPHEUS-128 — bands are the client display; the agent quoting

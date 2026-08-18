@@ -2363,6 +2363,152 @@ class TestProseNumberGate:
         assert pn.prose_gate_mode() == "block"
 
 
+class TestProfileExcerptWhitelist:
+    """ORPHEUS-142: figures visible in the rendered verbatim profile excerpt
+    are citable (the prompt requires profile claims to be grounded in exactly
+    that text, so rejecting an accurate quotation was the gate contradicting
+    the prompt) — while a fabricated aggregate still rejects. Citable ==
+    visible-to-the-agent: figures beyond the excerpt's truncation caps stay
+    gated because the agent never saw them."""
+
+    def _zip_b03ca0f5_shaped(self) -> ZipData:
+        """Mirrors the b03ca0f5 rejections: dollar figures in an Experience
+        description, a skills count over the 40-name display cap, and a large
+        count in a post's own text."""
+        return ZipData(
+            profile=ProfileData(
+                headline="Development Finance Executive",
+                summary="Two decades of energy and infrastructure finance.",
+                industry="International Trade and Development",
+                geo_location="Washington, DC",
+                websites="",
+            ),
+            positions=[
+                PositionData(
+                    company_name="DFC",
+                    title="Managing Director",
+                    description=(
+                        "Directed $400 million in energy security funding in "
+                        "Moldova and a $100 million annual portfolio in "
+                        "Central Asia."
+                    ),
+                    started_on="2019",
+                ),
+            ],
+            skills=["Project Finance"] * 80,  # digit-free names, 80 total
+            shares=[
+                ShareItem(
+                    date="2026-05-01",
+                    share_commentary=(
+                        "Proud that this program connected 6,740 households "
+                        "to resilient grids."
+                    ),
+                ),
+            ],
+            comments=[CommentItem(date="2026-05-02", message="Agreed.")],
+        )
+
+    def _whitelist_with_excerpt(self):
+        output = _output_301ba109_shaped()
+        excerpt = _format_profile_excerpt(self._zip_b03ca0f5_shaped())
+        return pn.build_number_whitelist(output, None, profile_excerpt=excerpt)
+
+    def test_profile_figures_citable(self):
+        """The b03ca0f5 class: accurate quotations of the member's own
+        profile text pass — dollar figures, the skills-total display count,
+        and a count appearing in a post's text."""
+        result = _narrative_result_with({
+            "Profile Signal Clarity": (
+                "Your experience descriptions cite $400 million in energy "
+                "security funding and a $100 million annual portfolio. With "
+                "80 listed skills, the profile reads broad; your post on "
+                "grid resilience cites 6,740 households connected."
+            ),
+        })
+        violations = pn.find_unwhitelisted_numbers(
+            pn.client_facing_strings(result), self._whitelist_with_excerpt()
+        )
+        assert violations == []
+
+    def test_fabricated_aggregate_still_rejected(self):
+        """PERMANENT CONTROL (the ticket's acceptance demands this): with the
+        excerpt admitted, a minted aggregate matching nothing still rejects.
+        If this ever passes silently, ORPHEUS-121 has been defeated."""
+        result = _narrative_result_with({
+            "Behavioral Signal Strength":
+                "You recorded 2,394 total comments across the archive.",
+        })
+        violations = pn.find_unwhitelisted_numbers(
+            pn.client_facing_strings(result), self._whitelist_with_excerpt()
+        )
+        assert ("section:Behavioral Signal Strength", "2,394") in violations
+
+    def test_without_excerpt_profile_figures_still_reject(self):
+        """The parameter does the work: the same profile quotation against a
+        whitelist built without the excerpt rejects — pins the boundary the
+        fix moved, and that omitting the excerpt reverts to old behavior."""
+        output = _output_301ba109_shaped()
+        whitelist = pn.build_number_whitelist(output)
+        result = _narrative_result_with({
+            "Profile Signal Clarity":
+                "Your experience cites $400 million in energy funding.",
+        })
+        violations = pn.find_unwhitelisted_numbers(
+            pn.client_facing_strings(result), whitelist
+        )
+        assert ("section:Profile Signal Clarity", "400") in violations
+
+    def test_figures_beyond_truncation_caps_stay_gated(self):
+        """A figure in a post past the 40-post display cap was never shown
+        to the agent, so quoting it is recall, not citation — still gated."""
+        z = self._zip_b03ca0f5_shaped()
+        z.shares = [
+            ShareItem(date=f"2026-03-{(i % 28) + 1:02d}",
+                      share_commentary="A digit-free post.")
+            for i in range(45)
+        ] + [
+            ShareItem(date="2026-01-01",
+                      share_commentary="An old post citing 7,777 attendees."),
+        ]
+        excerpt = _format_profile_excerpt(z)
+        assert "7,777" not in excerpt  # oldest post, beyond the cap
+        whitelist = pn.build_number_whitelist(
+            _output_301ba109_shaped(), None, profile_excerpt=excerpt
+        )
+        result = _narrative_result_with({
+            "Behavioral Signal Strength": "Your event drew 7,777 attendees.",
+        })
+        violations = pn.find_unwhitelisted_numbers(
+            pn.client_facing_strings(result), whitelist
+        )
+        assert ("section:Behavioral Signal Strength", "7,777") in violations
+
+    def test_advice_range_quantity_passes(self):
+        """ORPHEUS-142 decision 4: 'your last 10-15 posts' is advice, not a
+        data claim — 15 joined the structural allowances."""
+        result = _narrative_result_with({
+            "Behavioral Signal Quality":
+                "Review your last 10-15 posts for common patterns.",
+        })
+        violations = pn.find_unwhitelisted_numbers(
+            pn.client_facing_strings(result),
+            pn.build_number_whitelist(_output_301ba109_shaped()),
+        )
+        assert violations == []
+
+    def test_small_data_claims_still_gated(self):
+        """13 and 14 deliberately did NOT join the structural allowances:
+        '14 posts in the window' is a data claim and must trace."""
+        result = _narrative_result_with({
+            "Behavioral Signal Strength": "You made 14 posts in the window.",
+        })
+        violations = pn.find_unwhitelisted_numbers(
+            pn.client_facing_strings(result),
+            pn.build_number_whitelist(_output_301ba109_shaped()),
+        )
+        assert ("section:Behavioral Signal Strength", "14") in violations
+
+
 class _FakeAnthropicClient:
     """Queue of raw response texts; records every create() call's kwargs."""
 
@@ -2452,6 +2598,60 @@ class TestProseNumberGateInGenerateNarratives:
         assert len(client.calls) == 1
         assert result.prose_gate_degraded is False
         assert result.prose_gate_violations is None
+
+    @pytest.mark.asyncio
+    async def test_profile_citation_passes_when_zip_data_present(
+        self, monkeypatch
+    ):
+        """ORPHEUS-142 end-to-end: with zip_data supplied, the whitelist is
+        built from the SAME rendered excerpt the prompt carries, so a correct
+        profile citation returns clean on the first attempt — no retry, no
+        degrade. This was the 5-of-5 degrade case before the fix."""
+        monkeypatch.delenv("PROSE_NUMBER_GATE", raising=False)
+        zip_data = ZipData(
+            profile=ProfileData(headline="Executive", summary="Career notes."),
+            positions=[
+                PositionData(
+                    company_name="DFC", title="MD",
+                    description="Directed $400 million in energy funding.",
+                    started_on="2019",
+                ),
+            ],
+        )
+        citing = _full_response_json(
+            "Your experience descriptions cite $400 million in energy "
+            "funding, quoted exactly. " * 3
+        )
+        client = _FakeAnthropicClient([citing])
+        output = _output_301ba109_shaped()
+
+        result = await generate_narratives(
+            client, output, questionnaire={}, zip_data=zip_data
+        )
+
+        assert len(client.calls) == 1
+        assert result.prose_gate_degraded is False
+        # The figure the gate allowed is the one the prompt actually shows.
+        assert "$400 million" in client.calls[0]["messages"][0]["content"]
+
+    @pytest.mark.asyncio
+    async def test_same_citation_without_zip_data_still_rejects(
+        self, monkeypatch
+    ):
+        """Companion pin: no zip_data → no excerpt in the prompt → the same
+        figure is recall, not citation, and the gate still bites."""
+        monkeypatch.delenv("PROSE_NUMBER_GATE", raising=False)
+        citing = _full_response_json(
+            "Your experience descriptions cite $400 million in funding. " * 3
+        )
+        client = _FakeAnthropicClient([citing, citing, citing])
+        output = _output_301ba109_shaped()
+
+        result = await generate_narratives(client, output, questionnaire={})
+
+        assert len(client.calls) == 3  # rejected, retried, then degraded
+        assert result.prose_gate_degraded is True
+        assert "400" in result.prose_gate_violations
 
 
 class TestProseGateFinalAttemptDegrade:
