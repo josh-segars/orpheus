@@ -1,7 +1,15 @@
 fastapi
 uvicorn[standard]
 supabase
-anthropic
+# Pinned [2026-08-26, ORPHEUS-143]: anthropic 1.0.0 (2026-08-20) removed the
+# temperature/top_p/top_k kwargs from the generated methods (API-deprecated;
+# the migration guide routes older models through extra_body). The rubric
+# stage passes temperature=0.0 on every call (ORPHEUS-75 determinism), so an
+# unpinned build on >=1.0.0 fails every job at stage_rubric_scoring with a
+# TypeError before anything is scored. 0.125.0 is the last pre-1.0 release
+# and accepts the kwarg. Unpin only with the deliberate 1.0 migration
+# (extra_body or kwarg removal + an ORPHEUS-75 consistency-harness re-run).
+anthropic==0.125.0
 python-dotenv
 pydantic
 pydantic-settings>=2.0.0
