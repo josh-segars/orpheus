@@ -1282,3 +1282,131 @@ class TestMethodologyBlock:
         methodology = result.result["methodology"]
         assert methodology["snapshot"] is True
         assert methodology["dimension_weights"]["Behavioral Signal Strength"] == 0.30
+
+
+# --------------------------------------------------------------------------- #
+# Admin branch — ORPHEUS-147
+# --------------------------------------------------------------------------- #
+#
+# /admin's "Open report" reuses GET /jobs/{id}, but code-joined self-serve
+# clients (ORPHEUS-85/129) belong to the house advisor row — on no real
+# advisor's roster — so admin viewers get an unfiltered read: no ownership
+# filter on the jobs query, and no ORPHEUS-120 gate (admins publish the
+# drafts). Non-admin behavior is unchanged, including the typed 401 for
+# neither-role callers that `get_current_session_roles` used to raise
+# before the dependency swap to `get_verified_session`.
+
+ADMIN_EMAIL = "admin@test.local"
+
+
+def _admin_roles(
+    *, advisor_id: str | None = None, client_id: str | None = None
+) -> SessionRoles:
+    return SessionRoles(
+        user_id="user-admin-uuid",
+        email=ADMIN_EMAIL,
+        access_token="test-token",
+        advisor_id=advisor_id,
+        client_id=client_id,
+    )
+
+
+def _enable_admin(monkeypatch) -> None:
+    monkeypatch.setenv("ADMIN_EMAILS", ADMIN_EMAIL)
+    config_mod._reset_settings_cache_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_admin_without_roles_can_view_any_job(monkeypatch):
+    """ORPHEUS-147: an allowlisted admin with no advisors/clients rows
+    opens any client's job — one unfiltered jobs query, no roster read."""
+    _enable_admin(monkeypatch)
+    fake = FakeSupabase(
+        responses=[
+            {"data": [_job_row(job_id=JOB_1_ID, client_id=CLIENT_1_ID)]},
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_admin_roles(),
+        )
+
+    assert result.id == JOB_1_ID
+    assert result.client_id == CLIENT_1_ID
+    assert fake.tables_queried == ["jobs"]
+    # God-mode read: no ownership filter on the jobs query.
+    jobs_query = fake.queries[0]
+    assert jobs_query["table"] == "jobs"
+    assert not any(op == "in_" for op, _ in jobs_query["filters"])
+
+
+@pytest.mark.asyncio
+async def test_admin_sees_drafts_on_unpublished_advisory_job(monkeypatch):
+    """ORPHEUS-147: the admin is who publishes drafts, so the ORPHEUS-120
+    gate must not fire for them — full payload, no reports read."""
+    _enable_admin(monkeypatch)
+    fake = FakeSupabase(
+        responses=[
+            _complete_job_response(),
+            {"data": [_score_row(job_id=JOB_1_ID)]},
+            {"data": _minimal_dim_narratives()},
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_admin_roles(),
+        )
+
+    assert result.result is not None
+    assert result.in_review is False
+    assert "reports" not in fake.tables_queried
+
+
+@pytest.mark.asyncio
+async def test_admin_advisor_with_empty_roster_skips_404_short_circuit(monkeypatch):
+    """ORPHEUS-147: an admin who also holds an advisor row with zero
+    managed clients must not hit the empty-roster 404 short-circuit."""
+    _enable_admin(monkeypatch)
+    fake = FakeSupabase(
+        responses=[
+            # clients roster expansion — empty
+            {"data": []},
+            {"data": [_job_row(job_id=JOB_1_ID, client_id=CLIENT_1_ID)]},
+        ]
+    )
+
+    with _patch_supabase(fake):
+        result = await jobs_router.get_job(
+            job_id=JOB_1_ID,
+            roles=_admin_roles(advisor_id=ADVISOR_1_ID),
+        )
+
+    assert result.id == JOB_1_ID
+    assert fake.tables_queried == ["clients", "jobs"]
+
+
+@pytest.mark.asyncio
+async def test_neither_role_non_admin_gets_typed_401():
+    """ORPHEUS-147 regression: with the dependency now allowing the
+    neither-role case through, non-admin callers without a role must get
+    the same typed 401 `get_current_session_roles` raised before."""
+    fake = FakeSupabase(responses=[])
+    roles = SessionRoles(
+        user_id="user-nobody-uuid",
+        email="nobody@example.com",
+        access_token="test-token",
+        advisor_id=None,
+        client_id=None,
+    )
+
+    with _patch_supabase(fake):
+        with pytest.raises(HTTPException) as exc:
+            await jobs_router.get_job(job_id=JOB_1_ID, roles=roles)
+
+    assert exc.value.status_code == 401
+    assert "No advisor or client profile" in exc.value.detail
+    assert fake.tables_queried == []

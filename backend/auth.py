@@ -470,3 +470,19 @@ async def get_current_admin(
             detail="Your account is not authorized for /admin.",
         )
     return roles
+
+
+def is_admin_session(roles: SessionRoles) -> bool:
+    """True when the session's email is on the ADMIN_EMAILS allowlist.
+
+    Non-raising counterpart to `get_current_admin`, for handlers that
+    serve ordinary role-holders and admins from the same route
+    (ORPHEUS-147: GET /jobs/{id} lets admin viewers open any client's
+    report from /admin, including house-advisor clients who are on
+    nobody's roster). Same case-insensitive membership rule as
+    `get_current_admin`; an empty allowlist means no one is admin.
+    """
+    settings = get_settings()
+    if not settings.admin_email_set:
+        return False
+    return (roles.email or "").strip().lower() in settings.admin_email_set

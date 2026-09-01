@@ -33,7 +33,12 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from backend.auth import SessionRoles, get_current_session_roles
+from backend.auth import (
+    SessionRoles,
+    get_current_session_roles,
+    get_verified_session,
+    is_admin_session,
+)
 from backend.consent_versions import (
     ACCEPTED_PRIVACY_VERSIONS,
     CURRENT_PRIVACY_VERSION,
@@ -503,7 +508,7 @@ async def list_jobs(
 @router.get("/{job_id}", response_model=Job)
 async def get_job(
     job_id: str,
-    roles: SessionRoles = Depends(get_current_session_roles),
+    roles: SessionRoles = Depends(get_verified_session),
 ) -> Job:
     """Fetch a single job by id. Caller must own it via either role.
 
@@ -512,11 +517,18 @@ async def get_job(
     that client". We don't leak the existence of jobs the caller can't
     see (matches the leak-resistance contract on `GET /clients`).
 
-    Role gate accepts either:
+    Role gate accepts any of:
       * is_client() — the original client-viewing-own-report path. Job
         must belong to `roles.client_id`.
       * is_advisor() — ORPHEUS-46. Job must belong to a client the
         advisor manages (`clients.advisor_id == roles.advisor_id`).
+      * admin — ORPHEUS-147. Callers on the ADMIN_EMAILS allowlist may
+        open any job (the /admin "Open report" link reuses this route,
+        and code-joined clients belong to the house advisor, who is on
+        no real advisor's roster). Admins see drafts like an advisor
+        (they are who publishes them), and may hold no role rows at all
+        (dependency is `get_verified_session`; non-admin neither-role
+        callers still get the typed 401).
 
     Dual-role callers (an advisor who is also their own client, e.g.
     Andrew) see the union of both predicates. The advisor's self-clients
@@ -528,13 +540,19 @@ async def get_job(
     matching the pattern in `GET /clients`. The handler enforces
     ownership directly; RLS is not relied upon here.
     """
-    if not (roles.is_client() or roles.is_advisor()):
-        # Unreachable under `get_current_session_roles` (which 401s the
-        # neither-role case) but defends against a future code path
-        # that swaps in `get_verified_session` here.
+    # ORPHEUS-147: admin viewers (ADMIN_EMAILS allowlist, the ORPHEUS-31
+    # gate) may open any job — /admin's "Open report" reuses this route,
+    # and code-joined self-serve clients hang off the house advisor row,
+    # which is on no real advisor's roster.
+    viewer_is_admin = is_admin_session(roles)
+    if not viewer_is_admin and not (roles.is_client() or roles.is_advisor()):
+        # `get_verified_session` lets the neither-role case through so a
+        # pure-admin account (no advisors/clients row, ORPHEUS-53) can
+        # reach the admin branch. Non-admins get the same typed 401 that
+        # `get_current_session_roles` raised before ORPHEUS-147.
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Viewing a diagnostic requires a client or advisor profile.",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No advisor or client profile is associated with this account.",
         )
 
     supabase = get_service_client()
@@ -563,24 +581,22 @@ async def get_job(
             advisor_client_ids.add(str(client_row["id"]))
         allowed_client_ids |= advisor_client_ids
 
-    if not allowed_client_ids:
+    if not allowed_client_ids and not viewer_is_admin:
         # Advisor with zero managed clients (and no client role of
         # their own). The job, if it exists, definitionally doesn't
         # belong to them — 404 not 403 to match the leak-resistance
-        # contract.
+        # contract. Admin viewers skip the ownership filter entirely.
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Job {job_id!r} not found.",
         )
 
-    result = (
-        supabase.table("jobs")
-        .select("*")
-        .eq("id", job_id)
-        .in_("client_id", list(allowed_client_ids))
-        .limit(1)
-        .execute()
-    )
+    jobs_query = supabase.table("jobs").select("*").eq("id", job_id)
+    if not viewer_is_admin:
+        # ORPHEUS-147: no ownership filter for admin viewers — god-mode
+        # read, matching the /admin surfaces (ORPHEUS-31).
+        jobs_query = jobs_query.in_("client_id", list(allowed_client_ids))
+    result = jobs_query.limit(1).execute()
 
     if not result.data:
         raise HTTPException(
@@ -611,7 +627,9 @@ async def get_job(
         viewer_is_advisor_of_job = (
             str(row.get("client_id")) in advisor_client_ids
         )
-        if not viewer_is_advisor_of_job:
+        # ORPHEUS-147: admins are advisor-side viewers — they publish the
+        # drafts, so the ORPHEUS-120 gate must not hide drafts from them.
+        if not (viewer_is_advisor_of_job or viewer_is_admin):
             is_advisory, is_published = _report_publication(supabase, job_id)
             gated = is_advisory and not is_published
         if not gated:
